@@ -11,6 +11,7 @@ struct SettingsView: View {
         case backup
         case usage
         case performance
+        case updates
         case changelog
 
         var id: String { rawValue }
@@ -22,6 +23,7 @@ struct SettingsView: View {
             case .backup:      return "导入/导出"
             case .usage:       return "Token 用量"
             case .performance: return "性能"
+            case .updates:     return "软件更新"
             case .changelog:   return "更新日志"
             }
         }
@@ -33,12 +35,22 @@ struct SettingsView: View {
             case .backup:      return "square.and.arrow.up.on.square"
             case .usage:       return "chart.bar.xaxis"
             case .performance: return "speedometer"
+            case .updates:     return "arrow.down.circle"
             case .changelog:   return "sparkles"
             }
         }
     }
 
     @State private var tab: Tab = .providers
+
+    /// 实际展示的 tab — 「软件更新」(Sparkle) 仅 macOS 有,iOS 过滤掉。
+    private var availableTabs: [Tab] {
+        #if os(macOS)
+        return Tab.allCases
+        #else
+        return Tab.allCases.filter { $0 != .updates }
+        #endif
+    }
 
     /// 可添加的 provider 类型 — iOS 排除 CLI(沙箱起不了子进程)
     private var addableKinds: [ProviderKind] {
@@ -78,6 +90,12 @@ struct SettingsView: View {
                     UsageSettingsView()
                 case .performance:
                     PerformanceSettingsView()
+                case .updates:
+                    #if os(macOS)
+                    UpdateSettingsView()
+                    #else
+                    EmptyView()
+                    #endif
                 case .changelog:
                     ChangelogView()
                 }
@@ -105,6 +123,8 @@ struct SettingsView: View {
                         UsageSettingsView()
                     case .performance:
                         PerformanceSettingsView()
+                    case .updates:
+                        EmptyView()   // iOS 不展示;.updates 已从 availableTabs 过滤
                     case .changelog:
                         ChangelogView()
                     }
@@ -130,7 +150,7 @@ struct SettingsView: View {
         ScrollViewReader { proxy in
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ForEach(Tab.allCases) { t in
+                    ForEach(availableTabs) { t in
                         Button {
                             withAnimation(.easeInOut(duration: 0.18)) {
                                 tab = t
@@ -237,7 +257,7 @@ struct SettingsView: View {
 
     private var tabBar: some View {
         HStack(spacing: 8) {
-            ForEach(Tab.allCases) { t in
+            ForEach(availableTabs) { t in
                 Button {
                     tab = t
                 } label: {
@@ -324,6 +344,7 @@ struct SettingsView: View {
         case .backup:      return "把当前配置(不含会话)导出成 JSON 文件,或从备份恢复。可作为多设备同步的离线备选。"
         case .usage:       return "按天 + 模型查看 token 用量。input / output 分别计,辅助估算成本。"
         case .performance: return "流式响应的渲染节奏。机器卡可以拉长刷新间隔降 CPU。"
+        case .updates:     return "通过 Sparkle 检查、下载并自动安装最新版本。"
         case .changelog:   return "查看每个版本的新功能、修复和改进。"
         }
     }

@@ -61,6 +61,11 @@ struct KownApp: App {
                 }
             }
             .task {
+                #if os(macOS)
+                // 启动即拉起 Sparkle 更新器:按用户设置的频率在后台检查,
+                // 并(若开启)自动下载安装。满足「每次打开 App 也检测并启用自动更新」。
+                _ = UpdaterService.shared
+                #endif
                 guard showLaunchSplash else { return }
                 try? await Task.sleep(for: .milliseconds(1750))
                 withAnimation(.easeInOut(duration: 0.42)) {
@@ -109,6 +114,10 @@ struct KownApp: App {
                     viewModel.newConversation(mode: viewModel.activeMode)
                 }
                 .keyboardShortcut("n", modifiers: .command)
+            }
+            // 「Kown ▸ 检查更新…」(紧跟「关于 Kown」之后)
+            CommandGroup(after: .appInfo) {
+                CheckForUpdatesMenuItem()
             }
         }
         #endif

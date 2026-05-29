@@ -38,5 +38,15 @@
 			<string>Any</string>
 		</dict>
 	</dict>
+	<key>SUAutomaticallyUpdate</key>
+	<false/>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://raw.githubusercontent.com/macuhy/kown-mac/main/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>QxXWME0pGom6NLGkoNq6AdkK8h+i+ZttNeED2No5HT8=</string>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
 </dict>
 </plist>

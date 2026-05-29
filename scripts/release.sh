@@ -80,6 +80,29 @@ fi
 # 清掉历史遗留的 SPM resource bundle(如果之前的脚本拷过)— 防止 codesign --deep 校验它
 rm -rf "${APP_BUNDLE}/Contents/Resources/Kown_Kown.bundle"
 
+# 2.6) 内嵌 Sparkle.framework(自动更新)。
+#      SPM 只把 Sparkle 链进可执行文件,不会帮我们把 framework 拷进 .app —— 手动装。
+#      framework 的 install_name 是 @rpath/Sparkle.framework/...,所以主程序要带上
+#      @executable_path/../Frameworks 这条 rpath 才能在运行时找到它。
+SPARKLE_FW="$(/usr/bin/find .build/artifacts -type d -ipath '*macos*/Sparkle.framework' 2>/dev/null | head -1)"
+if [ -n "${SPARKLE_FW}" ] && [ -d "${SPARKLE_FW}" ]; then
+    echo "▶ Embedding Sparkle.framework..."
+    mkdir -p "${APP_BUNDLE}/Contents/Frameworks"
+    rm -rf "${APP_BUNDLE}/Contents/Frameworks/Sparkle.framework"
+    # ditto 保留符号链接 / 扩展属性(签名所需);别用 cp -R。
+    ditto "${SPARKLE_FW}" "${APP_BUNDLE}/Contents/Frameworks/Sparkle.framework"
+    # 加 rpath(已存在则忽略报错);顺手删掉 SPM 注入的 .build 绝对路径 rpath,
+    # 否则在别的 Mac 上那条死路径会拖慢 dyld 解析。
+    install_name_tool -add_rpath "@executable_path/../Frameworks" \
+        "${APP_BUNDLE}/Contents/MacOS/Kown" 2>/dev/null || true
+    BUILD_RPATH="$(otool -l "${APP_BUNDLE}/Contents/MacOS/Kown" | awk '/LC_RPATH/{f=1} f&&/path /{print $2; f=0}' | grep "/.build/" || true)"
+    if [ -n "${BUILD_RPATH}" ]; then
+        install_name_tool -delete_rpath "${BUILD_RPATH}" "${APP_BUNDLE}/Contents/MacOS/Kown" 2>/dev/null || true
+    fi
+else
+    echo "⚠ 没找到 Sparkle.framework artifact,自动更新不会工作。先跑 swift build -c release。"
+fi
+
 # 3) 写版本号
 plutil -replace CFBundleShortVersionString -string "${VERSION}" "${APP_BUNDLE}/Contents/Info.plist"
 # CFBundleVersion 用 git 提交数(单调递增),没 git 就用时间戳
@@ -109,14 +132,37 @@ elif [ "${IDENTITY}" != "-" ]; then
 fi
 
 # 4) 签名
+#    内嵌的 Sparkle.framework 必须「由里到外」逐个签:XPC 服务 → Autoupdate → Updater.app
+#    → framework 本体 → 最后主 app。且这些 helper 绝不能带上主 app 的 entitlements
+#    (iCloud / 文件访问),否则公证 / Gatekeeper 会拒。所以主 app 这步不能用 --deep。
+SP="${APP_BUNDLE}/Contents/Frameworks/Sparkle.framework"
+sign_sparkle() {  # $1 = identity, $2... = extra codesign flags
+    local id="$1"; shift
+    [ -d "${SP}" ] || return 0
+    echo "▶ Signing embedded Sparkle.framework (inside-out)..."
+    local item
+    for item in \
+        "${SP}/Versions/B/XPCServices/Downloader.xpc" \
+        "${SP}/Versions/B/XPCServices/Installer.xpc" \
+        "${SP}/Versions/B/Autoupdate" \
+        "${SP}/Versions/B/Updater.app" \
+        "${SP}"
+    do
+        [ -e "${item}" ] && codesign --force "$@" --sign "${id}" "${item}"
+    done
+}
+
 if [ "${IDENTITY}" = "-" ]; then
-    echo "▶ Ad-hoc signing with entitlements..."
-    codesign --force --deep --sign - \
+    echo "▶ Ad-hoc signing..."
+    sign_sparkle "-"
+    codesign --force --sign - \
         --entitlements "${ENTITLEMENTS}" \
         "${APP_BUNDLE}"
 else
     echo "▶ Signing with identity: ${IDENTITY}"
-    codesign --force --deep --options runtime --timestamp \
+    sign_sparkle "${IDENTITY}" --options runtime --timestamp
+    # 主 app 最后签(不带 --deep,nested 已各自签好),带上 app 自己的 entitlements。
+    codesign --force --options runtime --timestamp \
         --sign "${IDENTITY}" \
         --entitlements "${ENTITLEMENTS}" \
         "${APP_BUNDLE}"
@@ -209,10 +255,46 @@ if [ "${IDENTITY}" != "-" ]; then
     fi
 fi
 
+# 8) 生成签名后的 appcast.xml(Sparkle 更新源)。
+#    用 Sparkle 自带的 generate_appcast,它用 keychain 里的 EdDSA 私钥给 DMG 签名,
+#    并把 enclosure url 指向公开分发仓库 macuhy/kown-mac 的 release 资源。
+#    把当前 DMG 单独丢进临时目录再扫描,避免 dist/ 里历史 DMG 串进同一个 tag 的下载链接。
+#    产物 dist/appcast.xml 连同 DMG 一起上传到 macuhy/kown-mac(release 资源 + 仓库根的 appcast.xml)。
+APPCAST_DOWNLOAD_PREFIX="${APPCAST_DOWNLOAD_PREFIX:-https://github.com/macuhy/kown-mac/releases/download/v${VERSION}/}"
+APPCAST_LINK="${APPCAST_LINK:-https://github.com/macuhy/kown}"
+GEN_APPCAST="$(/usr/bin/find "${ROOT}/.build/artifacts" -ipath '*sparkle*/bin/generate_appcast' 2>/dev/null | head -1)"
+if [ -n "${GEN_APPCAST}" ] && [ -x "${GEN_APPCAST}" ]; then
+    echo "▶ Generating signed appcast.xml..."
+    APPCAST_WORK="$(mktemp -d -t kown-appcast)"
+    cp -f "${DMG_PATH}" "${APPCAST_WORK}/"
+    # generate_appcast 默认从 keychain 读私钥(account ed25519);失败不致命。
+    if "${GEN_APPCAST}" \
+        --download-url-prefix "${APPCAST_DOWNLOAD_PREFIX}" \
+        --link "${APPCAST_LINK}" \
+        -o "${ROOT}/dist/appcast.xml" \
+        "${APPCAST_WORK}" 2>&1
+    then
+        echo "  → ${ROOT}/dist/appcast.xml"
+    else
+        echo "  ⚠ generate_appcast 失败(keychain 私钥没权限?)。appcast 需手动生成。"
+    fi
+    rm -rf "${APPCAST_WORK}"
+else
+    echo "ℹ 没找到 generate_appcast,跳过 appcast 生成(先 swift build 拉下 Sparkle artifact)。"
+fi
+
 echo ""
 echo "✅ Release ready:"
 echo "   App: ${APP_BUNDLE}"
 echo "   DMG: ${DMG_PATH} ($(du -h "${DMG_PATH}" | awk '{print $1}'))"
+if [ -f "${ROOT}/dist/appcast.xml" ]; then
+    echo "   Appcast: ${ROOT}/dist/appcast.xml"
+    echo ""
+    echo "📤 发布自动更新:把 DMG 传到 macuhy/kown-mac 的 v${VERSION} release,"
+    echo "   再把 dist/appcast.xml 推到 macuhy/kown-mac 仓库根(main)。例如:"
+    echo "     gh release create v${VERSION} \"${DMG_PATH}\" -R macuhy/kown-mac -t v${VERSION}"
+    echo "     # 然后把 dist/appcast.xml 提交到 macuhy/kown-mac 的 main 分支"
+fi
 echo ""
 if [ "${IDENTITY}" = "-" ]; then
     echo "ℹ ad-hoc 模式 — 其他用户首次打开需手动 xattr -dr com.apple.quarantine /Applications/Kown.app"
