@@ -11,6 +11,11 @@ on:
         description: '版本号（如 1.2.0）'
         required: true
 
+# 默认 GITHUB_TOKEN 是只读；reusable workflow 需要 contents:write（dispatch 打 tag）。
+# 被调用方权限不能超过调用方，必须在此显式授予，否则 startup_failure。
+permissions:
+  contents: write
+
 jobs:
   release:
     uses: macuhy/macos-app-release-kit/.github/workflows/release-reusable.yml@main
