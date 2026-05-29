@@ -19,7 +19,15 @@ permissions:
 jobs:
   release:
     uses: macuhy/macos-app-release-kit/.github/workflows/release-reusable.yml@main
-    secrets: inherit            # 继承 macuhy 组织级 7 个密钥
+    # 跨仓库调用时 secrets: inherit 不会转发组织级 secret，必须显式逐个传。
+    secrets:
+      DEVELOPER_ID_CERTIFICATE_P12:      ${{ secrets.DEVELOPER_ID_CERTIFICATE_P12 }}
+      DEVELOPER_ID_CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+      APPLE_ID:                          ${{ secrets.APPLE_ID }}
+      APPLE_ID_PASSWORD:                 ${{ secrets.APPLE_ID_PASSWORD }}
+      APPLE_TEAM_ID:                     ${{ secrets.APPLE_TEAM_ID }}
+      SPARKLE_PRIVATE_KEY:               ${{ secrets.SPARKLE_PRIVATE_KEY }}
+      RELEASE_REPO_PAT:                  ${{ secrets.RELEASE_REPO_PAT }}
     with:
       app_name: "Kown"
       scheme: "Kown"
