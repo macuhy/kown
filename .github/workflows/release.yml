@@ -28,6 +28,7 @@ jobs:
       APPLE_TEAM_ID:                     ${{ secrets.APPLE_TEAM_ID }}
       SPARKLE_PRIVATE_KEY:               ${{ secrets.SPARKLE_PRIVATE_KEY }}
       RELEASE_REPO_PAT:                  ${{ secrets.RELEASE_REPO_PAT }}
+      PROVISIONING_PROFILE_BASE64:       ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
     with:
       app_name: "Kown"
       scheme: "Kown"
@@ -36,3 +37,5 @@ jobs:
       download_url_prefix: "https://github.com/macuhy/kown-mac/releases/download/"
       # mac/Kown.xcodeproj 已由 xcodegen 本地生成并提交（含 Sparkle），CI 直接构建
       use_xcodegen: false
+      # Kown 带 iCloud entitlement → 需 Developer ID provisioning profile
+      provisioning_profile_specifier: "Kown Developer ID"

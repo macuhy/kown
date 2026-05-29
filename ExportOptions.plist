@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- 供 xcodebuild -exportArchive 使用：以 Developer ID 方式导出（App Store 之外分发）。 -->
+<!-- 供 xcodebuild -exportArchive 使用：Developer ID 导出（App Store 之外分发）。
+     Kown 带 iCloud entitlement → 手动签名 + 指定 "Kown Developer ID" profile。 -->
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
@@ -10,9 +11,15 @@
     <string>4257SFGRFK</string>
 
     <key>signingStyle</key>
-    <string>automatic</string>
+    <string>manual</string>
 
     <key>signingCertificate</key>
     <string>Developer ID Application</string>
+
+    <key>provisioningProfiles</key>
+    <dict>
+        <key>com.xiaobo.kown</key>
+        <string>Kown Developer ID</string>
+    </dict>
 </dict>
 </plist>
