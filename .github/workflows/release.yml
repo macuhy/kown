@@ -1,0 +1,25 @@
+# 调用方 workflow —— 发布逻辑全在公共 kit 仓库的 reusable workflow。
+# 触发: ① git tag v1.2.0 && git push origin v1.2.0   ② Actions 页手动 Run（填版本号）
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号（如 1.2.0）'
+        required: true
+
+jobs:
+  release:
+    uses: macuhy/macos-app-release-kit/.github/workflows/release-reusable.yml@main
+    secrets: inherit            # 继承 macuhy 组织级 7 个密钥
+    with:
+      app_name: "Kown"
+      scheme: "Kown"
+      project: "mac/Kown.xcodeproj"
+      public_repo: "macuhy/kown-mac"
+      download_url_prefix: "https://github.com/macuhy/kown-mac/releases/download/"
+      # mac/Kown.xcodeproj 已由 xcodegen 本地生成并提交（含 Sparkle），CI 直接构建
+      use_xcodegen: false

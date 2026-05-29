@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 供 xcodebuild -exportArchive 使用：以 Developer ID 方式导出（App Store 之外分发）。 -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>method</key>
+    <string>developer-id</string>
+
+    <key>teamID</key>
+    <string>4257SFGRFK</string>
+
+    <key>signingStyle</key>
+    <string>automatic</string>
+
+    <key>signingCertificate</key>
+    <string>Developer ID Application</string>
+</dict>
+</plist>

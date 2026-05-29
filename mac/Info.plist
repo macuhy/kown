@@ -38,8 +38,6 @@
 			<string>Any</string>
 		</dict>
 	</dict>
-	<key>SUAutomaticallyUpdate</key>
-	<false/>
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
 	<key>SUFeedURL</key>
