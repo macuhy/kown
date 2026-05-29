@@ -51,14 +51,17 @@ enum ConversationStore {
             .prefix(maxLoadedOnStartup)
             .map { $0.0 }
 
-        var convs: [Conversation] = []
+        // 按 id 去重 —— iCloud 冲突会生成「<id> 2.json」这类副本,同一个 id 会被读到多份。
+        // 若不去重,SidebarView 的 ForEach 拿到重复 Identifiable id,SwiftUI 布局会错乱
+        // (行错位 / 大片空白)。同 id 保留 updatedAt 最新的那份。
+        var byID: [UUID: Conversation] = [:]
         for url in recentURLs {
-            if let data = try? Data(contentsOf: url),
-               let conv = try? decoder.decode(Conversation.self, from: data) {
-                convs.append(conv)
-            }
+            guard let data = try? Data(contentsOf: url),
+                  let conv = try? decoder.decode(Conversation.self, from: data) else { continue }
+            if let existing = byID[conv.id], existing.updatedAt >= conv.updatedAt { continue }
+            byID[conv.id] = conv
         }
-        return convs.sorted { $0.updatedAt > $1.updatedAt }
+        return byID.values.sorted { $0.updatedAt > $1.updatedAt }
     }
 
     /// 按 id 单独加载一条 — 给以后"加载更多"按钮用。

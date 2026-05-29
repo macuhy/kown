@@ -1,5 +1,14 @@
 # 更新日志
 
+## 0.6.13 — 2026-05-29
+### 修复(严重)
+- **自动更新无限循环 /「安装并重启」不生效** — 之前每个发布的包 `CFBundleVersion` 都被硬编码成 `1`,而 appcast 的 `sparkle:version` 用 git 提交数(单调递增)。装好新版后 app 仍报 build 1,Sparkle 一比 `8 > 1` 又弹更新,点安装重启后还是 build 1 → 死循环。现在 `CFBundleVersion` 走 `$(CURRENT_PROJECT_VERSION)`,由 CI 注入 git 提交数,和 appcast 对齐,Sparkle 正确识别"已是最新"
+### 修复
+- **侧边栏会话列表大片空白 / 重复** — iCloud 冲突会生成「`<id> 2.json`」副本,`loadAll` 把同一个 id 读成多份,SwiftUI `ForEach` 拿到重复 Identifiable id 导致布局错乱。现在按 id 去重,保留 `updatedAt` 最新的一份
+### 改进
+- **设置顶部 tab 放不下文字时自动只显示图标**(`ViewThatFits`)— 标签宽度不够不再挤成两行,退化成纯图标 + tooltip
+- **更新弹窗不再嵌入 GitHub 网页**(`SUShowReleaseNotes=NO`)— 只保留版本说明文字与按钮(0.6.13 起生效)
+
 ## 0.6.11 — 2026-05-28
 ### 改回
 - **Gemini 改回 SSE 流式**(`streamGenerateContent?alt=sse`)— 字一段段实时显,体验更好。0.6.10 的 `generateContent` 一次返回的方式回退。CRLF 解析早已修好(0.6.6),thoughtSignature 也带了(0.6.7),SSE 路径稳定

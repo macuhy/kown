@@ -257,17 +257,35 @@ struct SettingsView: View {
 
     private var tabBar: some View {
         HStack(spacing: 8) {
+            // 标签放得下就显示「图标+文字」,放不下就退化成「只显示图标」(文字进 tooltip),
+            // 永远不换行 / 不挤成两行。
+            ViewThatFits(in: .horizontal) {
+                tabRow(iconOnly: false)
+                tabRow(iconOnly: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 10)
+    }
+
+    private func tabRow(iconOnly: Bool) -> some View {
+        HStack(spacing: 8) {
             ForEach(availableTabs) { t in
                 Button {
                     tab = t
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: t.symbol)
-                        Text(t.label)
+                        if !iconOnly {
+                            Text(t.label)
+                                .lineLimit(1)
+                                .fixedSize()
+                        }
                     }
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(tab == t ? Color.accentColor : .secondary)
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, iconOnly ? 10 : 12)
                     .padding(.vertical, 6)
                     .background(
                         Capsule().fill((tab == t ? Color.accentColor : .secondary).opacity(0.10))
@@ -277,11 +295,9 @@ struct SettingsView: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .help(t.label)
             }
-            Spacer()
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 10)
     }
 
     private var providersList: some View {

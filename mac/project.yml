@@ -23,8 +23,10 @@ targets:
     info:
       path: Info.plist
       properties:
-        CFBundleShortVersionString: "0.6.12"
-        CFBundleVersion: "1"
+        # 版本号走 build setting:CI 用 MARKETING_VERSION / CURRENT_PROJECT_VERSION 注入
+        # (CURRENT_PROJECT_VERSION = git 提交数,单调递增 → Sparkle 才认得出是新版本)。
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         CFBundleDisplayName: Kown
         LSMinimumSystemVersion: "14.0"
         LSApplicationCategoryType: public.app-category.productivity
@@ -56,6 +58,9 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.xiaobo.kown
+        # 本地构建的默认版本;CI 用命令行覆盖(CURRENT_PROJECT_VERSION=git 提交数)。
+        MARKETING_VERSION: "0.6.13"
+        CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: 4257SFGRFK   # 写死付费 Team,Archive 不再每次让人选
         SWIFT_VERSION: "6.0"
