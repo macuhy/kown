@@ -23,7 +23,7 @@ targets:
     info:
       path: Info.plist
       properties:
-        CFBundleShortVersionString: "0.4.1"
+        CFBundleShortVersionString: "0.6.12"
         CFBundleVersion: "1"
         CFBundleDisplayName: Kown
         LSMinimumSystemVersion: "14.0"
@@ -34,6 +34,8 @@ targets:
         SUPublicEDKey: QxXWME0pGom6NLGkoNq6AdkK8h+i+ZttNeED2No5HT8=
         SUEnableAutomaticChecks: true
         SUScheduledCheckInterval: 86400
+        # 更新弹窗不显示 release notes 网页（GitHub 页面），只留按钮
+        SUShowReleaseNotes: false
         NSUbiquitousContainers:
           iCloud.com.xiaobo.kown:
             NSUbiquitousContainerIsDocumentScopePublic: false
