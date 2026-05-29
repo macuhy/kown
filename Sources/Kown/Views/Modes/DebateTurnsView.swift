@@ -1,0 +1,212 @@
+import SwiftUI
+
+/// Debate 模式：多模型先立论，再读彼此观点做反驳 / 修正，最后由 Chair 做主持总结。
+struct DebateTurnsView: View {
+    @Bindable var viewModel: AppViewModel
+    let conversation: Conversation
+    let liveStates: [UUID: ResponseState]
+    let liveChairState: ResponseState?
+    let liveDebateRounds: [DebateRound]
+    let livePrompt: String?
+    let isRunning: Bool
+    let livePanel: [ProviderConfig]
+    let liveChair: ProviderConfig?
+
+    @Environment(\.horizontalSizeClass) private var hSizeClass
+
+    private var stacksVertically: Bool {
+        #if os(iOS)
+        return hSizeClass == .compact
+        #else
+        return false
+        #endif
+    }
+
+    var body: some View {
+        LazyVStack(alignment: .leading, spacing: 18) {
+            ForEach(conversation.turns) { turn in
+                historicalTurn(turn)
+            }
+            if let livePrompt {
+                liveTurn(prompt: livePrompt)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 16)
+    }
+
+    private func historicalTurn(_ turn: Turn) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            PromptBubble(prompt: turn.prompt, timestamp: turn.timestamp)
+
+            let rounds = (turn.debateRounds ?? []).sorted { $0.index < $1.index }
+            if rounds.isEmpty {
+                // 兼容极早期/异常数据：没有 debateRounds 时展示最终 panel 结果。
+                panelStack {
+                    ForEach(turn.orderedPanelConfigs) { cfg in
+                        let key = cfg.id.uuidString
+                        HistoricalResponseCard(
+                            config: cfg,
+                            text: turn.responses[key] ?? "",
+                            error: turn.errors[key],
+                            onRetry: turn.errors[key] != nil ? {
+                                viewModel.retryProvider(turnID: turn.id, configID: cfg.id)
+                            } : nil,
+                            isRetrying: viewModel.isRetrying(turnID: turn.id, configID: cfg.id)
+                        )
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                    }
+                }
+            } else {
+                ForEach(rounds) { round in
+                    historicalRound(round, turn: turn)
+                }
+            }
+
+            if let moderator = turn.chairConfig {
+                ChairSummaryCard(
+                    config: moderator,
+                    text: turn.chairSummary,
+                    error: turn.chairError,
+                    liveText: nil,
+                    isStreaming: false,
+                    role: .moderator,
+                    onRetry: turn.chairError != nil ? {
+                        viewModel.retryChair(turnID: turn.id, target: .chair)
+                    } : nil,
+                    isRetrying: viewModel.isRetryingChair(turnID: turn.id, target: .chair)
+                )
+            }
+            if let writes = turn.appliedWrites, !writes.isEmpty {
+                AppliedWritesStrip(writes: writes)
+            }
+        }
+    }
+
+    private func historicalRound(_ round: DebateRound, turn: Turn) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            roundHeader(index: round.index, title: round.title, live: false)
+            panelStack {
+                ForEach(configs(for: round, snapshot: turn.providerSnapshot, fallbackOrder: turn.panelOrder)) { cfg in
+                    let key = cfg.id.uuidString
+                    HistoricalResponseCard(
+                        config: cfg,
+                        text: round.responses[key] ?? "",
+                        error: round.errors[key],
+                        onRetry: round.errors[key] != nil ? {
+                            viewModel.retryProvider(turnID: turn.id, configID: cfg.id, roundIndex: round.index)
+                        } : nil,
+                        isRetrying: viewModel.isRetrying(turnID: turn.id, configID: cfg.id, roundIndex: round.index)
+                    )
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                }
+            }
+        }
+    }
+
+    private func liveTurn(prompt: String) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            PromptBubble(prompt: prompt, timestamp: Date())
+
+            ForEach(liveDebateRounds.sorted { $0.index < $1.index }) { round in
+                liveCompletedRound(round)
+            }
+
+            if !liveStates.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    roundHeader(
+                        index: liveDebateRounds.count + 1,
+                        title: liveDebateRounds.isEmpty ? "立论" : "反驳 / 修正",
+                        live: isRunning
+                    )
+                    panelStack {
+                        ForEach(livePanel) { cfg in
+                            if let state = liveStates[cfg.id] {
+                                ResponseColumnView(config: cfg, state: state)
+                                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                            }
+                        }
+                    }
+                }
+            }
+
+            if let moderator = liveChair, let chairState = liveChairState {
+                ChairSummaryCard(
+                    config: moderator,
+                    text: nil,
+                    error: chairErrorMessage(chairState),
+                    liveText: chairState.text,
+                    isStreaming: isChairStreaming(chairState),
+                    role: .moderator
+                )
+            }
+        }
+    }
+
+    private func liveCompletedRound(_ round: DebateRound) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            roundHeader(index: round.index, title: round.title, live: false)
+            panelStack {
+                ForEach(configs(for: round, snapshot: liveSnapshot, fallbackOrder: livePanel.map { $0.id.uuidString })) { cfg in
+                    let key = cfg.id.uuidString
+                    HistoricalResponseCard(
+                        config: cfg,
+                        text: round.responses[key] ?? "",
+                        error: round.errors[key]
+                    )
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                }
+            }
+        }
+    }
+
+    private func roundHeader(index: Int, title: String, live: Bool) -> some View {
+        HStack(spacing: 8) {
+            Text("ROUND \(index)")
+                .font(.system(.caption2, design: .monospaced).weight(.bold))
+                .foregroundStyle(.indigo)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.indigo.opacity(0.12), in: Capsule())
+            Text(title)
+                .font(.headline.weight(.semibold))
+            if live {
+                ProgressView()
+                    .controlSize(.small)
+            }
+            Spacer()
+        }
+    }
+
+    @ViewBuilder
+    private func panelStack<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        if stacksVertically {
+            VStack(alignment: .leading, spacing: 12) { content() }
+        } else {
+            HStack(alignment: .top, spacing: 12) { content() }
+        }
+    }
+
+    private func configs(
+        for round: DebateRound,
+        snapshot: [String: ProviderConfig],
+        fallbackOrder: [String]
+    ) -> [ProviderConfig] {
+        let order = round.panelOrder.isEmpty ? fallbackOrder : round.panelOrder
+        return order.compactMap { snapshot[$0] }
+    }
+
+    private var liveSnapshot: [String: ProviderConfig] {
+        Dictionary(uniqueKeysWithValues: livePanel.map { ($0.id.uuidString, $0) })
+    }
+
+    private func isChairStreaming(_ state: ResponseState) -> Bool {
+        if case .streaming = state.phase { return true }
+        return false
+    }
+
+    private func chairErrorMessage(_ state: ResponseState) -> String? {
+        if case .failed(let msg) = state.phase { return msg }
+        return nil
+    }
+}

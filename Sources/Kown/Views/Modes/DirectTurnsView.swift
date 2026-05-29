@@ -1,0 +1,158 @@
+import SwiftUI
+
+/// Direct 模式：ChatGPT 风格的竖向气泡列表
+struct DirectTurnsView: View {
+    let conversation: Conversation
+    let liveStates: [UUID: ResponseState]
+    let livePrompt: String?
+    let livePanel: [ProviderConfig]
+
+    var body: some View {
+        LazyVStack(alignment: .leading, spacing: 16) {
+            ForEach(conversation.turns) { turn in
+                historicalTurn(turn)
+            }
+            if let livePrompt {
+                liveTurn(prompt: livePrompt)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 16)
+        .frame(maxWidth: .infinity)
+    }
+
+    private func historicalTurn(_ turn: Turn) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            userBubble(prompt: turn.prompt, timestamp: turn.timestamp)
+            if let cfg = turn.orderedPanelConfigs.first {
+                let key = cfg.id.uuidString
+                assistantBubble(
+                    config: cfg,
+                    text: turn.responses[key] ?? "",
+                    error: turn.errors[key],
+                    streaming: false
+                )
+            }
+            if let writes = turn.appliedWrites, !writes.isEmpty {
+                AppliedWritesStrip(writes: writes)
+            }
+        }
+    }
+
+    private func liveTurn(prompt: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            userBubble(prompt: prompt, timestamp: Date())
+            if let cfg = livePanel.first, let state = liveStates[cfg.id] {
+                assistantBubble(
+                    config: cfg,
+                    text: state.text,
+                    error: errorMessage(state.phase),
+                    streaming: isStreaming(state.phase)
+                )
+            }
+        }
+    }
+
+    private func userBubble(prompt: String, timestamp: Date) -> some View {
+        HStack {
+            Spacer(minLength: 60)
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(prompt)
+                    .font(.body)
+                    .textSelection(.enabled)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(Color.accentColor.opacity(0.18), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .strokeBorder(Color.accentColor.opacity(0.30), lineWidth: 1)
+                    }
+                Text(timestamp, style: .time)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+    }
+
+    private func assistantBubble(config: ProviderConfig, text: String, error: String?, streaming: Bool) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(accentColor(config).opacity(0.14))
+                Image(systemName: providerSymbol(config))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(accentColor(config))
+            }
+            .frame(width: 28, height: 28)
+            .overlay {
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .strokeBorder(accentColor(config).opacity(0.20), lineWidth: 1)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(config.displayName)
+                        .font(.caption.weight(.semibold))
+                    Text(config.model)
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                    if streaming {
+                        ProgressView().controlSize(.small)
+                    }
+                }
+                if let error {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .font(.callout)
+                        .foregroundStyle(.red)
+                } else if text.isEmpty {
+                    Text(streaming ? "正在思考..." : "(空响应)")
+                        .font(.body)
+                        .foregroundStyle(.tertiary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    MarkdownText(text: text, streaming: streaming)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(
+                Color.platformControlBackground.opacity(0.6),
+                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(accentColor(config).opacity(0.20), lineWidth: 1)
+            }
+            Spacer(minLength: 60)
+        }
+    }
+
+    private func isStreaming(_ phase: ResponsePhase) -> Bool {
+        if case .streaming = phase { return true }
+        return false
+    }
+
+    private func errorMessage(_ phase: ResponsePhase) -> String? {
+        if case .failed(let m) = phase { return m }
+        return nil
+    }
+
+    private func accentColor(_ cfg: ProviderConfig) -> Color {
+        switch cfg.kind {
+        case .openAICompatible: return Color(red: 0.06, green: 0.64, blue: 0.50)
+        case .anthropic:        return Color(red: 0.83, green: 0.38, blue: 0.18)
+        case .gemini:           return Color(red: 0.26, green: 0.52, blue: 0.96)
+        case .cliCommand:       return Color(red: 0.55, green: 0.45, blue: 0.78)
+        }
+    }
+
+    private func providerSymbol(_ cfg: ProviderConfig) -> String {
+        switch cfg.kind {
+        case .openAICompatible: return "sparkles"
+        case .anthropic:        return "text.book.closed"
+        case .gemini:           return "diamond.fill"
+        case .cliCommand:       return "terminal"
+        }
+    }
+}

@@ -1,75 +1,60 @@
 import Foundation
-import Security
 
 enum KeychainError: Error, LocalizedError {
     case missing
-    case unexpectedStatus(OSStatus)
+    case saveFailed(String)
 
     var errorDescription: String? {
         switch self {
-        case .missing: return "未配置 API Key"
-        case .unexpectedStatus(let s): return "Keychain 错误 (status=\(s))"
+        case .missing:             return "未配置 API Key，请在设置中填入"
+        case .saveFailed(let msg): return "保存失败: \(msg)"
         }
     }
 }
 
+/// Stores API keys as JSON in [syncedDataDir]/apikeys.json (permissions 0600).
+/// 同步开启时跟随其他配置一起进 iCloud 容器(对 Files app 隐藏);关闭时落本地。
+@MainActor
 enum KeychainStore {
-    private static let service = "app.kown.apikey"
+    private static var storeURL: URL {
+        Platform.syncedDataDir.appendingPathComponent("apikeys.json")
+    }
+
+    private static func loadAll() -> [String: String] {
+        guard let data = try? Data(contentsOf: storeURL),
+              let dict = try? JSONDecoder().decode([String: String].self, from: data)
+        else { return [:] }
+        return dict
+    }
+
+    private static func saveAll(_ dict: [String: String]) throws {
+        let data = try JSONEncoder().encode(dict)
+        try data.write(to: storeURL, options: .atomic)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o600 as NSNumber], ofItemAtPath: storeURL.path
+        )
+    }
 
     static func save(id: UUID, apiKey: String) throws {
-        let account = id.uuidString
-        let data = Data(apiKey.utf8)
-
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-        ]
-
-        let attributes: [String: Any] = [
-            kSecValueData as String: data
-        ]
-
-        let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
-        if updateStatus == errSecSuccess { return }
-        if updateStatus == errSecItemNotFound {
-            var addQuery = query
-            addQuery[kSecValueData as String] = data
-            let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
-            guard addStatus == errSecSuccess else {
-                throw KeychainError.unexpectedStatus(addStatus)
-            }
-            return
+        var all = loadAll()
+        all[id.uuidString] = apiKey
+        do { try saveAll(all) } catch {
+            throw KeychainError.saveFailed(error.localizedDescription)
         }
-        throw KeychainError.unexpectedStatus(updateStatus)
     }
 
     static func load(id: UUID) throws -> String {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: id.uuidString,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-        ]
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-        if status == errSecItemNotFound { throw KeychainError.missing }
-        guard status == errSecSuccess, let data = result as? Data,
-              let key = String(data: data, encoding: .utf8), !key.isEmpty else {
-            if status == errSecSuccess { throw KeychainError.missing }
-            throw KeychainError.unexpectedStatus(status)
+        let all = loadAll()
+        guard let key = all[id.uuidString], !key.isEmpty else {
+            throw KeychainError.missing
         }
         return key
     }
 
     static func delete(id: UUID) {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: id.uuidString,
-        ]
-        SecItemDelete(query as CFDictionary)
+        var all = loadAll()
+        all.removeValue(forKey: id.uuidString)
+        try? saveAll(all)
     }
 
     static func hasKey(id: UUID) -> Bool {

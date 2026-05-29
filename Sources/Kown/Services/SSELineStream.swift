@@ -31,11 +31,14 @@ struct SSELineStream: AsyncSequence {
             var buffer: [UInt8] = []
             while let byte = try await lines.next() {
                 if byte == 0x0A { // \n
-                    let line = String(decoding: buffer, as: UTF8.self)
+                    let raw = String(decoding: buffer, as: UTF8.self)
                     buffer.removeAll(keepingCapacity: true)
-                    // 处理一行
+                    // 关键:先去掉行尾 \r(CRLF 情况)再判空。
+                    // Gemini SSE 用 \r\n\r\n 分隔事件 — 之前把 isEmpty 判断在 trim 之前,
+                    // "\r" 不识别为事件边界,所有 data 累到流末尾才作为 1 个大事件出来,
+                    // JSONSerialization 解 "json1\njson2..." 直接失败 → 空响应。
+                    let line = raw.hasSuffix("\r") ? String(raw.dropLast()) : raw
                     if line.isEmpty {
-                        // 事件分隔
                         if !pendingData.isEmpty || pendingEvent != nil {
                             let evt = SSEEvent(event: pendingEvent,
                                                 data: pendingData.joined(separator: "\n"))
@@ -45,12 +48,10 @@ struct SSELineStream: AsyncSequence {
                         }
                         continue
                     }
-                    // 去掉行尾 \r(CRLF 情况)
-                    let trimmed = line.hasSuffix("\r") ? String(line.dropLast()) : line
-                    if trimmed.hasPrefix(":") { continue }       // 注释
-                    if let colon = trimmed.firstIndex(of: ":") {
-                        let field = String(trimmed[..<colon])
-                        var value = String(trimmed[trimmed.index(after: colon)...])
+                    if line.hasPrefix(":") { continue }       // 注释
+                    if let colon = line.firstIndex(of: ":") {
+                        let field = String(line[..<colon])
+                        var value = String(line[line.index(after: colon)...])
                         if value.hasPrefix(" ") { value.removeFirst() }
                         switch field {
                         case "data": pendingData.append(value)
