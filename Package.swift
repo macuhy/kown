@@ -24,6 +24,11 @@ let package = Package(
             swiftSettings: [
                 .enableUpcomingFeature("StrictConcurrency")
             ]
+        ),
+        .testTarget(
+            name: "KownTests",
+            dependencies: ["Kown"],
+            path: "Tests/KownTests"
         )
     ]
 )

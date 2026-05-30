@@ -51,13 +51,23 @@ enum ConversationStore {
             .prefix(maxLoadedOnStartup)
             .map { $0.0 }
 
-        // 按 id 去重 —— iCloud 冲突会生成「<id> 2.json」这类副本,同一个 id 会被读到多份。
-        // 若不去重,SidebarView 的 ForEach 拿到重复 Identifiable id,SwiftUI 布局会错乱
-        // (行错位 / 大片空白)。同 id 保留 updatedAt 最新的那份。
-        var byID: [UUID: Conversation] = [:]
+        var convs: [Conversation] = []
         for url in recentURLs {
             guard let data = try? Data(contentsOf: url),
                   let conv = try? decoder.decode(Conversation.self, from: data) else { continue }
+            convs.append(conv)
+        }
+        return dedupeByID(convs)
+    }
+
+    /// 按 id 去重,保留 `updatedAt` 最新的一份,并按 `updatedAt` 倒序返回。
+    ///
+    /// iCloud 冲突会生成「`<id> 2.json`」这类副本,同一个 id 会被读到多份。若不去重,
+    /// `SidebarView` 的 `ForEach` 拿到重复 Identifiable id,SwiftUI 布局会错乱(行错位 / 大片空白)。
+    /// 抽成纯静态函数给单测覆盖。
+    nonisolated static func dedupeByID(_ convs: [Conversation]) -> [Conversation] {
+        var byID: [UUID: Conversation] = [:]
+        for conv in convs {
             if let existing = byID[conv.id], existing.updatedAt >= conv.updatedAt { continue }
             byID[conv.id] = conv
         }
