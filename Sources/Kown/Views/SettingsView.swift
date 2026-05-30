@@ -1,4 +1,7 @@
 import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
 
 struct SettingsView: View {
     @Bindable var viewModel: AppViewModel
@@ -256,21 +259,9 @@ struct SettingsView: View {
     private var desktopSidebar: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 12) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 15, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [Color.teal.opacity(0.90), Color.orange.opacity(0.78)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                    Image(systemName: "brain.head.profile")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(.white)
-                }
+                SettingsAppIcon()
                 .frame(width: 40, height: 40)
-                .shadow(color: Color.teal.opacity(0.18), radius: 12, x: 0, y: 6)
+                .shadow(color: Color.primary.opacity(0.10), radius: 12, x: 0, y: 6)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Kown")
@@ -325,6 +316,7 @@ struct SettingsView: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 9)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(selected ? t.tint.opacity(0.13) : Color.clear)
@@ -333,8 +325,10 @@ struct SettingsView: View {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .strokeBorder(selected ? t.tint.opacity(0.26) : Color.clear, lineWidth: 1)
             }
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
         .buttonStyle(.plain)
+        .frame(maxWidth: .infinity)
         .help(t.label)
     }
 
@@ -715,6 +709,26 @@ struct SettingsView: View {
         } label: {
             Label("添加", systemImage: "plus")
         }
+    }
+}
+
+private struct SettingsAppIcon: View {
+    var body: some View {
+        #if os(macOS)
+        Image(nsImage: NSApp.applicationIconImage)
+            .resizable()
+            .scaledToFill()
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.22), lineWidth: 1)
+            }
+        #else
+        Image("AppIcon")
+            .resizable()
+            .scaledToFill()
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        #endif
     }
 }
 
