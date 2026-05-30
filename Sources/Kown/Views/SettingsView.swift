@@ -210,23 +210,10 @@ struct SettingsView: View {
                 tab = t
             }
         } label: {
-            HStack(spacing: 8) {
-                Image(systemName: t.symbol)
-                    .font(.system(size: 12, weight: .bold))
-                    .frame(width: 21, height: 21)
-                    .background(
-                        Circle()
-                            .fill(selected ? Color.white.opacity(0.22) : t.tint.opacity(0.12))
-                    )
-                Text(t.label)
-                    .lineLimit(1)
-            }
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(selected ? Color.white : Color.primary)
-            .padding(.leading, 6)
-            .padding(.trailing, 9)
-            .padding(.vertical, 4)
-            .frame(minHeight: 32)
+            Image(systemName: t.symbol)
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(selected ? Color.white : Color.primary)
+                .frame(width: 42, height: 42)
             .background {
                 Capsule(style: .continuous)
                     .fill(Color.platformControlBackground.opacity(selected ? 0 : 0.72))
@@ -250,6 +237,7 @@ struct SettingsView: View {
             .contentShape(Capsule(style: .continuous))
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(t.label)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
@@ -937,10 +925,16 @@ private struct SettingsAppIcon: View {
                     .strokeBorder(Color.white.opacity(0.22), lineWidth: 1)
             }
         #else
-        Image("AppIcon")
+        // iOS 下 `Image("AppIcon")` 取不到 app 图标(asset catalog 的 AppIcon 不作为普通命名图开放),
+        // 之前因此留白。改用 LaunchLogo(普通 imageset,App 其它地方已在用),保证能渲染。
+        Image("LaunchLogo")
             .resizable()
             .scaledToFill()
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.22), lineWidth: 1)
+            }
         #endif
     }
 }
