@@ -8,6 +8,7 @@ struct DebateTurnsView: View {
     let liveChairState: ResponseState?
     let liveDebateRounds: [DebateRound]
     let livePrompt: String?
+    var liveImages: [TurnImage] = []
     let isRunning: Bool
     let livePanel: [ProviderConfig]
     let liveChair: ProviderConfig?
@@ -42,7 +43,7 @@ struct DebateTurnsView: View {
             icon: "quote.bubble.fill",
             tint: debateTint
         ) {
-            PromptBubble(prompt: turn.prompt, timestamp: turn.timestamp)
+            PromptBubble(prompt: turn.prompt, timestamp: turn.timestamp, images: turn.images ?? [])
 
             let rounds = (turn.debateRounds ?? []).sorted { $0.index < $1.index }
             if rounds.isEmpty {
@@ -123,7 +124,7 @@ struct DebateTurnsView: View {
             tint: debateTint,
             isLive: isRunning
         ) {
-            PromptBubble(prompt: prompt, timestamp: Date())
+            PromptBubble(prompt: prompt, timestamp: Date(), images: liveImages)
 
             ForEach(liveDebateRounds.sorted { $0.index < $1.index }) { round in
                 liveCompletedRound(round)

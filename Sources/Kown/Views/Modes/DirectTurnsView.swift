@@ -5,6 +5,7 @@ struct DirectTurnsView: View {
     let conversation: Conversation
     let liveStates: [UUID: ResponseState]
     let livePrompt: String?
+    var liveImages: [TurnImage] = []
     let livePanel: [ProviderConfig]
 
     var body: some View {
@@ -23,7 +24,7 @@ struct DirectTurnsView: View {
 
     private func historicalTurn(_ turn: Turn) -> some View {
         directTurnShell(isLive: false) {
-            userBubble(prompt: turn.prompt, timestamp: turn.timestamp)
+            userBubble(prompt: turn.prompt, timestamp: turn.timestamp, images: turn.images ?? [])
             if let cfg = turn.orderedPanelConfigs.first {
                 let key = cfg.id.uuidString
                 assistantBubble(
@@ -41,7 +42,7 @@ struct DirectTurnsView: View {
 
     private func liveTurn(prompt: String) -> some View {
         directTurnShell(isLive: true) {
-            userBubble(prompt: prompt, timestamp: Date())
+            userBubble(prompt: prompt, timestamp: Date(), images: liveImages)
             if let cfg = livePanel.first, let state = liveStates[cfg.id] {
                 assistantBubble(
                     config: cfg,
@@ -99,27 +100,32 @@ struct DirectTurnsView: View {
         .shadow(color: directTint.opacity(isLive ? 0.10 : 0.05), radius: 22, x: 0, y: 10)
     }
 
-    private func userBubble(prompt: String, timestamp: Date) -> some View {
+    private func userBubble(prompt: String, timestamp: Date, images: [TurnImage] = []) -> some View {
         HStack {
             Spacer(minLength: 60)
             VStack(alignment: .trailing, spacing: 4) {
-                Text(prompt)
-                    .font(.body)
-                    .textSelection(.enabled)
-                    .padding(.horizontal, 15)
-                    .padding(.vertical, 11)
-                    .background(
-                        LinearGradient(
-                            colors: [Color.accentColor.opacity(0.22), Color.accentColor.opacity(0.11)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        in: RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    )
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .strokeBorder(Color.accentColor.opacity(0.24), lineWidth: 1)
-                    }
+                if !images.isEmpty {
+                    ConversationImagesRow(images: images)
+                }
+                if !prompt.isEmpty {
+                    Text(prompt)
+                        .font(.body)
+                        .textSelection(.enabled)
+                        .padding(.horizontal, 15)
+                        .padding(.vertical, 11)
+                        .background(
+                            LinearGradient(
+                                colors: [Color.accentColor.opacity(0.22), Color.accentColor.opacity(0.11)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        )
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .strokeBorder(Color.accentColor.opacity(0.24), lineWidth: 1)
+                        }
+                }
                 Text(timestamp, style: .time)
                     .font(.caption2)
                     .foregroundStyle(.tertiary)

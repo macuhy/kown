@@ -76,6 +76,8 @@ final class AppViewModel {
     var liveDebateRounds: [DebateRound] = []
     /// 本轮发出的 prompt（用于 turn 渲染时取最新一行）
     var liveTurnPrompt: String?
+    /// 本轮附带的图片（直播期间也展示,等 Turn 落盘后由 turn.images 接管）
+    var liveTurnImages: [TurnImage] = []
 
     // MARK: - 内部
     private static let systemPromptKey = "kown.systemPrompt.v1"
@@ -482,6 +484,19 @@ final class AppViewModel {
         attachments.removeAll { $0.id == id }
     }
 
+    /// 把本轮要发的图片字节落盘(同步目录),返回轻量引用挂到 Turn —— 实现本机历史展示 + iCloud 同步。
+    private func persistTurnImages(_ payloads: [Attachment.ImagePayload]) -> [TurnImage] {
+        var refs: [TurnImage] = []
+        for p in payloads {
+            guard let data = Data(base64Encoded: p.base64) else { continue }
+            let fileName = "\(UUID().uuidString).\(ConversationImageStore.ext(forMime: p.mimeType))"
+            guard ConversationImageStore.save(data, fileName: fileName) else { continue }
+            refs.append(TurnImage(fileName: fileName, mimeType: p.mimeType,
+                                  pixelWidth: p.pixelWidth, pixelHeight: p.pixelHeight))
+        }
+        return refs
+    }
+
     /// 当前 panel 是否能用图片（OpenAI 兼容 / Anthropic / Gemini 都支持视觉；CLI 不支持）
     var anyProviderSupportsImage: Bool {
         let (panel, _) = providersForCurrentSend()
@@ -751,6 +766,8 @@ final class AppViewModel {
         let roundDate = Date()
         let roundID = String(UUID().uuidString.prefix(8))
         let imageSnapshot = imagePayloads
+        // 把本轮图片字节落盘到同步目录,拿到轻量引用 → 历史里能看到 + 随 iCloud 同步。
+        let turnImages = persistTurnImages(imageSnapshot)
         // 上下文摘要 + 最近原文多轮:摘要进 system prompt;原文进真正的 messages[user/assistant]
         let contextSummarySnapshot = ConversationSummarizer.summaryForNextSend(conversations[convIdx])
         let priorTurnsSnapshot = ConversationSummarizer.priorTurnsForReplay(conversations[convIdx])
@@ -766,6 +783,7 @@ final class AppViewModel {
         liveSummaryState = nil
         liveDebateRounds.removeAll()
         liveTurnPrompt = promptSnapshot
+        liveTurnImages = turnImages
         for cfg in panel {
             let s = ResponseState(id: cfg.id)
             s.reset()
@@ -1036,7 +1054,8 @@ final class AppViewModel {
                     providerSnapshot: snapshot,
                     panelOrder: panelOrder,
                     debateRounds: debateRounds,
-                    appliedWrites: appliedWrites
+                    appliedWrites: appliedWrites,
+                    images: turnImages.isEmpty ? nil : turnImages
                 )
                 self.conversations[idx].turns.append(turn)
                 self.conversations[idx].updatedAt = Date()
@@ -1068,6 +1087,7 @@ final class AppViewModel {
             self.liveSummaryState = nil
             self.liveDebateRounds.removeAll()
             self.liveTurnPrompt = nil
+            self.liveTurnImages = []
             self.isRunning = false
             self.runningConvID = nil
         }

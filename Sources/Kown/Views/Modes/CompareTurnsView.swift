@@ -8,6 +8,7 @@ struct CompareTurnsView: View {
     let liveStates: [UUID: ResponseState]
     let liveChairState: ResponseState?
     let livePrompt: String?
+    var liveImages: [TurnImage] = []
     let livePanel: [ProviderConfig]
     let liveChair: ProviderConfig?
 
@@ -41,7 +42,7 @@ struct CompareTurnsView: View {
             icon: "rectangle.split.2x1.fill",
             tint: compareTint
         ) {
-            PromptBubble(prompt: turn.prompt, timestamp: turn.timestamp)
+            PromptBubble(prompt: turn.prompt, timestamp: turn.timestamp, images: turn.images ?? [])
             comparePanels {
                 ForEach(Array(turn.orderedPanelConfigs.prefix(2))) { cfg in
                     let key = cfg.id.uuidString
@@ -85,7 +86,7 @@ struct CompareTurnsView: View {
             tint: compareTint,
             isLive: true
         ) {
-            PromptBubble(prompt: prompt, timestamp: Date())
+            PromptBubble(prompt: prompt, timestamp: Date(), images: liveImages)
             comparePanels {
                 ForEach(Array(livePanel.prefix(2))) { cfg in
                     if let state = liveStates[cfg.id] {

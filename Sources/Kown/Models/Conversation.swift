@@ -70,6 +70,26 @@ struct DebateRound: Identifiable, Codable, Hashable, Sendable {
     }
 }
 
+/// 一轮问答里用户附带的图片引用。**只存元数据**(文件名 + mime + 尺寸),
+/// 真正的字节单独存成文件(见 `ConversationImageStore`),放在同步目录里随 iCloud 同步。
+/// 这样会话 JSON 不会被 base64 撑爆(否则一张 8MB 图 → JSON ~11MB,高频存盘很费)。
+struct TurnImage: Identifiable, Codable, Hashable, Sendable {
+    let id: UUID
+    /// 同步图片目录下的文件名,如 `<uuid>.jpg`。
+    let fileName: String
+    let mimeType: String
+    let pixelWidth: Int
+    let pixelHeight: Int
+
+    init(id: UUID = UUID(), fileName: String, mimeType: String, pixelWidth: Int, pixelHeight: Int) {
+        self.id = id
+        self.fileName = fileName
+        self.mimeType = mimeType
+        self.pixelWidth = pixelWidth
+        self.pixelHeight = pixelHeight
+    }
+}
+
 /// 一轮问答：用户的 prompt + 各模型最终文本 + 可选的 Chair 综合
 struct Turn: Identifiable, Codable, Hashable, Sendable {
     let id: UUID
@@ -101,6 +121,8 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
     /// 本轮被 model 提议 + 自动 apply 到 workspace 的文件改动(从 `kown:write` 代码块解析出)。
     /// 仅当 Conversation 设置了 workspaceBookmark 时才会有内容。
     var appliedWrites: [AppliedWrite]?
+    /// 用户本轮附带的图片(引用,字节单独存盘)。旧会话没有该字段,保持 optional 兼容旧 JSON。
+    var images: [TurnImage]?
 
     init(id: UUID = UUID(),
          timestamp: Date = Date(),
@@ -117,7 +139,8 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
          providerSnapshot: [String: ProviderConfig] = [:],
          panelOrder: [String] = [],
          debateRounds: [DebateRound]? = nil,
-         appliedWrites: [AppliedWrite]? = nil) {
+         appliedWrites: [AppliedWrite]? = nil,
+         images: [TurnImage]? = nil) {
         self.id = id
         self.timestamp = timestamp
         self.prompt = prompt
@@ -134,6 +157,7 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
         self.panelOrder = panelOrder
         self.debateRounds = debateRounds
         self.appliedWrites = appliedWrites
+        self.images = images
     }
 
     /// 取顺序化的 panel 配置（按发送顺序，Chair 不在内）

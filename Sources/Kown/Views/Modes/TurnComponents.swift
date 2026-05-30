@@ -4,6 +4,7 @@ import SwiftUI
 struct PromptBubble: View {
     let prompt: String
     let timestamp: Date?
+    var images: [TurnImage] = []
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -39,10 +40,13 @@ struct PromptBubble: View {
                             .foregroundStyle(.tertiary)
                     }
                 }
-                Text(prompt)
-                    .font(.body)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                if !prompt.isEmpty {
+                    Text(prompt)
+                        .font(.body)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                ConversationImagesRow(images: images)
             }
             Spacer(minLength: 0)
         }

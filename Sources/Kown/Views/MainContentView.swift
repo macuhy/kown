@@ -65,6 +65,7 @@ struct MainContentView: View {
                     let lChair = showLive ? viewModel.liveChairState : nil
                     let lSummary = showLive ? viewModel.liveSummaryState : nil
                     let lPrompt = showLive ? viewModel.liveTurnPrompt : nil
+                    let lImages = showLive ? viewModel.liveTurnImages : []
                     let lDebateRounds = showLive ? viewModel.liveDebateRounds : []
                     let lIsRunning = showLive && viewModel.isRunning
                     Group {
@@ -77,6 +78,7 @@ struct MainContentView: View {
                                 liveChairState: lChair,
                                 liveSummaryState: lSummary,
                                 livePrompt: lPrompt,
+                                liveImages: lImages,
                                 isRunning: lIsRunning,
                                 livePanel: viewModel.providersForCurrentSend().panel,
                                 liveChair: viewModel.chairProvider,
@@ -87,6 +89,7 @@ struct MainContentView: View {
                                 conversation: conv ?? Conversation(),
                                 liveStates: lStates,
                                 livePrompt: lPrompt,
+                                liveImages: lImages,
                                 livePanel: viewModel.providersForCurrentSend().panel
                             )
                         case .compare:
@@ -96,6 +99,7 @@ struct MainContentView: View {
                                 liveStates: lStates,
                                 liveChairState: lChair,
                                 livePrompt: lPrompt,
+                                liveImages: lImages,
                                 livePanel: viewModel.providersForCurrentSend().panel,
                                 liveChair: viewModel.providersForCurrentSend().chair
                             )
@@ -107,6 +111,7 @@ struct MainContentView: View {
                                 liveChairState: lChair,
                                 liveDebateRounds: lDebateRounds,
                                 livePrompt: lPrompt,
+                                liveImages: lImages,
                                 isRunning: lIsRunning,
                                 livePanel: viewModel.providersForCurrentSend().panel,
                                 liveChair: viewModel.chairProvider

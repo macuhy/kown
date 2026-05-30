@@ -8,6 +8,7 @@ struct CouncilTurnsView: View {
     let liveChairState: ResponseState?
     let liveSummaryState: ResponseState?
     let livePrompt: String?
+    var liveImages: [TurnImage] = []
     let isRunning: Bool
     /// 用于 live turn 推断当前 panel/chair/summary
     let livePanel: [ProviderConfig]
@@ -45,7 +46,7 @@ struct CouncilTurnsView: View {
             icon: "person.3.sequence.fill",
             tint: councilTint
         ) {
-            PromptBubble(prompt: turn.prompt, timestamp: turn.timestamp)
+            PromptBubble(prompt: turn.prompt, timestamp: turn.timestamp, images: turn.images ?? [])
             panelStack {
                 ForEach(turn.orderedPanelConfigs) { cfg in
                     let key = cfg.id.uuidString
@@ -102,7 +103,7 @@ struct CouncilTurnsView: View {
             tint: councilTint,
             isLive: isRunning
         ) {
-            PromptBubble(prompt: prompt, timestamp: Date())
+            PromptBubble(prompt: prompt, timestamp: Date(), images: liveImages)
             panelStack {
                 ForEach(livePanel) { cfg in
                     if let state = liveStates[cfg.id] {
