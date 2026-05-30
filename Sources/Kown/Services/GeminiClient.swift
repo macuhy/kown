@@ -3,6 +3,21 @@ import Foundation
 struct GeminiClient: LLMClient {
     private static let maxToolRounds = 6
 
+    /// 构造当前轮 user content。带图片时 parts 里加 `inline_data`(base64),文本 part 在后。
+    private static func makeUserContent(prompt: String, images: [Attachment.ImagePayload]) -> [String: Any] {
+        var parts: [[String: Any]] = []
+        for img in images {
+            parts.append([
+                "inline_data": [
+                    "mime_type": img.mimeType,
+                    "data": img.base64
+                ]
+            ])
+        }
+        parts.append(["text": prompt])
+        return ["role": "user", "parts": parts]
+    }
+
     func stream(prompt: String,
                 options: ChatOptions,
                 config: ProviderConfig,
@@ -23,10 +38,7 @@ struct GeminiClient: LLMClient {
                             ])
                         }
                     }
-                    contents.append([
-                        "role": "user",
-                        "parts": [["text": prompt]]
-                    ])
+                    contents.append(Self.makeUserContent(prompt: prompt, images: options.images))
 
                     var cumulativeInput = 0
                     var cumulativeOutput = 0

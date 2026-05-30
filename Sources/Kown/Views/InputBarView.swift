@@ -3,6 +3,9 @@ import UniformTypeIdentifiers
 #if os(macOS)
 import AppKit
 #endif
+#if os(iOS)
+import PhotosUI
+#endif
 
 struct InputBarView: View {
     @Bindable var viewModel: AppViewModel
@@ -14,6 +17,10 @@ struct InputBarView: View {
     #if os(macOS)
     @State private var showFileImporter = false
     @State private var showImageImporter = false
+    #endif
+    #if os(iOS)
+    @State private var showPhotoPicker = false
+    @State private var photoItem: PhotosPickerItem?
     #endif
 
     var body: some View {
@@ -71,6 +78,25 @@ struct InputBarView: View {
             allowedContentTypes: [.image]
         ) { result in
             handlePicked(result, isImage: true)
+        }
+        #endif
+        #if os(iOS)
+        .photosPicker(isPresented: $showPhotoPicker, selection: $photoItem, matching: .images)
+        .onChange(of: photoItem) { _, item in
+            guard let item else { return }
+            Task {
+                defer { photoItem = nil }
+                do {
+                    guard let data = try await item.loadTransferable(type: Data.self) else {
+                        pickerError = "读取图片失败"
+                        return
+                    }
+                    try viewModel.attachImageNormalized(data, name: "photo")
+                    pickerError = nil
+                } catch {
+                    pickerError = error.localizedDescription
+                }
+            }
         }
         #endif
     }
@@ -170,8 +196,11 @@ struct InputBarView: View {
             }
             #if os(macOS)
             iconButton("photo", help: viewModel.anyProviderSupportsImage
-                               ? "附加图片（仅 OpenAI 兼容支持视觉）"
+                               ? "附加图片（OpenAI 兼容 / Anthropic / Gemini 支持视觉）"
                                : "附加图片（当前面板里没有支持视觉的 provider，发送时会忽略）") { pickImage() }
+            #endif
+            #if os(iOS)
+            iconButton("photo", help: "从相册添加图片") { showPhotoPicker = true }
             #endif
             webSearchToggle
             if viewModel.currentMode == .debate {

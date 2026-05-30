@@ -1,5 +1,10 @@
 # 更新日志
 
+## 0.6.22 — 2026-05-30
+### 新增
+- **iOS 输入栏支持添加图片** — 输入栏新增相册按钮(PhotosPicker),选图后随问题一起发给模型描述/分析。HEIC 自动转 JPEG(视觉 API 多不收 HEIC)
+- **Anthropic / Gemini 也支持图片** — 之前只有 OpenAI 兼容能发图,现在 Claude、Gemini 也能看图(macOS 附加图片对三家都生效)
+
 ## 0.6.21 — 2026-05-29
 ### 维护
 - **加单元测试 + CI** — 覆盖踩过坑的点:SSE `\r\n` 事件边界、会话按 id 去重、Workspace `kown:write` 解析与路径安全(拒 `../` 越界 / 非文本后缀);push / PR 到 main 自动在 macOS 跑 `swift test`。无功能改动

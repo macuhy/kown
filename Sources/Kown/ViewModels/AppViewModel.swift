@@ -472,14 +472,20 @@ final class AppViewModel {
         attachments.append(.image(i))
     }
 
+    /// iOS 相册 / 任意来源图片 — 自动把 HEIC 等非标准格式转 JPEG(视觉 API 多不收 HEIC)。
+    func attachImageNormalized(_ data: Data, name: String) throws {
+        let i = try AttachmentLoader.loadImageNormalized(data: data, name: name)
+        attachments.append(.image(i))
+    }
+
     func removeAttachment(_ id: UUID) {
         attachments.removeAll { $0.id == id }
     }
 
-    /// 当前 panel 是否能用图片（任一 OpenAI Compatible）
+    /// 当前 panel 是否能用图片（OpenAI 兼容 / Anthropic / Gemini 都支持视觉；CLI 不支持）
     var anyProviderSupportsImage: Bool {
         let (panel, _) = providersForCurrentSend()
-        return panel.contains { $0.kind == .openAICompatible }
+        return panel.contains { $0.kind == .openAICompatible || $0.kind == .anthropic || $0.kind == .gemini }
     }
 
     // MARK: - Prompt Enhancer

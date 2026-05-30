@@ -87,6 +87,37 @@ enum AttachmentLoader {
         )
     }
 
+    /// 视觉 API 普遍接受的图片格式(Anthropic / OpenAI / Gemini)。HEIC 不在其中。
+    private static let webStandardMimes: Set<String> = ["image/png", "image/jpeg", "image/gif", "image/webp"]
+
+    /// 从任意图片 Data 构造附件,必要时把 HEIC / 非标准格式转成 JPEG。
+    /// iOS 相册多为 HEIC,而 Anthropic / OpenAI / Gemini 多不收 HEIC → 统一转 JPEG。
+    static func loadImageNormalized(data: Data, name: String) throws -> Attachment.ImagePayload {
+        let sniffed = sniffMime(data: data)
+        if let m = sniffed, webStandardMimes.contains(m) {
+            return try loadImage(data: data, name: name, mime: m)
+        }
+        // HEIC / 未知 → 转 JPEG;转码失败就退回原样,让服务端决定。
+        guard let jpeg = transcodeToJPEG(data) else {
+            return try loadImage(data: data, name: name, mime: sniffed)
+        }
+        let base = (name as NSString).deletingPathExtension
+        return try loadImage(data: jpeg, name: (base.isEmpty ? "image" : base) + ".jpg", mime: "image/jpeg")
+    }
+
+    /// 用 ImageIO 把任意图片转成 JPEG(跨平台,不依赖 UIKit / AppKit)。
+    private static func transcodeToJPEG(_ data: Data, quality: CGFloat = 0.9) -> Data? {
+        guard let src = CGImageSourceCreateWithData(data as CFData, nil),
+              let cg = CGImageSourceCreateImageAtIndex(src, 0, nil) else { return nil }
+        let out = NSMutableData()
+        guard let dest = CGImageDestinationCreateWithData(out, UTType.jpeg.identifier as CFString, 1, nil) else {
+            return nil
+        }
+        CGImageDestinationAddImage(dest, cg, [kCGImageDestinationLossyCompressionQuality: quality] as CFDictionary)
+        guard CGImageDestinationFinalize(dest) else { return nil }
+        return out as Data
+    }
+
     /// 从已有 Data 直接构造图片附件(用于剪贴板 / drop / 其他非文件来源)。
     static func loadImage(data: Data, name: String, mime: String? = nil) throws -> Attachment.ImagePayload {
         if data.count > maxImageBytes {

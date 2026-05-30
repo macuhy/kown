@@ -5,6 +5,27 @@ struct AnthropicClient: LLMClient {
     /// 默认 output token 预算 — 32k 在多轮工具循环里太奢侈。
     private static let defaultMaxTokens = 8192
 
+    /// 构造当前轮 user 消息。带图片时用 content blocks(图片在前、文本在后,Anthropic 推荐顺序)。
+    /// `media_type` 需为 image/jpeg|png|gif|webp(HEIC 在附件加载时已转 JPEG)。
+    private static func makeUserMessage(prompt: String, images: [Attachment.ImagePayload]) -> [String: Any] {
+        guard !images.isEmpty else {
+            return ["role": "user", "content": prompt]
+        }
+        var content: [[String: Any]] = []
+        for img in images {
+            content.append([
+                "type": "image",
+                "source": [
+                    "type": "base64",
+                    "media_type": img.mimeType,
+                    "data": img.base64
+                ]
+            ])
+        }
+        content.append(["type": "text", "text": prompt])
+        return ["role": "user", "content": content]
+    }
+
     func stream(prompt: String,
                 options: ChatOptions,
                 config: ProviderConfig,
@@ -19,7 +40,7 @@ struct AnthropicClient: LLMClient {
                             messages.append(["role": "assistant", "content": turn.assistantText])
                         }
                     }
-                    messages.append(["role": "user", "content": prompt])
+                    messages.append(Self.makeUserMessage(prompt: prompt, images: options.images))
 
                     var cumulativeInput = 0
                     var cumulativeOutput = 0
