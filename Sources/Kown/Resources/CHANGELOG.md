@@ -1,5 +1,10 @@
 # 更新日志
 
+## 0.6.17 — 2026-05-29
+### 改进
+- **macOS 设置页重做** — 从顶部胶囊 tab 改成固定侧边栏 + 顶部上下文标题,Provider 页增加启用数量、Chair、Summary、CLI 摘要卡片,整体层级更清楚
+- **设置窗口固定尺寸** — macOS 设置 sheet 固定为 `960 × 660`,切换 tab 时不再因为内容宽高不同一跳一跳
+
 ## 0.6.16 — 2026-05-29
 ### 修复
 - **「安装并重启」按钮无效、要手动退出才更新** — 进程级抓包确认:点按钮后 Sparkle 的安装器(`Autoupdate` / `Updater.app`)起来了,但 Kown 进程没退出,安装器就一直死等。根因:Sparkle 因后台更新检查未声明 gentle reminders,把 Kown 当 background app,不替它终止进程。修复:UpdaterService 实现 `SPUStandardUserDriverDelegate`(声明支持 gentle reminders,让 Sparkle 走前台「终止并重启」流程)+ `SPUUpdaterDelegate.updaterWillRelaunchApplication` 兜底强制 `terminate`。注:本修复在新版本生效——升到 0.6.16 之后,之后的更新点按钮即可自动重启

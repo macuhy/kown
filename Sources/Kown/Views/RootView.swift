@@ -42,7 +42,7 @@ struct RootView: View {
         .sheet(isPresented: $showSettings) {
             SettingsView(viewModel: viewModel)
                 #if os(macOS)
-                .frame(minWidth: 780, minHeight: 600)
+                .frame(width: 960, height: 660)
                 #endif
         }
     }

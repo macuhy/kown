@@ -39,9 +39,23 @@ struct SettingsView: View {
             case .changelog:   return "sparkles"
             }
         }
+        var tint: Color {
+            switch self {
+            case .providers:   return Color(red: 0.10, green: 0.66, blue: 0.56)
+            case .webSearch:   return Color(red: 0.16, green: 0.48, blue: 0.94)
+            case .sync:        return Color(red: 0.18, green: 0.58, blue: 0.92)
+            case .backup:      return Color(red: 0.91, green: 0.55, blue: 0.20)
+            case .usage:       return Color(red: 0.24, green: 0.63, blue: 0.36)
+            case .performance: return Color(red: 0.88, green: 0.35, blue: 0.22)
+            case .updates:     return Color(red: 0.57, green: 0.42, blue: 0.82)
+            case .changelog:   return Color(red: 0.95, green: 0.57, blue: 0.16)
+            }
+        }
     }
 
     @State private var tab: Tab = .providers
+    private static let desktopWidth: CGFloat = 960
+    private static let desktopHeight: CGFloat = 660
 
     /// 实际展示的 tab — 「软件更新」(Sparkle) 仅 macOS 有,iOS 过滤掉。
     private var availableTabs: [Tab] {
@@ -70,37 +84,21 @@ struct SettingsView: View {
     }
 
     private var desktopBody: some View {
-        ZStack {
-            SettingsBackdrop()
-
+        HStack(spacing: 0) {
+            desktopSidebar
+            Rectangle()
+                .fill(Color.primary.opacity(0.08))
+                .frame(width: 1)
             VStack(spacing: 0) {
-                header
-                tabBar
-
-                switch tab {
-                case .providers:
-                    providersList
-                case .webSearch:
-                    WebSearchSettingsView(viewModel: viewModel)
-                case .sync:
-                    ICloudSyncSettingsView(viewModel: viewModel)
-                case .backup:
-                    BackupSettingsView(viewModel: viewModel)
-                case .usage:
-                    UsageSettingsView()
-                case .performance:
-                    PerformanceSettingsView()
-                case .updates:
-                    #if os(macOS)
-                    UpdateSettingsView()
-                    #else
-                    EmptyView()
-                    #endif
-                case .changelog:
-                    ChangelogView()
-                }
+                desktopHeader
+                Rectangle()
+                    .fill(Color.primary.opacity(0.08))
+                    .frame(height: 1)
+                desktopContent
             }
+            .background(SettingsBackdrop())
         }
+        .frame(width: Self.desktopWidth, height: Self.desktopHeight)
     }
 
     #if os(iOS)
@@ -255,6 +253,203 @@ struct SettingsView: View {
     }
     #endif
 
+    private var desktopSidebar: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 15, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.teal.opacity(0.90), Color.orange.opacity(0.78)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                    Image(systemName: "brain.head.profile")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+                .frame(width: 40, height: 40)
+                .shadow(color: Color.teal.opacity(0.18), radius: 12, x: 0, y: 6)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Kown")
+                        .font(.system(.headline, design: .rounded).weight(.bold))
+                    Text("偏好设置")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("导航")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 10)
+                    .padding(.top, 4)
+                ForEach(availableTabs) { t in
+                    desktopTabButton(t)
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            sidebarStatusCard
+        }
+        .padding(16)
+        .frame(width: 230)
+        .background(.ultraThinMaterial)
+    }
+
+    private func desktopTabButton(_ t: Tab) -> some View {
+        let selected = tab == t
+        return Button {
+            withAnimation(.easeInOut(duration: 0.16)) {
+                tab = t
+            }
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: t.symbol)
+                    .font(.system(size: 14, weight: .semibold))
+                    .frame(width: 24, height: 24)
+                    .foregroundStyle(selected ? t.tint : .secondary)
+                Text(t.label)
+                    .font(.callout.weight(selected ? .semibold : .medium))
+                    .foregroundStyle(selected ? .primary : .secondary)
+                Spacer(minLength: 0)
+                if selected {
+                    Circle()
+                        .fill(t.tint)
+                        .frame(width: 6, height: 6)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 9)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(selected ? t.tint.opacity(0.13) : Color.clear)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(selected ? t.tint.opacity(0.26) : Color.clear, lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .help(t.label)
+    }
+
+    private var sidebarStatusCard: some View {
+        let enabled = viewModel.providers.filter(\.enabled).count
+        let total = viewModel.providers.count
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: enabled == 0 ? "exclamationmark.triangle.fill" : "checkmark.seal.fill")
+                    .foregroundStyle(enabled == 0 ? .orange : .green)
+                Text(enabled == 0 ? "需要启用模型" : "模型可用")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(enabled == 0 ? .orange : .green)
+            }
+            Text("\(enabled)/\(total) 家 Provider 已启用")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+            if let chair = viewModel.providers.first(where: \.isChair) {
+                Text("Chair · \(chair.displayName)")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.platformControlBackground.opacity(0.58), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+        }
+    }
+
+    private var desktopHeader: some View {
+        HStack(alignment: .center, spacing: 16) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [tab.tint.opacity(0.24), tab.tint.opacity(0.10)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                Image(systemName: tab.symbol)
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(tab.tint)
+            }
+            .frame(width: 52, height: 52)
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(tab.tint.opacity(0.22), lineWidth: 1)
+            }
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(tab.label)
+                    .font(.system(.title2, design: .rounded).weight(.bold))
+                Text(headerSubtitle)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 16)
+
+            if tab == .providers {
+                activeBadge
+                addProviderMenu
+                    .menuStyle(.borderlessButton)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .fixedSize()
+            }
+
+            Button("完成") { dismiss() }
+                .keyboardShortcut(.defaultAction)
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 18)
+        .background(.thinMaterial)
+    }
+
+    @ViewBuilder
+    private var desktopContent: some View {
+        Group {
+            switch tab {
+            case .providers:
+                providersList
+            case .webSearch:
+                WebSearchSettingsView(viewModel: viewModel)
+            case .sync:
+                ICloudSyncSettingsView(viewModel: viewModel)
+            case .backup:
+                BackupSettingsView(viewModel: viewModel)
+            case .usage:
+                UsageSettingsView()
+            case .performance:
+                PerformanceSettingsView()
+            case .updates:
+                #if os(macOS)
+                UpdateSettingsView()
+                #else
+                EmptyView()
+                #endif
+            case .changelog:
+                ChangelogView()
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
     private var tabBar: some View {
         HStack(spacing: 8) {
             // 标签放得下就显示「图标+文字」,放不下就退化成「只显示图标」(文字进 tooltip),
@@ -302,18 +497,141 @@ struct SettingsView: View {
 
     private var providersList: some View {
         ScrollView {
-            LazyVStack(spacing: 12) {
-                ForEach($viewModel.providers) { $cfg in
-                    ProviderRowView(
-                        config: $cfg,
-                        onDelete: { viewModel.removeProvider(cfg.id) },
-                        onSave:   { viewModel.saveProviders() },
-                        onToggleChair: { newValue in viewModel.setChair(cfg.id, isChair: newValue) },
-                        onToggleSummary: { newValue in viewModel.setSummary(cfg.id, isSummary: newValue) }
-                    )
+            VStack(alignment: .leading, spacing: 18) {
+                providerDashboard
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Provider 配置")
+                            .font(.headline)
+                        Text("启用、角色、连接和模型参数都在这里直接编辑。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Text("\(viewModel.providers.count) 家")
+                        .font(.caption.weight(.semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(Color.secondary.opacity(0.10), in: Capsule())
+                }
+
+                if viewModel.providers.isEmpty {
+                    emptyProvidersCard
+                } else {
+                    LazyVStack(spacing: 14) {
+                        ForEach($viewModel.providers) { $cfg in
+                            ProviderRowView(
+                                config: $cfg,
+                                onDelete: { viewModel.removeProvider(cfg.id) },
+                                onSave:   { viewModel.saveProviders() },
+                                onToggleChair: { newValue in viewModel.setChair(cfg.id, isChair: newValue) },
+                                onToggleSummary: { newValue in viewModel.setSummary(cfg.id, isSummary: newValue) }
+                            )
+                        }
+                    }
                 }
             }
-            .padding(18)
+            .padding(24)
+            .frame(maxWidth: 1040, alignment: .topLeading)
+        }
+    }
+
+    private var providerDashboard: some View {
+        let total = viewModel.providers.count
+        let enabled = viewModel.providers.filter(\.enabled).count
+        let chair = viewModel.providers.first(where: \.isChair)?.displayName ?? "未设置"
+        let summary = viewModel.providers.first(where: \.isSummary)?.displayName ?? "未设置"
+        return LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 12)], spacing: 12) {
+            metricTile(
+                title: "已启用",
+                value: "\(enabled)/\(total)",
+                detail: enabled == 0 ? "发送前至少启用一家" : "当前可参与回答",
+                icon: enabled == 0 ? "exclamationmark.triangle.fill" : "checkmark.seal.fill",
+                tint: enabled == 0 ? .orange : .green
+            )
+            metricTile(
+                title: "Chair",
+                value: chair,
+                detail: "Council / Compare 结论角色",
+                icon: "crown.fill",
+                tint: .orange
+            )
+            metricTile(
+                title: "Summary",
+                value: summary,
+                detail: "Council 中立总结角色",
+                icon: "list.bullet.rectangle.fill",
+                tint: .teal
+            )
+            metricTile(
+                title: "CLI Provider",
+                value: "\(viewModel.providers.filter { $0.kind.isCLI }.count)",
+                detail: "Claude / Gemini / Codex 等命令",
+                icon: "terminal.fill",
+                tint: Color(red: 0.55, green: 0.45, blue: 0.78)
+            )
+        }
+    }
+
+    private func metricTile(title: String, value: String, detail: String, icon: String, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Image(systemName: icon)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(tint)
+                    .frame(width: 30, height: 30)
+                    .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                Spacer()
+            }
+            Text(value)
+                .font(.system(.title3, design: .rounded).weight(.bold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .minimumScaleFactor(0.78)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+                Text(detail)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(2)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 128, alignment: .topLeading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(tint.opacity(0.16), lineWidth: 1)
+        }
+    }
+
+    private var emptyProvidersCard: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "square.stack.3d.up.slash")
+                .font(.system(size: 36, weight: .semibold))
+                .foregroundStyle(Color.orange)
+                .frame(width: 70, height: 70)
+                .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            Text("还没有 Provider")
+                .font(.headline)
+            Text("添加 OpenAI 兼容、Anthropic、Gemini 或 CLI Provider 后即可开始使用。")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            addProviderMenu
+                .buttonStyle(.borderedProminent)
+        }
+        .padding(34)
+        .frame(maxWidth: .infinity)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
         }
     }
 
@@ -404,14 +722,31 @@ private struct SettingsBackdrop: View {
     var body: some View {
         ZStack {
             Color.platformWindowBackground
-            LinearGradient(
+            RadialGradient(
                 colors: [
-                    Color.teal.opacity(0.10),
-                    Color.orange.opacity(0.08),
+                    Color.teal.opacity(0.18),
                     Color.clear
                 ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
+                center: .topLeading,
+                startRadius: 0,
+                endRadius: 520
+            )
+            RadialGradient(
+                colors: [
+                    Color.orange.opacity(0.14),
+                    Color.clear
+                ],
+                center: .bottomTrailing,
+                startRadius: 80,
+                endRadius: 560
+            )
+            LinearGradient(
+                colors: [
+                    Color.white.opacity(0.04),
+                    Color.clear
+                ],
+                startPoint: .top,
+                endPoint: .bottom
             )
         }
         .ignoresSafeArea()
