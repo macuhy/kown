@@ -8,6 +8,8 @@ struct DirectTurnsView: View {
     var liveImages: [TurnImage] = []
     let livePanel: [ProviderConfig]
 
+    @Environment(\.horizontalSizeClass) private var hSizeClass
+
     var body: some View {
         LazyVStack(alignment: .leading, spacing: 18) {
             ForEach(conversation.turns) { turn in
@@ -17,7 +19,7 @@ struct DirectTurnsView: View {
                 liveTurn(prompt: livePrompt)
             }
         }
-        .padding(.horizontal, 18)
+        .padding(.horizontal, listHorizontalPadding)
         .padding(.vertical, 18)
         .frame(maxWidth: .infinity)
     }
@@ -78,7 +80,8 @@ struct DirectTurnsView: View {
             }
             content()
         }
-        .padding(14)
+        .padding(.horizontal, turnShellHorizontalPadding)
+        .padding(.vertical, turnShellVerticalPadding)
         .background(
             ZStack {
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
@@ -102,7 +105,7 @@ struct DirectTurnsView: View {
 
     private func userBubble(prompt: String, timestamp: Date, images: [TurnImage] = []) -> some View {
         HStack {
-            Spacer(minLength: 60)
+            Spacer(minLength: userLeadingGutter)
             VStack(alignment: .trailing, spacing: 4) {
                 if !images.isEmpty {
                     ConversationImagesRow(images: images)
@@ -134,7 +137,7 @@ struct DirectTurnsView: View {
     }
 
     private func assistantBubble(config: ProviderConfig, text: String, error: String?, streaming: Bool) -> some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: assistantSpacing) {
             ZStack {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(
@@ -148,7 +151,7 @@ struct DirectTurnsView: View {
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(.white)
             }
-            .frame(width: 34, height: 34)
+            .frame(width: assistantAvatarSize, height: assistantAvatarSize)
             .overlay {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .strokeBorder(Color.white.opacity(0.28), lineWidth: 1)
@@ -194,7 +197,7 @@ struct DirectTurnsView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            .padding(.horizontal, 15)
+            .padding(.horizontal, messageHorizontalPadding)
             .padding(.vertical, 12)
             .background(
                 ZStack {
@@ -214,8 +217,48 @@ struct DirectTurnsView: View {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .strokeBorder(accentColor(config).opacity(0.20), lineWidth: 1)
             }
-            Spacer(minLength: 60)
+            Spacer(minLength: assistantTrailingGutter)
         }
+    }
+
+    private var usesCompactChatLayout: Bool {
+        #if os(iOS)
+        return hSizeClass == .compact
+        #else
+        return false
+        #endif
+    }
+
+    private var listHorizontalPadding: CGFloat {
+        usesCompactChatLayout ? 10 : 18
+    }
+
+    private var turnShellHorizontalPadding: CGFloat {
+        usesCompactChatLayout ? 10 : 14
+    }
+
+    private var turnShellVerticalPadding: CGFloat {
+        usesCompactChatLayout ? 12 : 14
+    }
+
+    private var userLeadingGutter: CGFloat {
+        usesCompactChatLayout ? 20 : 60
+    }
+
+    private var assistantTrailingGutter: CGFloat {
+        usesCompactChatLayout ? 8 : 60
+    }
+
+    private var assistantSpacing: CGFloat {
+        usesCompactChatLayout ? 9 : 12
+    }
+
+    private var assistantAvatarSize: CGFloat {
+        usesCompactChatLayout ? 30 : 34
+    }
+
+    private var messageHorizontalPadding: CGFloat {
+        usesCompactChatLayout ? 13 : 15
     }
 
     private func isStreaming(_ phase: ResponsePhase) -> Bool {
