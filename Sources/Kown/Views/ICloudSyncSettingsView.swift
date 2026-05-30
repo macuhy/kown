@@ -54,10 +54,14 @@ struct ICloudSyncSettingsView: View {
 
     // MARK: - Hero
 
+    @ViewBuilder
     private var heroCard: some View {
+        #if os(iOS)
+        mobileHeroCard
+        #else
         let status = viewModel.iCloudSync.status
         let enabled = viewModel.iCloudSync.isEnabled
-        return VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .top, spacing: 16) {
                 iconTile(statusSymbol(status), tint: statusColor(status), secondary: secondaryTint)
                 VStack(alignment: .leading, spacing: 7) {
@@ -109,7 +113,73 @@ struct ICloudSyncSettingsView: View {
                 .strokeBorder(statusColor(status).opacity(0.22), lineWidth: 1)
         }
         .shadow(color: statusColor(status).opacity(0.09), radius: 22, x: 0, y: 12)
+        #endif
     }
+
+    #if os(iOS)
+    private var mobileHeroCard: some View {
+        let status = viewModel.iCloudSync.status
+        let enabled = viewModel.iCloudSync.isEnabled
+        let color = statusColor(status)
+        return VStack(alignment: .leading, spacing: 11) {
+            HStack(alignment: .center, spacing: 10) {
+                compactIconTile(statusSymbol(status), tint: color, secondary: secondaryTint)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("iCloud 同步")
+                        .font(.headline.weight(.bold))
+                        .lineLimit(1)
+                    Text(status.displayText)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 8)
+
+                if viewModel.iCloudMigrationInFlight {
+                    ProgressView().controlSize(.small)
+                } else {
+                    statusBadge(enabled ? "已打开" : "未打开",
+                                icon: enabled ? "checkmark.icloud.fill" : "icloud.slash",
+                                color: enabled ? .green : .secondary)
+                }
+            }
+
+            Text(detailLine(status))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(spacing: 7) {
+                compactMetricRow(title: "同步范围",
+                                 value: "4 项",
+                                 detail: "会话 / Provider / Web Search / API Key",
+                                 icon: "square.stack.3d.up.fill",
+                                 color: tint)
+                compactMetricRow(title: "本机偏好",
+                                 value: "独立",
+                                 detail: "Debate 轮数、默认开关不互相覆盖",
+                                 icon: "slider.horizontal.3",
+                                 color: .secondary)
+                compactMetricRow(title: "冲突备份",
+                                 value: conflictBackupCount > 0 ? "\(conflictBackupCount)" : "0",
+                                 detail: conflictBackupCount > 0 ? "可清理冗余目录" : "没有待清理项",
+                                 icon: conflictBackupCount > 0 ? "exclamationmark.triangle.fill" : "checkmark.circle.fill",
+                                 color: conflictBackupCount > 0 ? .orange : .green)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(heroBackground(color: color))
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(color.opacity(0.20), lineWidth: 1)
+        }
+        .shadow(color: color.opacity(0.06), radius: 12, x: 0, y: 7)
+    }
+    #endif
 
     // MARK: - Conflict backup cleanup
 
@@ -323,9 +393,9 @@ struct ICloudSyncSettingsView: View {
 
     private func heroBackground(color: Color) -> some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
+            RoundedRectangle(cornerRadius: heroCornerRadius, style: .continuous)
                 .fill(.regularMaterial)
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
+            RoundedRectangle(cornerRadius: heroCornerRadius, style: .continuous)
                 .fill(
                     LinearGradient(
                         colors: [color.opacity(0.16), secondaryTint.opacity(0.10), Color.clear],
@@ -335,6 +405,33 @@ struct ICloudSyncSettingsView: View {
                 )
         }
     }
+
+    private var heroCornerRadius: CGFloat {
+        #if os(iOS)
+        return 20
+        #else
+        return 28
+        #endif
+    }
+
+    #if os(iOS)
+    private func compactIconTile(_ symbol: String, tint: Color, secondary: Color) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [tint.opacity(0.94), secondary.opacity(0.78)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+            Image(systemName: symbol)
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(.white)
+        }
+        .frame(width: 42, height: 42)
+    }
+    #endif
 
     private func iconTile(_ symbol: String, tint: Color, secondary: Color) -> some View {
         ZStack {
@@ -401,6 +498,39 @@ struct ICloudSyncSettingsView: View {
         }
     }
 
+    private func compactMetricRow(title: String, value: String, detail: String, icon: String, color: Color) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(color)
+                .frame(width: 25, height: 25)
+                .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Text(detail)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            Text(value)
+                .font(.subheadline.weight(.bold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+                .monospacedDigit()
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(color.opacity(0.14), lineWidth: 1)
+        }
+    }
+
     private func statusBadge(_ text: String, icon: String, color: Color) -> some View {
         Label(text, systemImage: icon)
             .font(.caption.weight(.bold))
@@ -428,13 +558,13 @@ struct ICloudSyncSettingsView: View {
     @ViewBuilder
     private func cardShell<Content: View>(tint: Color, @ViewBuilder content: () -> Content) -> some View {
         content()
-            .padding(18)
+            .padding(cardPadding)
             .frame(maxWidth: .infinity, alignment: .topLeading)
             .background(
                 ZStack {
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
                         .fill(.regularMaterial)
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
                         .fill(
                             LinearGradient(
                                 colors: [tint.opacity(0.08), Color.clear],
@@ -445,9 +575,25 @@ struct ICloudSyncSettingsView: View {
                 }
             )
             .overlay {
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
                     .strokeBorder(tint.opacity(0.16), lineWidth: 1)
             }
+    }
+
+    private var cardPadding: CGFloat {
+        #if os(iOS)
+        return 14
+        #else
+        return 18
+        #endif
+    }
+
+    private var cardCornerRadius: CGFloat {
+        #if os(iOS)
+        return 18
+        #else
+        return 22
+        #endif
     }
 
     // MARK: - Row helpers

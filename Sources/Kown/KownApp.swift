@@ -91,6 +91,9 @@ struct KownApp: App {
                 ChangelogView(autoOpenedForVersion: ChangelogService.shared.currentVersion)
                 #endif
             }
+            #if os(iOS)
+            .dynamicTypeSize(.xSmall ... .medium)
+            #endif
         }
         .onChange(of: scenePhase) { _, newPhase in
             // app 进入后台 / 失焦时强制刷掉 conversation save 缓冲,

@@ -41,10 +41,14 @@ struct WebSearchSettingsView: View {
         #endif
     }
 
+    @ViewBuilder
     private var heroCard: some View {
+        #if os(iOS)
+        mobileHeroCard
+        #else
         let enabled = viewModel.webSearchConfig.enabled
         let keyReady = viewModel.hasWebSearchKey
-        return VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .top, spacing: 16) {
                 iconTile("globe", tint: tint, secondary: secondaryTint)
                 VStack(alignment: .leading, spacing: 7) {
@@ -92,7 +96,73 @@ struct WebSearchSettingsView: View {
                 .strokeBorder(tint.opacity(0.22), lineWidth: 1)
         }
         .shadow(color: tint.opacity(0.09), radius: 22, x: 0, y: 12)
+        #endif
     }
+
+    #if os(iOS)
+    private var mobileHeroCard: some View {
+        let enabled = viewModel.webSearchConfig.enabled
+        let keyReady = viewModel.hasWebSearchKey
+        return VStack(alignment: .leading, spacing: 11) {
+            HStack(alignment: .center, spacing: 10) {
+                compactIconTile("globe", tint: tint, secondary: secondaryTint)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Web Search")
+                        .font(.headline.weight(.bold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                    Text("Firecrawl · web_search")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 8)
+
+                statusBadge(enabled ? "已启用" : "未启用",
+                            icon: enabled ? "checkmark.seal.fill" : "power",
+                            color: enabled ? .green : .secondary)
+            }
+
+            Text("配置 Firecrawl 后,点亮输入栏的 🌐,模型就能按需联网搜索。")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(spacing: 7) {
+                compactMetricRow(title: "Base URL",
+                                 value: shortBaseURL,
+                                 detail: "Firecrawl endpoint",
+                                 icon: "link",
+                                 color: tint)
+                compactMetricRow(title: "结果上限",
+                                 value: "\(viewModel.webSearchConfig.resultLimit)",
+                                 detail: "建议 5-15 条",
+                                 icon: "number.circle.fill",
+                                 color: secondaryTint)
+                compactMetricRow(title: "默认联网",
+                                 value: viewModel.alwaysEnableWebSearch ? "开启" : "手动",
+                                 detail: "新会话是否自动点亮 🌐",
+                                 icon: "bolt.fill",
+                                 color: viewModel.alwaysEnableWebSearch ? .orange : .secondary)
+            }
+
+            statusBadge(keyReady ? "Key 已保存" : "等待 Key",
+                        icon: keyReady ? "key.fill" : "key.slash",
+                        color: keyReady ? .green : .orange)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(heroBackground)
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(tint.opacity(0.20), lineWidth: 1)
+        }
+        .shadow(color: tint.opacity(0.06), radius: 12, x: 0, y: 7)
+    }
+    #endif
 
     private var configCard: some View {
         cardShell(tint: tint) {
@@ -307,9 +377,9 @@ struct WebSearchSettingsView: View {
 
     private var heroBackground: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
+            RoundedRectangle(cornerRadius: heroCornerRadius, style: .continuous)
                 .fill(.regularMaterial)
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
+            RoundedRectangle(cornerRadius: heroCornerRadius, style: .continuous)
                 .fill(
                     LinearGradient(
                         colors: [tint.opacity(0.16), secondaryTint.opacity(0.10), Color.clear],
@@ -319,6 +389,33 @@ struct WebSearchSettingsView: View {
                 )
         }
     }
+
+    private var heroCornerRadius: CGFloat {
+        #if os(iOS)
+        return 20
+        #else
+        return 28
+        #endif
+    }
+
+    #if os(iOS)
+    private func compactIconTile(_ symbol: String, tint: Color, secondary: Color) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [tint.opacity(0.95), secondary.opacity(0.82)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+            Image(systemName: symbol)
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(.white)
+        }
+        .frame(width: 42, height: 42)
+    }
+    #endif
 
     private func iconTile(_ symbol: String, tint: Color, secondary: Color) -> some View {
         ZStack {
@@ -353,6 +450,40 @@ struct WebSearchSettingsView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+        }
+    }
+
+    private func compactMetricRow(title: String, value: String, detail: String, icon: String, color: Color) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(color)
+                .frame(width: 25, height: 25)
+                .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Text(detail)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            Text(value)
+                .font(.subheadline.weight(.bold))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .minimumScaleFactor(0.72)
+                .monospacedDigit()
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(color.opacity(0.14), lineWidth: 1)
         }
     }
 
@@ -445,13 +576,13 @@ struct WebSearchSettingsView: View {
     @ViewBuilder
     private func cardShell<Content: View>(tint: Color, @ViewBuilder content: () -> Content) -> some View {
         content()
-            .padding(18)
+            .padding(cardPadding)
             .frame(maxWidth: .infinity, alignment: .topLeading)
             .background(
                 ZStack {
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
                         .fill(.regularMaterial)
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
                         .fill(
                             LinearGradient(
                                 colors: [tint.opacity(0.08), Color.clear],
@@ -462,9 +593,25 @@ struct WebSearchSettingsView: View {
                 }
             )
             .overlay {
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
                     .strokeBorder(tint.opacity(0.16), lineWidth: 1)
             }
+    }
+
+    private var cardPadding: CGFloat {
+        #if os(iOS)
+        return 14
+        #else
+        return 18
+        #endif
+    }
+
+    private var cardCornerRadius: CGFloat {
+        #if os(iOS)
+        return 18
+        #else
+        return 22
+        #endif
     }
 
     // MARK: - Actions

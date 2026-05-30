@@ -154,9 +154,9 @@ struct SettingsView: View {
     private var mobileTabBar: some View {
         ScrollViewReader { proxy in
             VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 10) {
+                HStack(spacing: 8) {
                     SettingsAppIcon()
-                        .frame(width: 34, height: 34)
+                        .frame(width: 30, height: 30)
                         .shadow(color: tab.tint.opacity(0.16), radius: 10, x: 0, y: 5)
                         .overlay {
                             RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -165,9 +165,9 @@ struct SettingsView: View {
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(tab.label)
-                            .font(.headline.weight(.bold))
+                            .font(.subheadline.weight(.bold))
                         Text(headerSubtitle)
-                            .font(.caption)
+                            .font(.caption2)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
@@ -187,8 +187,8 @@ struct SettingsView: View {
                 .padding(.horizontal, -18)
             }
             .padding(.horizontal, 16)
-            .padding(.top, 6)
-            .padding(.bottom, 8)
+            .padding(.top, 4)
+            .padding(.bottom, 6)
             .background(.ultraThinMaterial)
             .overlay(alignment: .bottom) {
                 Rectangle()
@@ -212,8 +212,8 @@ struct SettingsView: View {
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: t.symbol)
-                    .font(.system(size: 14, weight: .bold))
-                    .frame(width: 24, height: 24)
+                    .font(.system(size: 12, weight: .bold))
+                    .frame(width: 21, height: 21)
                     .background(
                         Circle()
                             .fill(selected ? Color.white.opacity(0.22) : t.tint.opacity(0.12))
@@ -221,12 +221,12 @@ struct SettingsView: View {
                 Text(t.label)
                     .lineLimit(1)
             }
-            .font(.subheadline.weight(.semibold))
+            .font(.caption.weight(.semibold))
             .foregroundStyle(selected ? Color.white : Color.primary)
-            .padding(.leading, 7)
-            .padding(.trailing, 10)
-            .padding(.vertical, 5)
-            .frame(minHeight: 36)
+            .padding(.leading, 6)
+            .padding(.trailing, 9)
+            .padding(.vertical, 4)
+            .frame(minHeight: 32)
             .background {
                 Capsule(style: .continuous)
                     .fill(Color.platformControlBackground.opacity(selected ? 0 : 0.72))

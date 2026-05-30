@@ -68,11 +68,15 @@ struct UsageSettingsView: View {
     }
     #endif
 
+    @ViewBuilder
     private var heroCard: some View {
+        #if os(iOS)
+        mobileHeroCard
+        #else
         let total = store.grandTotal(scope: scope)
         let devices = max(store.deviceCount, 1)
         let isThisDeviceOnly = (scope == .thisDevice)
-        return VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .top, spacing: 16) {
                 iconTile("chart.bar.xaxis", tint: tint, secondary: secondaryTint)
                 VStack(alignment: .leading, spacing: 7) {
@@ -125,7 +129,73 @@ struct UsageSettingsView: View {
                 .strokeBorder(tint.opacity(0.22), lineWidth: 1)
         }
         .shadow(color: tint.opacity(0.09), radius: 22, x: 0, y: 12)
+        #endif
     }
+
+    #if os(iOS)
+    private var mobileHeroCard: some View {
+        let total = store.grandTotal(scope: scope)
+        let devices = max(store.deviceCount, 1)
+        let isThisDeviceOnly = (scope == .thisDevice)
+        return VStack(alignment: .leading, spacing: 11) {
+            HStack(alignment: .center, spacing: 10) {
+                compactIconTile("chart.bar.xaxis", tint: tint, secondary: secondaryTint)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Token 用量")
+                        .font(.headline.weight(.bold))
+                        .lineLimit(1)
+                    Text(isThisDeviceOnly ? "仅本机" : "全部设备")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 8)
+
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text(formatTokens(total.total))
+                        .font(.title3.weight(.black))
+                        .monospacedDigit()
+                    Text("tokens")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Text("按天和模型统计 input / output token 与调用次数。")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+
+            VStack(spacing: 7) {
+                compactMetricRow(title: "调用次数",
+                                 value: "\(total.callCount)",
+                                 detail: "LLM 完成响应后记录",
+                                 icon: "bolt.horizontal.fill",
+                                 color: tint)
+                compactMetricRow(title: "统计天数",
+                                 value: "\(days.count)",
+                                 detail: days.first.map { "最近 \(prettyDate($0))" } ?? "暂无记录",
+                                 icon: "calendar",
+                                 color: secondaryTint)
+                compactMetricRow(title: "设备",
+                                 value: isThisDeviceOnly ? "本机" : "\(devices)",
+                                 detail: isThisDeviceOnly ? "只看当前设备文件" : "跨设备 usage 文件汇总",
+                                 icon: isThisDeviceOnly ? "laptopcomputer" : "icloud.fill",
+                                 color: isThisDeviceOnly ? .secondary : .blue)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(heroBackground)
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(tint.opacity(0.20), lineWidth: 1)
+        }
+        .shadow(color: tint.opacity(0.06), radius: 12, x: 0, y: 7)
+    }
+    #endif
 
     // MARK: - scope picker
 
@@ -417,9 +487,9 @@ struct UsageSettingsView: View {
 
     private var heroBackground: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
+            RoundedRectangle(cornerRadius: heroCornerRadius, style: .continuous)
                 .fill(.regularMaterial)
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
+            RoundedRectangle(cornerRadius: heroCornerRadius, style: .continuous)
                 .fill(
                     LinearGradient(
                         colors: [tint.opacity(0.16), secondaryTint.opacity(0.10), Color.clear],
@@ -429,6 +499,33 @@ struct UsageSettingsView: View {
                 )
         }
     }
+
+    private var heroCornerRadius: CGFloat {
+        #if os(iOS)
+        return 20
+        #else
+        return 28
+        #endif
+    }
+
+    #if os(iOS)
+    private func compactIconTile(_ symbol: String, tint: Color, secondary: Color) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [tint.opacity(0.95), secondary.opacity(0.82)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+            Image(systemName: symbol)
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(.white)
+        }
+        .frame(width: 42, height: 42)
+    }
+    #endif
 
     private func iconTile(_ symbol: String, tint: Color, secondary: Color) -> some View {
         ZStack {
@@ -495,6 +592,39 @@ struct UsageSettingsView: View {
         }
     }
 
+    private func compactMetricRow(title: String, value: String, detail: String, icon: String, color: Color) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(color)
+                .frame(width: 25, height: 25)
+                .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Text(detail)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            Text(value)
+                .font(.subheadline.weight(.bold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+                .monospacedDigit()
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(color.opacity(0.14), lineWidth: 1)
+        }
+    }
+
     private func statusBadge(_ text: String, icon: String, color: Color) -> some View {
         Label(text, systemImage: icon)
             .font(.caption.weight(.bold))
@@ -509,13 +639,13 @@ struct UsageSettingsView: View {
     @ViewBuilder
     private func cardShell<Content: View>(tint: Color, @ViewBuilder content: () -> Content) -> some View {
         content()
-            .padding(18)
+            .padding(cardPadding)
             .frame(maxWidth: .infinity, alignment: .topLeading)
             .background(
                 ZStack {
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
                         .fill(.regularMaterial)
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
                         .fill(
                             LinearGradient(
                                 colors: [tint.opacity(0.08), Color.clear],
@@ -526,9 +656,25 @@ struct UsageSettingsView: View {
                 }
             )
             .overlay {
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
                     .strokeBorder(tint.opacity(0.16), lineWidth: 1)
             }
+    }
+
+    private var cardPadding: CGFloat {
+        #if os(iOS)
+        return 14
+        #else
+        return 18
+        #endif
+    }
+
+    private var cardCornerRadius: CGFloat {
+        #if os(iOS)
+        return 18
+        #else
+        return 22
+        #endif
     }
 
     // MARK: - utils

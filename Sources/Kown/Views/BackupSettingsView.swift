@@ -98,7 +98,11 @@ struct BackupSettingsView: View {
 
     // MARK: - Hero
 
+    @ViewBuilder
     private var heroCard: some View {
+        #if os(iOS)
+        mobileHeroCard
+        #else
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .top, spacing: 16) {
                 iconTile("shippingbox.and.arrow.backward.fill", tint: tint, secondary: secondaryTint)
@@ -145,7 +149,66 @@ struct BackupSettingsView: View {
                 .strokeBorder(tint.opacity(0.22), lineWidth: 1)
         }
         .shadow(color: tint.opacity(0.09), radius: 22, x: 0, y: 12)
+        #endif
     }
+
+    #if os(iOS)
+    private var mobileHeroCard: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            HStack(alignment: .center, spacing: 10) {
+                compactIconTile("shippingbox.and.arrow.backward.fill", tint: tint, secondary: secondaryTint)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("导入 / 导出")
+                        .font(.headline.weight(.bold))
+                        .lineLimit(1)
+                    Text("JSON 配置备份")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 8)
+
+                statusBadge(includeAPIKeys ? "包含 Key" : "不含 Key",
+                            icon: includeAPIKeys ? "key.fill" : "key.slash",
+                            color: includeAPIKeys ? .orange : .secondary)
+            }
+
+            Text("导出 Provider、Web Search 和偏好;也可以从备份恢复。")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(spacing: 7) {
+                compactMetricRow(title: "导出内容",
+                                 value: "配置",
+                                 detail: "Provider / Web Search / Preference",
+                                 icon: "square.and.arrow.up.fill",
+                                 color: tint)
+                compactMetricRow(title: "API Key",
+                                 value: includeAPIKeys ? "明文" : "跳过",
+                                 detail: includeAPIKeys ? "请妥善保存备份文件" : "新设备需重新填写",
+                                 icon: includeAPIKeys ? "lock.open.fill" : "lock.fill",
+                                 color: includeAPIKeys ? .orange : .secondary)
+                compactMetricRow(title: "导入策略",
+                                 value: "覆盖 / 合并",
+                                 detail: "导入时再选择模式",
+                                 icon: "arrow.triangle.merge",
+                                 color: secondaryTint)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(heroBackground)
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(tint.opacity(0.20), lineWidth: 1)
+        }
+        .shadow(color: tint.opacity(0.06), radius: 12, x: 0, y: 7)
+    }
+    #endif
 
     // MARK: - 共用片段
 
@@ -269,9 +332,9 @@ struct BackupSettingsView: View {
 
     private var heroBackground: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
+            RoundedRectangle(cornerRadius: heroCornerRadius, style: .continuous)
                 .fill(.regularMaterial)
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
+            RoundedRectangle(cornerRadius: heroCornerRadius, style: .continuous)
                 .fill(
                     LinearGradient(
                         colors: [tint.opacity(0.16), secondaryTint.opacity(0.10), Color.clear],
@@ -281,6 +344,33 @@ struct BackupSettingsView: View {
                 )
         }
     }
+
+    private var heroCornerRadius: CGFloat {
+        #if os(iOS)
+        return 20
+        #else
+        return 28
+        #endif
+    }
+
+    #if os(iOS)
+    private func compactIconTile(_ symbol: String, tint: Color, secondary: Color) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [tint.opacity(0.95), secondary.opacity(0.78)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+            Image(systemName: symbol)
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(.white)
+        }
+        .frame(width: 42, height: 42)
+    }
+    #endif
 
     private func iconTile(_ symbol: String, tint: Color, secondary: Color) -> some View {
         ZStack {
@@ -347,6 +437,38 @@ struct BackupSettingsView: View {
         }
     }
 
+    private func compactMetricRow(title: String, value: String, detail: String, icon: String, color: Color) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(color)
+                .frame(width: 25, height: 25)
+                .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Text(detail)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            Text(value)
+                .font(.subheadline.weight(.bold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(color.opacity(0.14), lineWidth: 1)
+        }
+    }
+
     private func statusBadge(_ text: String, icon: String, color: Color) -> some View {
         Label(text, systemImage: icon)
             .font(.caption.weight(.bold))
@@ -375,13 +497,13 @@ struct BackupSettingsView: View {
     @ViewBuilder
     private func cardShell<Content: View>(tint: Color, @ViewBuilder content: () -> Content) -> some View {
         content()
-            .padding(18)
+            .padding(cardPadding)
             .frame(maxWidth: .infinity, alignment: .topLeading)
             .background(
                 ZStack {
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
                         .fill(.regularMaterial)
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
                         .fill(
                             LinearGradient(
                                 colors: [tint.opacity(0.08), Color.clear],
@@ -392,9 +514,25 @@ struct BackupSettingsView: View {
                 }
             )
             .overlay {
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
                     .strokeBorder(tint.opacity(0.16), lineWidth: 1)
             }
+    }
+
+    private var cardPadding: CGFloat {
+        #if os(iOS)
+        return 14
+        #else
+        return 18
+        #endif
+    }
+
+    private var cardCornerRadius: CGFloat {
+        #if os(iOS)
+        return 18
+        #else
+        return 22
+        #endif
     }
 
     // MARK: - Actions
