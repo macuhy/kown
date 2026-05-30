@@ -92,6 +92,14 @@ final class UpdaterService: ObservableObject {
     func checkForUpdates() {
         updater.checkForUpdates()
     }
+
+    /// 启动时静默后台检查 —— 不受 `SUScheduledCheckInterval`(每天一次)限制,
+    /// 满足「每次打开 App 都检测」。发现新版时:开了自动下载就静默下载、下次启动安装;
+    /// 否则才弹标准更新窗。仅在用户开了自动检查时才查,尊重设置。
+    func checkInBackground() {
+        guard updater.automaticallyChecksForUpdates else { return }
+        updater.checkForUpdatesInBackground()
+    }
 }
 
 /// 放进 macOS 菜单栏「Kown ▸ 检查更新…」的菜单项。

@@ -1,5 +1,9 @@
 # 更新日志
 
+## 0.6.15 — 2026-05-29
+### 改进
+- **每次打开 App 都做一次后台静默更新检查** — 之前只靠 Sparkle 的每日定时器(`SUScheduledCheckInterval=86400`),距上次检查不满 24h 就不查,所以新版发出来后不会马上发现。现在启动时额外强制一次 `checkForUpdatesInBackground`(尊重"自动检查"开关):开了自动下载就静默装、下次启动生效,否则弹更新窗
+
 ## 0.6.14 — 2026-05-29
 ### 修复(严重)
 - **iCloud 迁移卡死 + 冲突副本根治** — `copyTree` 之前用裸 `FileManager.copyItem` 直接读写 iCloud 容器:读云端 placeholder 会同步阻塞等 materialize(FileProvider 忙时整迁移卡死在某个文件上 100% 不动),未协调的写入又让 iCloud 把同名文件 fork 成 `.kown 2/3/4...`(那上千个冲突文件的来源)。现在每个文件走 `NSFileCoordinator` 协调读写 —— 读端先把云文件拉下来再交付,写端拿独占 slot 再落盘,既不会无限卡,也不再生成冲突副本。migrate / mirror / reconcile 三条路径都受益

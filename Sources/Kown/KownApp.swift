@@ -62,9 +62,14 @@ struct KownApp: App {
             }
             .task {
                 #if os(macOS)
-                // 启动即拉起 Sparkle 更新器:按用户设置的频率在后台检查,
-                // 并(若开启)自动下载安装。满足「每次打开 App 也检测并启用自动更新」。
+                // 启动即拉起 Sparkle 更新器(按 SUScheduledCheckInterval 定时检查)。
                 _ = UpdaterService.shared
+                // 再额外强制一次后台静默检查 —— Sparkle 定时器要等满间隔才查,
+                // 这里保证「每次打开 App 都检测」。稍等让启动稳定再查。
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(3))
+                    UpdaterService.shared.checkInBackground()
+                }
                 #endif
                 guard showLaunchSplash else { return }
                 try? await Task.sleep(for: .milliseconds(1750))
