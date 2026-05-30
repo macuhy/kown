@@ -124,7 +124,7 @@ struct SettingsView: View {
                     case .updates:
                         EmptyView()   // iOS 不展示;.updates 已从 availableTabs 过滤
                     case .changelog:
-                        ChangelogView()
+                        ChangelogView(embeddedInSettings: true)
                     }
                 }
             }
@@ -444,7 +444,7 @@ struct SettingsView: View {
                 EmptyView()
                 #endif
             case .changelog:
-                ChangelogView()
+                ChangelogView(embeddedInSettings: true)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
