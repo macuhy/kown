@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- iOS App Store / TestFlight 导出选项(供 xcodebuild -exportArchive 用)。
+     manual 签名 + 指定 "Kown AppStore" profile(含 iCloud capability);
+     上传走 App Store Connect API key(见 ios-release.yml)。 -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>method</key>
+    <string>app-store-connect</string>
+
+    <key>teamID</key>
+    <string>4257SFGRFK</string>
+
+    <key>signingStyle</key>
+    <string>manual</string>
+
+    <key>provisioningProfiles</key>
+    <dict>
+        <key>com.xiaobo.kown</key>
+        <string>Kown AppStore</string>
+    </dict>
+
+    <key>destination</key>
+    <string>export</string>
+
+    <key>uploadSymbols</key>
+    <true/>
+
+    <key>manageAppVersionAndBuildNumber</key>
+    <false/>
+</dict>
+</plist>

@@ -20,8 +20,10 @@ targets:
     info:
       path: Info.plist
       properties:
-        CFBundleShortVersionString: "0.3.0"
-        CFBundleVersion: "1"
+        # 版本走 build setting:CI 用 MARKETING_VERSION / CURRENT_PROJECT_VERSION 注入
+        # (CURRENT_PROJECT_VERSION = git 提交数,每次上传 TestFlight build 号唯一)。
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         CFBundleDisplayName: Kown
         LSRequiresIPhoneOS: true
         # 加密导出合规 — false 表示仅使用 HTTPS / 系统标准加密(免提交合规文档)。
@@ -64,6 +66,9 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.xiaobo.kown
+        # 本地默认版本;CI 用命令行覆盖(发版走 ios-v* tag → MARKETING_VERSION)。
+        MARKETING_VERSION: "0.3.0"
+        CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: 4257SFGRFK   # 写死付费 Team,Archive 不再每次让人选
         SWIFT_VERSION: "6.0"
