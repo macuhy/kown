@@ -15,16 +15,30 @@ struct ConversationRowView: View {
     @FocusState private var renameFocused: Bool
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: conversation.mode.symbol)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(isSelected ? .white : modeColor)
-                .frame(width: 22, height: 22)
-                .background(
-                    Circle().fill((isSelected ? Color.accentColor : modeColor).opacity(isSelected ? 1 : 0.12))
-                )
+        HStack(alignment: .top, spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                modeColor.opacity(isSelected ? 0.95 : 0.18),
+                                modeColor.opacity(isSelected ? 0.62 : 0.08)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                Image(systemName: conversation.mode.symbol)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(isSelected ? .white : modeColor)
+            }
+            .frame(width: 34, height: 34)
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder((isSelected ? Color.white : modeColor).opacity(isSelected ? 0.25 : 0.16), lineWidth: 1)
+            }
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 5) {
                 if isRenaming {
                     let baseField = TextField("会话标题", text: $renameDraft)
                         .textFieldStyle(.roundedBorder)
@@ -39,13 +53,13 @@ struct ConversationRowView: View {
                     #endif
                 } else {
                     Text(conversation.title.isEmpty ? "New Conversation" : conversation.title)
-                        .font(.subheadline.weight(.semibold))
+                        .font(.system(.subheadline, design: .rounded).weight(.bold))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
                 }
 
                 if !conversation.lastPromptPreview.isEmpty {
-                    Text("Asked about: \(conversation.lastPromptPreview)")
+                    Text(conversation.lastPromptPreview)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
@@ -56,24 +70,44 @@ struct ConversationRowView: View {
                 }
 
                 if !isRenaming {
-                    Text(formattedDate)
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                    HStack(spacing: 6) {
+                        Text(modeLabel)
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(modeColor)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(modeColor.opacity(0.11), in: Capsule())
+                        Text(formattedDate)
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(.tertiary)
+                            .monospacedDigit()
+                    }
                 }
             }
 
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 9)
+        .padding(.horizontal, 11)
+        .padding(.vertical, 11)
         .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(isSelected ? Color.accentColor.opacity(0.13) : Color.clear)
+            ZStack {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(isSelected ? modeColor.opacity(0.13) : Color.platformControlBackground.opacity(0.30))
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [modeColor.opacity(isSelected ? 0.10 : 0.035), Color.clear],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(isSelected ? Color.accentColor.opacity(0.45) : Color.clear, lineWidth: 1)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(isSelected ? modeColor.opacity(0.36) : Color.primary.opacity(0.06), lineWidth: 1)
         )
+        .shadow(color: modeColor.opacity(isSelected ? 0.10 : 0.03), radius: isSelected ? 14 : 8, x: 0, y: 6)
         // 整行可点 = 选中（重命名状态下不响应，避免点 TextField 退出 rename）
         .contentShape(Rectangle())
         .onTapGesture {
@@ -95,6 +129,15 @@ struct ConversationRowView: View {
         case .direct:  return Color(red: 0.55, green: 0.45, blue: 0.78)
         case .compare: return Color(red: 0.83, green: 0.38, blue: 0.18)
         case .debate:  return Color.indigo
+        }
+    }
+
+    private var modeLabel: String {
+        switch conversation.mode {
+        case .council: return "Council"
+        case .direct:  return "Direct"
+        case .compare: return "Compare"
+        case .debate:  return "Debate"
         }
     }
 

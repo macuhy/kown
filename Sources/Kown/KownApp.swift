@@ -152,10 +152,29 @@ private struct LaunchSplashView: View {
                                 radius: 22, x: 0, y: 12)
 
                     VStack(spacing: 8) {
+                        Text("Kown")
+                            .font(.system(size: 34, weight: .black, design: .rounded))
+                            .tracking(-1.2)
+                            .foregroundStyle(
+                                LinearGradient(
+                                    colors: [
+                                        Color(red: 0.04, green: 0.20, blue: 0.40),
+                                        Color(red: 0.02, green: 0.48, blue: 0.82)
+                                    ],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .opacity(appeared ? 1 : 0)
+                            .offset(y: appeared ? 0 : 10)
+
                         Text("Model Debate")
-                            .font(.system(size: 30, weight: .bold, design: .rounded))
-                            .tracking(-1.0)
-                            .foregroundStyle(Color(red: 0.04, green: 0.12, blue: 0.30))
+                            .font(.caption.weight(.bold))
+                            .tracking(1.2)
+                            .foregroundStyle(Color(red: 0.02, green: 0.42, blue: 0.98))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(Color(red: 0.02, green: 0.42, blue: 0.98).opacity(0.10), in: Capsule())
                             .opacity(appeared ? 1 : 0)
                             .offset(y: appeared ? 0 : 10)
 
@@ -217,6 +236,14 @@ private struct LaunchSplashView: View {
                         )
                     }
                     .padding(.top, 18)
+                    .padding(14)
+                    .background(.white.opacity(0.36), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 24, style: .continuous)
+                            .strokeBorder(.white.opacity(0.62), lineWidth: 1)
+                    }
+                    .shadow(color: Color(red: 0.10, green: 0.32, blue: 0.82).opacity(0.10),
+                            radius: 22, x: 0, y: 12)
                     .opacity(appeared ? 1 : 0)
                     .offset(y: appeared ? 0 : 14)
 

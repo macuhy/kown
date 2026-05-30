@@ -16,6 +16,7 @@ struct ProviderRowView: View {
     @State private var testing: Bool = false
     @State private var confirmingDelete: Bool = false
     @State private var isHovered: Bool = false
+    private let cardCorner: CGFloat = 22
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -24,13 +25,30 @@ struct ProviderRowView: View {
             advancedDisclosure
             statusBar
         }
-        .padding(16)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .padding(18)
+        .background(
+            ZStack {
+                RoundedRectangle(cornerRadius: cardCorner, style: .continuous)
+                    .fill(.regularMaterial)
+                RoundedRectangle(cornerRadius: cardCorner, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                kindColor.opacity(isHovered ? 0.15 : 0.09),
+                                Color.platformControlBackground.opacity(0.36),
+                                Color.clear
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
+        )
         .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(kindColor.opacity(isHovered ? 0.38 : 0.20), lineWidth: 1)
+            RoundedRectangle(cornerRadius: cardCorner, style: .continuous)
+                .strokeBorder(kindColor.opacity(isHovered ? 0.42 : 0.18), lineWidth: 1)
         }
-        .shadow(color: kindColor.opacity(isHovered ? 0.13 : 0.06), radius: isHovered ? 14 : 8, x: 0, y: isHovered ? 8 : 4)
+        .shadow(color: kindColor.opacity(isHovered ? 0.16 : 0.06), radius: isHovered ? 22 : 10, x: 0, y: isHovered ? 12 : 5)
         .opacity(config.enabled ? 1 : 0.78)
         .animation(.easeOut(duration: 0.16), value: isHovered)
         .onHover { isHovered = $0 }
@@ -92,7 +110,7 @@ struct ProviderRowView: View {
     }
 
     private var headerRow: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 14) {
             providerMark
 
             VStack(alignment: .leading, spacing: 7) {
@@ -109,14 +127,16 @@ struct ProviderRowView: View {
 
                 TextField("显示名", text: $config.displayName)
                     .textFieldStyle(.roundedBorder)
-                    .font(.headline)
+                    .font(.system(.headline, design: .rounded).weight(.semibold))
                     .onSubmit { onSave() }
             }
 
             Spacer()
 
-            chairButton
-            summaryButton
+            HStack(spacing: 8) {
+                chairButton
+                summaryButton
+            }
 
             Toggle("启用", isOn: $config.enabled)
                 .toggleStyle(.switch)
@@ -138,6 +158,15 @@ struct ProviderRowView: View {
             } else {
                 httpFieldRows
             }
+        }
+        .padding(14)
+        .background(
+            Color.platformTextBackground.opacity(0.28),
+            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.07), lineWidth: 1)
         }
     }
 
@@ -359,8 +388,19 @@ struct ProviderRowView: View {
             }
         }
         .font(.caption)
-        .padding(12)
-        .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .padding(13)
+        .background(
+            LinearGradient(
+                colors: [kindColor.opacity(0.08), Color.primary.opacity(0.035)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(kindColor.opacity(0.14), lineWidth: 1)
+        }
     }
 
     @ViewBuilder
@@ -373,9 +413,13 @@ struct ProviderRowView: View {
             Label("启用前请补全 Base URL 和 Model", systemImage: "info.circle.fill")
                 .foregroundStyle(.orange)
                 .font(.caption)
-                .padding(10)
+                .padding(11)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(Color.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(Color.orange.opacity(0.18), lineWidth: 1)
+                }
         }
     }
 
@@ -462,6 +506,7 @@ struct ProviderRowView: View {
             RoundedRectangle(cornerRadius: 13, style: .continuous)
                 .strokeBorder(kindColor.opacity(0.22), lineWidth: 1)
         }
+        .shadow(color: kindColor.opacity(0.13), radius: 10, x: 0, y: 5)
     }
 
     private func providerChip(_ text: String, color: Color) -> some View {

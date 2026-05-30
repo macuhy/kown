@@ -8,6 +8,9 @@ import SwiftUI
 struct PerformanceSettingsView: View {
     @AppStorage(ResponseState.flushIntervalKey) private var intervalRaw: Int = ResponseState.defaultFlushIntervalMs
 
+    private let tint = Color(red: 0.88, green: 0.35, blue: 0.22)
+    private let secondaryTint = Color(red: 0.91, green: 0.55, blue: 0.20)
+
     /// AppStorage 读出来的 raw 值如果不在白名单里(比如老版本残留 0),fall back 到默认
     private var current: Int {
         ResponseState.allowedFlushIntervalsMs.contains(intervalRaw)
@@ -22,6 +25,7 @@ struct PerformanceSettingsView: View {
     var body: some View {
         #if os(iOS)
         Form {
+            heroSection
             Section {
                 picker
             } header: {
@@ -29,25 +33,128 @@ struct PerformanceSettingsView: View {
             } footer: {
                 Text(footerText)
             }
+            Section("档位说明") {
+                intervalGuide
+            }
         }
         #else
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                card {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("流式刷新间隔")
-                            .font(.headline)
-                        picker
-                        Text(footerText)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
+                heroCard
+                settingCard
+                guideCard
             }
-            .padding(20)
-            .frame(maxWidth: 760, alignment: .topLeading)
+            .padding(24)
+            .frame(maxWidth: 860, alignment: .topLeading)
         }
         #endif
+    }
+
+    // MARK: - Hero
+
+    private var heroCard: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top, spacing: 16) {
+                iconTile("speedometer", tint: tint, secondary: secondaryTint)
+                VStack(alignment: .leading, spacing: 7) {
+                    HStack(spacing: 8) {
+                        Text("性能")
+                            .font(.system(.title2, design: .rounded).weight(.bold))
+                        statusBadge(performanceBadgeText, icon: "gauge.with.dots.needle.33percent", color: performanceColor)
+                    }
+                    Text("调整流式响应的刷新节奏。间隔越短越丝滑,间隔越长越省电、CPU 压力越低。")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text("\(current) ms")
+                        .font(.system(size: 34, weight: .black, design: .rounded))
+                        .monospacedDigit()
+                    Text(frequencyText(current))
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+            }
+
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
+                metricTile(title: "当前档位",
+                           value: "\(current) ms",
+                           detail: footerText,
+                           icon: "timer",
+                           color: performanceColor)
+                metricTile(title: "默认值",
+                           value: "\(ResponseState.defaultFlushIntervalMs) ms",
+                           detail: "丝滑与省电的平衡点",
+                           icon: "checkmark.seal.fill",
+                           color: .green)
+                metricTile(title: "刷新频率",
+                           value: frequencyText(current),
+                           detail: "约每秒 UI 刷新次数",
+                           icon: "waveform.path.ecg",
+                           color: secondaryTint)
+            }
+        }
+        .padding(22)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(heroBackground)
+        .overlay {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .strokeBorder(tint.opacity(0.22), lineWidth: 1)
+        }
+        .shadow(color: tint.opacity(0.09), radius: 22, x: 0, y: 12)
+    }
+
+    private var settingCard: some View {
+        card(tint: tint) {
+            VStack(alignment: .leading, spacing: 14) {
+                sectionHeader("流式刷新间隔", subtitle: "即时生效,只改变 UI 刷新频率,不影响模型生成速度。", icon: "slider.horizontal.below.rectangle", color: tint)
+                picker
+                messageBanner(footerText, icon: "info.circle.fill", color: performanceColor)
+            }
+        }
+    }
+
+    private var guideCard: some View {
+        card(tint: secondaryTint) {
+            VStack(alignment: .leading, spacing: 14) {
+                sectionHeader("档位说明", subtitle: "从更丝滑到更省电,按机器性能和个人偏好选择。", icon: "list.bullet.rectangle.fill", color: secondaryTint)
+                intervalGuide
+            }
+        }
+    }
+
+    private var intervalGuide: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(ResponseState.allowedFlushIntervalsMs, id: \.self) { ms in
+                HStack(spacing: 10) {
+                    Text("\(ms) ms")
+                        .font(.system(.callout, design: .rounded).weight(.bold))
+                        .monospacedDigit()
+                        .frame(width: 72, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(intervalTitle(ms))
+                            .font(.callout.weight(.semibold))
+                        Text(intervalDetail(ms))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 0)
+                    if ms == current {
+                        statusBadge("当前", icon: "checkmark", color: performanceColor)
+                    }
+                }
+                .padding(11)
+                .background((ms == current ? performanceColor : Color.primary).opacity(ms == current ? 0.10 : 0.035), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder((ms == current ? performanceColor : Color.primary).opacity(ms == current ? 0.18 : 0.06), lineWidth: 1)
+                }
+            }
+        }
     }
 
     private var picker: some View {
@@ -72,18 +179,195 @@ struct PerformanceSettingsView: View {
         }
     }
 
-    @ViewBuilder
-    private func card<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        content()
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-            .background(
-                Color.platformControlBackground.opacity(0.55),
-                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-            )
+    // MARK: - Styling helpers
+
+    #if os(iOS)
+    private var heroSection: some View {
+        Section {
+            heroCard
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+        }
+    }
+    #endif
+
+    private var performanceColor: Color {
+        switch current {
+        case 30: return tint
+        case 50: return .green
+        case 100: return secondaryTint
+        case 200, 500: return .blue
+        default: return .secondary
+        }
+    }
+
+    private var performanceBadgeText: String {
+        switch current {
+        case 30: return "极致丝滑"
+        case 50: return "默认平衡"
+        case 100: return "省电"
+        case 200, 500: return "低负载"
+        default: return "默认"
+        }
+    }
+
+    private var heroBackground: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(.regularMaterial)
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [tint.opacity(0.16), secondaryTint.opacity(0.10), Color.clear],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        }
+    }
+
+    private func iconTile(_ symbol: String, tint: Color, secondary: Color) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [tint.opacity(0.95), secondary.opacity(0.78)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+            Image(systemName: symbol)
+                .font(.system(size: 24, weight: .bold))
+                .foregroundStyle(.white)
+        }
+        .frame(width: 58, height: 58)
+        .shadow(color: tint.opacity(0.20), radius: 14, x: 0, y: 8)
+    }
+
+    private func sectionHeader(_ title: String, subtitle: String, icon: String, color: Color) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(color)
+                .frame(width: 28, height: 28)
+                .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.headline)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func metricTile(title: String, value: String, detail: String, icon: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(color)
+                Text(title)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+            }
+            Text(value)
+                .font(.system(.title3, design: .rounded).weight(.bold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+            Text(detail)
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .lineLimit(2)
+        }
+        .padding(13)
+        .frame(maxWidth: .infinity, minHeight: 108, alignment: .topLeading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(color.opacity(0.18), lineWidth: 1)
+        }
+    }
+
+    private func statusBadge(_ text: String, icon: String, color: Color) -> some View {
+        Label(text, systemImage: icon)
+            .font(.caption.weight(.bold))
+            .foregroundStyle(color)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background(color.opacity(0.12), in: Capsule())
+            .overlay { Capsule().strokeBorder(color.opacity(0.18), lineWidth: 1) }
+            .fixedSize()
+    }
+
+    private func messageBanner(_ text: String, icon: String, color: Color) -> some View {
+        Label(text, systemImage: icon)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(color)
+            .padding(11)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(color.opacity(0.10), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.10), lineWidth: 1)
+                    .strokeBorder(color.opacity(0.18), lineWidth: 1)
             }
+    }
+
+    @ViewBuilder
+    private func card<Content: View>(tint: Color, @ViewBuilder content: () -> Content) -> some View {
+        content()
+            .padding(18)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .background(
+                ZStack {
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .fill(.regularMaterial)
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [tint.opacity(0.08), Color.clear],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                }
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .strokeBorder(tint.opacity(0.16), lineWidth: 1)
+            }
+    }
+
+    private func frequencyText(_ ms: Int) -> String {
+        guard ms > 0 else { return "默认" }
+        let hz = 1000.0 / Double(ms)
+        if hz >= 10 {
+            return "≈ \(Int(round(hz)))Hz"
+        }
+        return String(format: "≈ %.1fHz", hz)
+    }
+
+    private func intervalTitle(_ ms: Int) -> String {
+        switch ms {
+        case 30: return "最丝滑"
+        case 50: return "默认平衡"
+        case 100: return "一般电脑首选"
+        case 200: return "低配 / Intel 友好"
+        case 500: return "极致省电"
+        default: return "自定义"
+        }
+    }
+
+    private func intervalDetail(_ ms: Int) -> String {
+        switch ms {
+        case 30: return "字更接近逐个出现,CPU 占用最高。"
+        case 50: return "推荐默认值,兼顾观感和能耗。"
+        case 100: return "文字成片刷新,显著降低 UI 更新频率。"
+        case 200: return "刷新节奏明显放慢,适合老机器。"
+        case 500: return "一大段一大段刷出,最大限度省电。"
+        default: return "默认 50ms。"
+        }
     }
 }

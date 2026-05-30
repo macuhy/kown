@@ -9,63 +9,63 @@ struct ResponseColumnView: View {
         VStack(alignment: .leading, spacing: 0) {
             Rectangle()
                 .fill(accentGradient)
-                .frame(height: 3)
+                .frame(height: 4)
 
             header
-                .padding(.horizontal, 16)
-                .padding(.top, 14)
+                .padding(.horizontal, 18)
+                .padding(.top, 15)
                 .padding(.bottom, 12)
 
             separator
             textBody
             separator
             footer
-                .padding(.horizontal, 16)
+                .padding(.horizontal, 18)
                 .padding(.vertical, 10)
         }
         .background(
-            Color.platformControlBackground.opacity(0.55),
-            in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+            ZStack {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(.regularMaterial)
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [accentColor.opacity(0.10), Color.platformControlBackground.opacity(0.34), Color.clear],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
         )
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(accentColor.opacity(0.28), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .strokeBorder(accentColor.opacity(0.24), lineWidth: 1)
         }
+        .shadow(color: accentColor.opacity(0.08), radius: 22, x: 0, y: 12)
     }
 
     // MARK: - Header
 
     private var header: some View {
-        HStack(spacing: 11) {
+        HStack(spacing: 12) {
             providerMark
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 6) {
                 // Provider name + status
-                HStack {
+                HStack(spacing: 8) {
                     Text(config.displayName)
-                        .font(.system(.subheadline, weight: .semibold))
+                        .font(.system(.subheadline, design: .rounded).weight(.bold))
                         .lineLimit(1)
                     Spacer()
                     HStack(spacing: 6) {
                         httpStatusBadge
                         statusDot
                     }
+                    .fixedSize()
                 }
-                // Model tag
-                Text(config.model)
-                    .font(.system(.caption2, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                // Endpoint URL or CLI command
-                HStack(spacing: 4) {
-                    Text(config.kind.isCLI ? "EXEC" : "POST")
-                        .font(.system(.caption2, design: .monospaced).weight(.bold))
-                        .foregroundStyle(.tertiary)
-                    Text(endpointDisplay)
-                        .font(.system(.caption2, design: .monospaced))
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+                HStack(spacing: 6) {
+                    metadataPill(config.model, icon: "cpu", emphasized: true)
+                    metadataPill(endpointDisplay, icon: config.kind.isCLI ? "terminal" : "network", prefix: config.kind.isCLI ? "EXEC" : "POST")
                 }
             }
         }
@@ -104,17 +104,18 @@ struct ResponseColumnView: View {
     }
 
     private func httpBadge(code: Int?, text: String, color: Color) -> some View {
-        HStack(spacing: 3) {
+        HStack(spacing: 4) {
             if let code {
                 Text("\(code)")
                     .font(.system(.caption2, design: .monospaced).weight(.bold))
                     .foregroundStyle(color)
             }
             Text(text)
-                .font(.caption2.weight(.medium))
+                .font(.caption2.weight(.bold))
                 .foregroundStyle(color)
         }
-        .padding(.horizontal, 7).padding(.vertical, 3)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
         .background(color.opacity(0.10), in: Capsule())
         .overlay { Capsule().strokeBorder(color.opacity(0.20), lineWidth: 1) }
     }
@@ -129,16 +130,23 @@ struct ResponseColumnView: View {
     private var providerMark: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(accentColor.opacity(0.12))
+                .fill(
+                    LinearGradient(
+                        colors: [accentColor.opacity(0.92), accentColor.opacity(0.46)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
             Image(systemName: providerSymbol)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(accentColor)
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(.white)
         }
-        .frame(width: 38, height: 38)
+        .frame(width: 40, height: 40)
         .overlay {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(accentColor.opacity(0.20), lineWidth: 1)
+                .strokeBorder(Color.white.opacity(0.28), lineWidth: 1)
         }
+        .shadow(color: accentColor.opacity(0.18), radius: 12, x: 0, y: 6)
     }
 
     @ViewBuilder
@@ -151,9 +159,13 @@ struct ResponseColumnView: View {
                 .frame(width: 18, height: 18)
                 .id(phaseKey)
         } else {
-            Circle()
-                .fill(phaseColor)
-                .frame(width: 8, height: 8)
+            ZStack {
+                Circle()
+                    .fill(phaseColor.opacity(0.14))
+                Circle()
+                    .fill(phaseColor)
+                    .frame(width: 8, height: 8)
+            }
                 .frame(width: 18, height: 18)
                 .id(phaseKey)
         }
@@ -191,6 +203,34 @@ struct ResponseColumnView: View {
             }
     }
 
+    private func metadataPill(
+        _ text: String,
+        icon: String,
+        prefix: String? = nil,
+        emphasized: Bool = false
+    ) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: icon)
+                .font(.system(size: 9, weight: .bold))
+            if let prefix {
+                Text(prefix)
+                    .font(.system(.caption2, design: .monospaced).weight(.bold))
+                    .foregroundStyle(accentColor)
+            }
+            Text(text)
+                .font(.system(.caption2, design: .monospaced).weight(emphasized ? .semibold : .regular))
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .foregroundStyle(Color.primary.opacity(emphasized ? 0.62 : 0.46))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(Color.secondary.opacity(emphasized ? 0.09 : 0.07), in: Capsule())
+        .overlay {
+            Capsule().strokeBorder(Color.primary.opacity(0.07), lineWidth: 1)
+        }
+    }
+
     // MARK: - Body
 
     private var textBody: some View {
@@ -201,9 +241,18 @@ struct ResponseColumnView: View {
                     bodyContent
                     Color.clear.frame(height: 1).id("bottom")
                 }
-                .padding(16)
+                .padding(18)
             }
-            .background(Color.platformTextBackground.opacity(0.34))
+            .background(
+                ZStack {
+                    Color.platformTextBackground.opacity(0.26)
+                    LinearGradient(
+                        colors: [accentColor.opacity(0.035), Color.clear],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                }
+            )
             .frame(minHeight: 280)
             .onChange(of: state.text) { _, _ in
                 guard case .streaming = state.phase else { return }
@@ -221,17 +270,16 @@ struct ResponseColumnView: View {
         if !state.events.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(Array(state.events.enumerated()), id: \.offset) { _, line in
-                    Text(line)
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(line.hasPrefix("⚠") ? Color.orange : Color.blue)
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 4)
-                        .background(
-                            Capsule().fill((line.hasPrefix("⚠") ? Color.orange : Color.blue).opacity(0.10))
-                        )
-                        .overlay(
-                            Capsule().strokeBorder((line.hasPrefix("⚠") ? Color.orange : Color.blue).opacity(0.22), lineWidth: 1)
-                        )
+                    let color = line.hasPrefix("⚠") ? Color.orange : Color.blue
+                    Label(line, systemImage: line.hasPrefix("⚠") ? "exclamationmark.triangle.fill" : "hammer.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(color)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(color.opacity(0.10), in: Capsule())
+                        .overlay {
+                            Capsule().strokeBorder(color.opacity(0.22), lineWidth: 1)
+                        }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -261,9 +309,11 @@ struct ResponseColumnView: View {
             Image(systemName: "tray.and.arrow.down")
                 .font(.system(size: 28, weight: .semibold))
                 .foregroundStyle(accentColor.opacity(0.72))
+                .frame(width: 58, height: 58)
+                .background(accentColor.opacity(0.10), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             VStack(spacing: 4) {
                 Text("等待本轮发送")
-                    .font(.headline)
+                    .font(.system(.headline, design: .rounded).weight(.bold))
                 Text("发送后会自动流式滚动到底部。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -277,7 +327,7 @@ struct ResponseColumnView: View {
             ProgressView()
                 .controlSize(.small)
             Text("正在建立连接...")
-                .font(.callout)
+                .font(.callout.weight(.semibold))
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, minHeight: 230)
@@ -292,6 +342,12 @@ struct ResponseColumnView: View {
                 .font(.body)
                 .foregroundStyle(.red)
                 .textSelection(.enabled)
+        }
+        .padding(14)
+        .background(Color.red.opacity(0.07), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(Color.red.opacity(0.18), lineWidth: 1)
         }
         .frame(maxWidth: .infinity, minHeight: 230, alignment: .topLeading)
     }
@@ -320,16 +376,10 @@ struct ResponseColumnView: View {
     private var footer: some View {
         HStack(spacing: 12) {
             if let s = state.elapsedSeconds {
-                Label(String(format: "%.1fs", s), systemImage: "clock")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
+                footerPill(String(format: "%.1fs", s), icon: "clock")
             }
             if !state.text.isEmpty, case .finished = state.phase {
-                Text("·  \(state.text.count) 字")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                    .monospacedDigit()
+                footerPill("\(state.text.count) 字", icon: "text.alignleft")
             }
             Spacer()
 
@@ -342,13 +392,26 @@ struct ResponseColumnView: View {
                 }
             } label: {
                 Label(copied ? "已复制" : "复制", systemImage: copied ? "checkmark" : "doc.on.doc")
-                    .font(.caption)
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(copied ? .green : .secondary)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background((copied ? Color.green : Color.secondary).opacity(0.10), in: Capsule())
             }
             .buttonStyle(.borderless)
             .disabled(state.text.isEmpty)
             .help("复制当前回答")
         }
+    }
+
+    private func footerPill(_ text: String, icon: String) -> some View {
+        Label(text, systemImage: icon)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .monospacedDigit()
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background(Color.secondary.opacity(0.08), in: Capsule())
     }
 
     // MARK: - Colors

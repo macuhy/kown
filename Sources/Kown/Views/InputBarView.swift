@@ -17,7 +17,7 @@ struct InputBarView: View {
     #endif
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 10) {
             if showSystemPromptDrawer {
                 systemPromptEditor
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
@@ -26,16 +26,32 @@ struct InputBarView: View {
                 attachmentsRow
             }
             if let err = pickerError {
-                Text(err)
-                    .font(.caption)
+                Label(err, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(.red)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.red.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(Color.red.opacity(0.18), lineWidth: 1)
+                    }
             }
             barRow
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(.thinMaterial)
+        .background {
+            ZStack(alignment: .top) {
+                Rectangle().fill(.thinMaterial)
+                LinearGradient(
+                    colors: [Color.accentColor.opacity(0.07), Color.clear],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            }
+        }
         .overlay(alignment: .top) {
             Rectangle().fill(Color.primary.opacity(0.08)).frame(height: 1)
         }
@@ -103,20 +119,36 @@ struct InputBarView: View {
             .textFieldStyle(.plain)
             .font(.body)
             .lineLimit(1...5)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .frame(minHeight: 44)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .frame(minHeight: 48)
             .frame(maxWidth: .infinity)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color.platformTextBackground.opacity(0.7))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(inputFocused ? Color.accentColor.opacity(0.45) : Color.primary.opacity(0.10),
-                                  lineWidth: inputFocused ? 1.4 : 1)
-            )
-            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .background {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color.platformTextBackground.opacity(0.78))
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    inputFocused ? Color.accentColor.opacity(0.10) : Color.white.opacity(0.035),
+                                    Color.clear
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                }
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(
+                        inputFocused ? Color.accentColor.opacity(0.48) : Color.primary.opacity(0.10),
+                        lineWidth: inputFocused ? 1.5 : 1
+                    )
+            }
+            .shadow(color: inputFocused ? Color.accentColor.opacity(0.12) : Color.clear, radius: 16, x: 0, y: 8)
+            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .focused($inputFocused)
             .submitLabel(.send)
             .onSubmit { sendIfCan() }
@@ -154,6 +186,11 @@ struct InputBarView: View {
             workspaceButton
             #endif
         }
+        .padding(4)
+        .background(.regularMaterial, in: Capsule())
+        .overlay {
+            Capsule().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+        }
     }
 
     #if os(macOS)
@@ -165,18 +202,18 @@ struct InputBarView: View {
                 Button {
                     pickWorkspace()
                 } label: {
-                    HStack(spacing: 4) {
+                    HStack(spacing: 5) {
                         Image(systemName: "folder.fill")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.system(size: 11, weight: .bold))
                         Text((displayPath as NSString).lastPathComponent)
-                            .font(.caption.weight(.semibold))
+                            .font(.caption.weight(.bold))
                             .lineLimit(1)
                     }
                     .foregroundStyle(Color.accentColor)
-                    .padding(.horizontal, 8)
-                    .frame(height: 28)
+                    .padding(.horizontal, 9)
+                    .frame(height: 30)
                     .background(Color.accentColor.opacity(0.12), in: Capsule())
-                    .overlay(Capsule().strokeBorder(Color.accentColor.opacity(0.30), lineWidth: 1))
+                    .overlay(Capsule().strokeBorder(Color.accentColor.opacity(0.26), lineWidth: 1))
                 }
                 .buttonStyle(.plain)
                 .help("Workspace: \(displayPath)\n点击切换文件夹")
@@ -187,6 +224,7 @@ struct InputBarView: View {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 14))
                         .foregroundStyle(.tertiary)
+                        .frame(width: 24, height: 30)
                 }
                 .buttonStyle(.plain)
                 .help("移除 workspace")
@@ -214,11 +252,12 @@ struct InputBarView: View {
 
     private var attachmentsRow: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
                 ForEach(viewModel.attachments) { att in
                     attachmentChip(att)
                 }
             }
+            .padding(.vertical, 1)
         }
     }
 
@@ -235,9 +274,12 @@ struct InputBarView: View {
     private func chipShell(icon: String, label: String, detail: String, id: UUID, color: Color) -> some View {
         HStack(spacing: 6) {
             Image(systemName: icon)
+                .font(.caption.weight(.bold))
                 .foregroundStyle(color)
+                .frame(width: 24, height: 24)
+                .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             Text(label)
-                .font(.caption.weight(.medium))
+                .font(.caption.weight(.semibold))
                 .lineLimit(1)
             Text(detail)
                 .font(.caption2)
@@ -250,10 +292,11 @@ struct InputBarView: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 5)
-        .background(color.opacity(0.10), in: Capsule())
-        .overlay(Capsule().strokeBorder(color.opacity(0.25), lineWidth: 1))
+        .padding(.leading, 6)
+        .padding(.trailing, 9)
+        .padding(.vertical, 6)
+        .background(.regularMaterial, in: Capsule())
+        .overlay(Capsule().strokeBorder(color.opacity(0.24), lineWidth: 1))
     }
 
     private var placeholder: String {
@@ -281,16 +324,16 @@ struct InputBarView: View {
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: "arrow.triangle.2.circlepath")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 12, weight: .bold))
                 Text("\(viewModel.debateRoundsForNextSend)轮")
-                    .font(.caption.weight(.semibold))
+                    .font(.caption.weight(.bold))
                     .monospacedDigit()
             }
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 8)
-            .frame(height: 28)
-            .background(Color.secondary.opacity(0.10), in: Capsule())
-            .overlay(Capsule().strokeBorder(Color.secondary.opacity(0.20), lineWidth: 1))
+            .foregroundStyle(Color.orange)
+            .padding(.horizontal, 9)
+            .frame(height: 30)
+            .background(Color.orange.opacity(0.12), in: Capsule())
+            .overlay(Capsule().strokeBorder(Color.orange.opacity(0.22), lineWidth: 1))
         }
         .menuIndicator(.hidden)
         .fixedSize()
@@ -324,16 +367,30 @@ struct InputBarView: View {
             }
         } label: {
             Image(systemName: "globe")
-                .font(.system(size: 14, weight: .medium))
+                .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(isOn ? Color.white : .secondary)
-                .frame(width: 28, height: 28)
-                .background(
+                .frame(width: 30, height: 30)
+                .background {
                     Circle().fill(
                         isOn
-                            ? Color.blue
-                            : Color.primary.opacity(canEnable ? 0.05 : 0.02)
+                            ? LinearGradient(
+                                colors: [Color.blue, Color.cyan.opacity(0.82)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                            : LinearGradient(
+                                colors: [
+                                    Color.primary.opacity(canEnable ? 0.06 : 0.025),
+                                    Color.primary.opacity(canEnable ? 0.035 : 0.015)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
                     )
-                )
+                }
+                .overlay {
+                    Circle().strokeBorder(isOn ? Color.white.opacity(0.24) : Color.primary.opacity(0.08), lineWidth: 1)
+                }
         }
         .buttonStyle(.plain)
         .disabled(!canEnable)
@@ -346,12 +403,15 @@ struct InputBarView: View {
     private func iconButton(_ symbol: String, help: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 14, weight: .medium))
+                .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.secondary)
-                .frame(width: 28, height: 28)
-                .background(
-                    Circle().fill(Color.primary.opacity(0.05))
-                )
+                .frame(width: 30, height: 30)
+                .background {
+                    Circle().fill(Color.primary.opacity(0.055))
+                }
+                .overlay {
+                    Circle().strokeBorder(Color.primary.opacity(0.07), lineWidth: 1)
+                }
         }
         .buttonStyle(.plain)
         .help(help)
@@ -364,13 +424,28 @@ struct InputBarView: View {
     }
 
     private var sendButton: some View {
-        Button {
+        let isEnabled = viewModel.canSend || isViewingRunningConv
+        let tint = isViewingRunningConv ? Color.red : Color.accentColor
+        return Button {
             sendIfCan()
         } label: {
             ZStack {
                 Circle()
-                    .fill(viewModel.canSend ? Color.accentColor : Color.secondary.opacity(0.25))
-                    .frame(width: 32, height: 32)
+                    .fill(
+                        isEnabled
+                            ? LinearGradient(
+                                colors: [tint, tint.opacity(0.72)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                            : LinearGradient(
+                                colors: [Color.secondary.opacity(0.26), Color.secondary.opacity(0.18)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                    )
+                    .frame(width: 38, height: 38)
+                    .shadow(color: isEnabled ? tint.opacity(0.22) : Color.clear, radius: 12, x: 0, y: 6)
                 if isViewingRunningConv {
                     Image(systemName: "stop.fill")
                         .font(.system(size: 12, weight: .bold))
@@ -397,10 +472,13 @@ struct InputBarView: View {
     }
 
     private var systemPromptEditor: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Image(systemName: "text.alignleft")
+                    .font(.caption.weight(.bold))
                     .foregroundStyle(Color.teal)
+                    .frame(width: 28, height: 28)
+                    .background(Color.teal.opacity(0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                 Text("SYSTEM PROMPT")
                     .font(.caption.weight(.bold))
                     .tracking(0.5)
@@ -417,13 +495,13 @@ struct InputBarView: View {
                 .scrollContentBackground(.hidden)
                 .font(.system(.caption, design: .monospaced))
                 .frame(minHeight: 60, maxHeight: 130)
-                .padding(8)
+                .padding(10)
                 .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.platformTextBackground.opacity(0.6))
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.platformTextBackground.opacity(0.66))
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .strokeBorder(Color.teal.opacity(0.25), lineWidth: 1)
                 )
 
@@ -433,7 +511,12 @@ struct InputBarView: View {
                     .foregroundStyle(.tertiary)
             }
         }
-        .padding(.bottom, 4)
+        .padding(12)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(Color.teal.opacity(0.18), lineWidth: 1)
+        }
     }
 
     // MARK: - 文件/图片选择 (macOS only — iOS 移除附件入口)

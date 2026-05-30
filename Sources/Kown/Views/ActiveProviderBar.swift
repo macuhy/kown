@@ -11,61 +11,133 @@ struct ActiveProviderBar: View {
             EmptyView()
         } else {
             content(mode: mode)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(
-                    Rectangle()
-                        .fill(Color.primary.opacity(0.03))
-                        .overlay(alignment: .bottom) {
-                            Rectangle().fill(Color.primary.opacity(0.07)).frame(height: 1)
-                        }
-                )
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .background {
+                    ZStack(alignment: .bottom) {
+                        Rectangle().fill(.thinMaterial)
+                        LinearGradient(
+                            colors: [modeTint(mode).opacity(0.06), Color.clear],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                        Rectangle()
+                            .fill(Color.primary.opacity(0.08))
+                            .frame(height: 1)
+                    }
+                }
         }
     }
 
     @ViewBuilder
     private func content(mode: ConversationMode) -> some View {
-        HStack(alignment: .center, spacing: 10) {
-            label(mode)
-            Spacer()
-            chips(mode)
-            picker(mode)
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: 12) {
+                label(mode)
+                Spacer(minLength: 12)
+                chips(mode)
+                picker(mode)
+            }
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    label(mode)
+                    Spacer(minLength: 8)
+                    picker(mode)
+                }
+                chips(mode)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background {
+            ZStack {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(.regularMaterial)
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [modeTint(mode).opacity(0.10), Color.clear],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(modeTint(mode).opacity(0.18), lineWidth: 1)
         }
     }
 
     private func label(_ mode: ConversationMode) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 9) {
             Image(systemName: mode.symbol)
-                .font(.caption.weight(.semibold))
-            Text(mode == .direct ? "对话模型" : "对比模型")
-                .font(.caption.weight(.semibold))
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(modeTint(mode))
+                .frame(width: 28, height: 28)
+                .background(modeTint(mode).opacity(0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .strokeBorder(modeTint(mode).opacity(0.20), lineWidth: 1)
+                }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(mode == .direct ? "对话模型" : "对比模型")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.primary)
+                Text(mode == .direct ? "Single responder" : "Same prompt, two reads")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
-        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     @ViewBuilder
     private func chips(_ mode: ConversationMode) -> some View {
         let (panel, _) = viewModel.providersForCurrentSend()
         if panel.isEmpty {
-            Text("无可用 provider")
-                .font(.caption)
-                .foregroundStyle(.orange)
+            statusChip("无可用 provider", icon: "exclamationmark.triangle.fill", tint: .orange)
         } else {
-            HStack(spacing: 6) {
-                ForEach(panel) { cfg in
-                    providerChip(cfg)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(panel) { cfg in
+                        providerChip(cfg)
+                    }
                 }
+                .padding(.vertical, 1)
             }
+            .frame(maxWidth: 520)
+        }
+    }
+
+    private func statusChip(_ text: String, icon: String, tint: Color) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.caption.weight(.bold))
+            Text(text)
+                .font(.caption.weight(.semibold))
+        }
+        .foregroundStyle(tint)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(tint.opacity(0.12), in: Capsule())
+        .overlay {
+            Capsule().strokeBorder(tint.opacity(0.22), lineWidth: 1)
         }
     }
 
     private func providerChip(_ cfg: ProviderConfig) -> some View {
-        HStack(spacing: 6) {
+        let tint = accentColor(cfg)
+        return HStack(spacing: 8) {
             Image(systemName: providerSymbol(cfg))
-                .font(.caption2.weight(.semibold))
-            VStack(alignment: .leading, spacing: 0) {
+                .font(.caption.weight(.bold))
+                .foregroundStyle(tint)
+                .frame(width: 26, height: 26)
+                .background(tint.opacity(0.13), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            VStack(alignment: .leading, spacing: 1) {
                 Text(cfg.displayName)
-                    .font(.caption.weight(.semibold))
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.primary)
                     .lineLimit(1)
                 Text(cfg.model)
                     .font(.system(.caption2, design: .monospaced))
@@ -73,11 +145,16 @@ struct ActiveProviderBar: View {
                     .lineLimit(1)
             }
         }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 4)
-        .background(accentColor(cfg).opacity(0.10), in: Capsule())
-        .overlay(Capsule().strokeBorder(accentColor(cfg).opacity(0.30), lineWidth: 1))
-        .foregroundStyle(accentColor(cfg))
+        .padding(.leading, 6)
+        .padding(.trailing, 10)
+        .padding(.vertical, 6)
+        .background {
+            Capsule()
+                .fill(tint.opacity(0.10))
+        }
+        .overlay {
+            Capsule().strokeBorder(tint.opacity(0.24), lineWidth: 1)
+        }
     }
 
     @ViewBuilder
@@ -93,8 +170,19 @@ struct ActiveProviderBar: View {
                 }
             }
         } label: {
-            Label(mode == .compare ? "选择 (≤2)" : "切换模型", systemImage: "chevron.up.chevron.down")
-                .font(.caption.weight(.medium))
+            HStack(spacing: 6) {
+                Text(mode == .compare ? "选择 ≤2" : "切换模型")
+                    .font(.caption.weight(.bold))
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 10, weight: .bold))
+            }
+            .foregroundStyle(enabled.isEmpty ? Color.secondary : Color.accentColor)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background((enabled.isEmpty ? Color.secondary : Color.accentColor).opacity(0.11), in: Capsule())
+            .overlay {
+                Capsule().strokeBorder((enabled.isEmpty ? Color.secondary : Color.accentColor).opacity(0.22), lineWidth: 1)
+            }
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
@@ -168,6 +256,15 @@ struct ActiveProviderBar: View {
             if seen.insert(item).inserted { result.append(item) }
         }
         return result
+    }
+
+    private func modeTint(_ mode: ConversationMode) -> Color {
+        switch mode {
+        case .council: return Color(red: 0.10, green: 0.66, blue: 0.56)
+        case .direct:  return Color(red: 0.16, green: 0.48, blue: 0.94)
+        case .compare: return Color(red: 0.91, green: 0.55, blue: 0.20)
+        case .debate:  return Color(red: 0.88, green: 0.35, blue: 0.22)
+        }
     }
 
     private func accentColor(_ cfg: ProviderConfig) -> Color {

@@ -6,13 +6,31 @@ struct ModeTabsView: View {
     @State private var confirmSwitch = false
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 5) {
             ForEach(ConversationMode.allCases, id: \.self) { mode in
                 tab(for: mode)
             }
         }
-        .padding(3)
-        .background(Color.primary.opacity(0.06), in: Capsule())
+        .padding(4)
+        .background {
+            ZStack {
+                Capsule()
+                    .fill(.regularMaterial)
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: [modeTint(viewModel.currentMode).opacity(0.10), Color.clear],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
+        }
+        .overlay {
+            Capsule().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+        }
+        .shadow(color: modeTint(viewModel.currentMode).opacity(0.08), radius: 16, x: 0, y: 8)
+        .animation(.easeInOut(duration: 0.16), value: viewModel.currentMode)
         .confirmationDialog(
             "切换模式将开始一个新会话",
             isPresented: $confirmSwitch
@@ -29,25 +47,43 @@ struct ModeTabsView: View {
 
     private func tab(for mode: ConversationMode) -> some View {
         let isActive = viewModel.currentMode == mode
+        let tint = modeTint(mode)
         return Button {
             handleTap(mode)
         } label: {
-            HStack(spacing: 5) {
+            HStack(spacing: 6) {
                 Image(systemName: mode.symbol)
+                    .font(.system(size: 12, weight: .bold))
                 Text(mode.displayName)
+                    .lineLimit(1)
             }
-            .font(.caption.weight(.semibold))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .foregroundStyle(isActive ? Color.primary : .secondary)
-            .background(
-                Capsule().fill(isActive ? Color.platformWindowBackground : Color.clear)
-            )
-            .overlay(
-                Capsule().strokeBorder(isActive ? Color.primary.opacity(0.12) : Color.clear, lineWidth: 1)
-            )
+            .font(.caption.weight(.bold))
+            .foregroundStyle(isActive ? Color.white : Color.secondary)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 6)
+            .background {
+                if isActive {
+                    Capsule()
+                        .fill(
+                            LinearGradient(
+                                colors: [tint.opacity(0.98), tint.opacity(0.72)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                } else {
+                    Capsule().fill(Color.clear)
+                }
+            }
+            .overlay {
+                Capsule()
+                    .strokeBorder(isActive ? Color.white.opacity(0.24) : Color.clear, lineWidth: 1)
+            }
+            .shadow(color: isActive ? tint.opacity(0.18) : Color.clear, radius: 10, x: 0, y: 5)
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .help(mode.displayName)
     }
 
     private func handleTap(_ mode: ConversationMode) {
@@ -59,6 +95,15 @@ struct ModeTabsView: View {
             confirmSwitch = true
         } else {
             _ = viewModel.switchMode(to: mode)
+        }
+    }
+
+    private func modeTint(_ mode: ConversationMode) -> Color {
+        switch mode {
+        case .council: return Color(red: 0.10, green: 0.66, blue: 0.56)
+        case .direct:  return Color(red: 0.16, green: 0.48, blue: 0.94)
+        case .compare: return Color(red: 0.91, green: 0.55, blue: 0.20)
+        case .debate:  return Color(red: 0.88, green: 0.35, blue: 0.22)
         }
     }
 }

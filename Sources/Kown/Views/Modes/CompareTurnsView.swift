@@ -22,7 +22,7 @@ struct CompareTurnsView: View {
     }
 
     var body: some View {
-        LazyVStack(alignment: .leading, spacing: 18) {
+        LazyVStack(alignment: .leading, spacing: 22) {
             ForEach(conversation.turns) { turn in
                 historicalTurn(turn)
             }
@@ -30,12 +30,17 @@ struct CompareTurnsView: View {
                 liveTurn(prompt: livePrompt)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 16)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 18)
     }
 
     private func historicalTurn(_ turn: Turn) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        ModeTurnCard(
+            title: "Compare",
+            subtitle: "双模型并排对照，Judge 给出结论",
+            icon: "rectangle.split.2x1.fill",
+            tint: compareTint
+        ) {
             PromptBubble(prompt: turn.prompt, timestamp: turn.timestamp)
             comparePanels {
                 ForEach(Array(turn.orderedPanelConfigs.prefix(2))) { cfg in
@@ -73,7 +78,13 @@ struct CompareTurnsView: View {
     }
 
     private func liveTurn(prompt: String) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        ModeTurnCard(
+            title: "Compare",
+            subtitle: "\(min(livePanel.count, 2)) 个回答正在对照生成",
+            icon: "rectangle.split.2x1.fill",
+            tint: compareTint,
+            isLive: true
+        ) {
             PromptBubble(prompt: prompt, timestamp: Date())
             comparePanels {
                 ForEach(Array(livePanel.prefix(2))) { cfg in
@@ -105,13 +116,17 @@ struct CompareTurnsView: View {
                 content()
             }
             .tabViewStyle(.page(indexDisplayMode: .always))
-            .frame(minHeight: 420)
+            .frame(minHeight: 440)
             #else
-            HStack(alignment: .top, spacing: 12) { content() }
+            HStack(alignment: .top, spacing: 14) { content() }
             #endif
         } else {
-            HStack(alignment: .top, spacing: 12) { content() }
+            HStack(alignment: .top, spacing: 14) { content() }
         }
+    }
+
+    private var compareTint: Color {
+        Color(red: 0.83, green: 0.38, blue: 0.18)
     }
 
     private func isJudgeStreaming(_ state: ResponseState) -> Bool {

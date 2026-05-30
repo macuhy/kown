@@ -6,20 +6,31 @@ struct PromptBubble: View {
     let timestamp: Date?
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: 12) {
             ZStack {
-                Circle().fill(Color.accentColor.opacity(0.14))
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.accentColor.opacity(0.92), Color.accentColor.opacity(0.54)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
                 Image(systemName: "person.fill")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Color.accentColor)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.white)
             }
-            .frame(width: 28, height: 28)
+            .frame(width: 34, height: 34)
+            .shadow(color: Color.accentColor.opacity(0.18), radius: 10, x: 0, y: 5)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 7) {
                 HStack {
                     Text("You")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(Color.accentColor)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.accentColor.opacity(0.11), in: Capsule())
                     if let timestamp {
                         Text("·")
                             .foregroundStyle(.tertiary)
@@ -35,14 +46,24 @@ struct PromptBubble: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(14)
+        .padding(16)
         .background(
-            Color.accentColor.opacity(0.05),
-            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+            ZStack {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(.regularMaterial)
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.accentColor.opacity(0.09), Color.clear],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Color.accentColor.opacity(0.12), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(Color.accentColor.opacity(0.16), lineWidth: 1)
         }
     }
 }
@@ -61,60 +82,82 @@ struct HistoricalResponseCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Rectangle().fill(accentColor.opacity(0.6)).frame(height: 3)
+            Rectangle()
+                .fill(accentGradient)
+                .frame(height: 4)
             header
-                .padding(.horizontal, 14)
-                .padding(.top, 10)
-                .padding(.bottom, 8)
-            Divider()
+                .padding(.horizontal, 16)
+                .padding(.top, 13)
+                .padding(.bottom, 11)
+            softDivider
             body_
-                .padding(14)
-            Divider()
+                .padding(16)
+                .background(bodyBackground)
+            softDivider
             footer
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
         }
         .background(
-            Color.platformControlBackground.opacity(0.6),
-            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+            ZStack {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(.regularMaterial)
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [accentColor.opacity(0.08), Color.platformControlBackground.opacity(0.34), Color.clear],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
         )
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(accentColor.opacity(0.22), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(accentColor.opacity(error == nil ? 0.20 : 0.42), lineWidth: 1)
         }
+        .shadow(color: accentColor.opacity(0.06), radius: 18, x: 0, y: 10)
     }
 
     private var header: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             ZStack {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(accentColor.opacity(0.14))
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [accentColor.opacity(0.88), accentColor.opacity(0.42)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
                 Image(systemName: providerSymbol)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(accentColor)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.white)
             }
-            .frame(width: 28, height: 28)
+            .frame(width: 34, height: 34)
             .overlay {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .strokeBorder(accentColor.opacity(0.20), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.28), lineWidth: 1)
             }
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 5) {
                 Text(config.displayName)
-                    .font(.subheadline.weight(.semibold))
+                    .font(.system(.subheadline, design: .rounded).weight(.bold))
                     .lineLimit(1)
-                Text(config.model)
-                    .font(.system(.caption2, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    providerKindBadge
+                    Text(config.model)
+                        .font(.system(.caption2, design: .monospaced).weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
             Spacer()
             if error != nil {
-                Text("失败")
-                    .font(.caption2.weight(.bold))
-                    .padding(.horizontal, 7).padding(.vertical, 3)
-                    .background(Color.red.opacity(0.12), in: Capsule())
-                    .foregroundStyle(.red)
+                statusBadge("失败", icon: "xmark.octagon.fill", color: .red)
+            } else {
+                statusBadge("已完成", icon: "checkmark.seal.fill", color: .green)
             }
         }
     }
@@ -157,11 +200,18 @@ struct HistoricalResponseCard: View {
                     .foregroundStyle(.red)
                     .textSelection(.enabled)
             }
+            .padding(12)
+            .background(Color.red.opacity(0.07), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(Color.red.opacity(0.18), lineWidth: 1)
+            }
             .frame(maxWidth: .infinity, alignment: .topLeading)
         } else if text.isEmpty {
-            Text("(空响应)")
-                .font(.system(.body, design: .rounded))
+            Label("(空响应)", systemImage: "text.bubble")
+                .font(.system(.body, design: .rounded).weight(.medium))
                 .foregroundStyle(.tertiary)
+                .padding(.vertical, 12)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             MarkdownText(text: text)
@@ -170,12 +220,9 @@ struct HistoricalResponseCard: View {
     }
 
     private var footer: some View {
-        HStack {
+        HStack(spacing: 10) {
             if !text.isEmpty {
-                Text("\(text.count) 字")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .monospacedDigit()
+                metricPill("\(text.count) 字", icon: "text.alignleft")
             }
             Spacer()
             Button {
@@ -187,8 +234,11 @@ struct HistoricalResponseCard: View {
                 }
             } label: {
                 Label(copied ? "已复制" : "复制", systemImage: copied ? "checkmark" : "doc.on.doc")
-                    .font(.caption2)
+                    .font(.caption2.weight(.semibold))
                     .foregroundStyle(copied ? .green : .secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background((copied ? Color.green : Color.secondary).opacity(0.10), in: Capsule())
             }
             .buttonStyle(.borderless)
             .disabled(text.isEmpty)
@@ -202,6 +252,64 @@ struct HistoricalResponseCard: View {
         case .gemini:           return Color(red: 0.26, green: 0.52, blue: 0.96)
         case .cliCommand:       return Color(red: 0.55, green: 0.45, blue: 0.78)
         }
+    }
+
+    private var accentGradient: LinearGradient {
+        LinearGradient(
+            colors: [accentColor.opacity(0.95), accentColor.opacity(0.30)],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+    }
+
+    private var bodyBackground: some View {
+        LinearGradient(
+            colors: [Color.platformTextBackground.opacity(0.26), accentColor.opacity(0.035)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    private var softDivider: some View {
+        Rectangle()
+            .fill(Color.primary.opacity(0.07))
+            .frame(height: 1)
+    }
+
+    private var providerKindBadge: some View {
+        Text(config.kind.displayName)
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(accentColor)
+            .lineLimit(1)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(accentColor.opacity(0.11), in: Capsule())
+            .overlay {
+                Capsule()
+                    .strokeBorder(accentColor.opacity(0.18), lineWidth: 1)
+            }
+    }
+
+    private func statusBadge(_ text: String, icon: String, color: Color) -> some View {
+        Label(text, systemImage: icon)
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(color)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(color.opacity(0.11), in: Capsule())
+            .overlay {
+                Capsule().strokeBorder(color.opacity(0.18), lineWidth: 1)
+            }
+    }
+
+    private func metricPill(_ text: String, icon: String) -> some View {
+        Label(text, systemImage: icon)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.tertiary)
+            .monospacedDigit()
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.secondary.opacity(0.08), in: Capsule())
     }
 
     private var providerSymbol: String {
@@ -225,12 +333,18 @@ struct AppliedWritesStrip: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Image(systemName: "tray.and.arrow.down.fill")
-                    .font(.caption.weight(.semibold))
+                    .font(.caption.weight(.bold))
                     .foregroundStyle(.teal)
                 Text("Workspace 写入(\(writes.count))")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(.teal)
                 Spacer()
+                Text("Applied")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.teal)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.teal.opacity(0.11), in: Capsule())
             }
             ForEach(writes) { w in
                 AppliedWriteCard(write: w,
@@ -244,15 +358,25 @@ struct AppliedWritesStrip: View {
                                  })
             }
         }
-        .padding(12)
+        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            Color.teal.opacity(0.06),
-            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+            ZStack {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(.regularMaterial)
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.teal.opacity(0.10), Color.clear],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color.teal.opacity(0.30), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(Color.teal.opacity(0.24), lineWidth: 1)
         }
     }
 }
@@ -327,12 +451,12 @@ struct AppliedWriteCard: View {
         }
         .padding(10)
         .background(
-            Color.platformControlBackground.opacity(0.55),
-            in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+            Color.platformControlBackground.opacity(0.48),
+            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(statusColor.opacity(write.success ? 0.16 : 0.34), lineWidth: 1)
         }
     }
 
@@ -428,53 +552,87 @@ struct ChairSummaryCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 9) {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 11) {
                 ZStack {
-                    Circle().fill(role.tint.opacity(0.18))
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [role.tint.opacity(0.92), role.tint.opacity(0.48)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
                     Image(systemName: role.icon)
-                        .foregroundStyle(role.tint)
-                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .font(.system(size: 15, weight: .bold))
                 }
-                .frame(width: 28, height: 28)
+                .frame(width: 38, height: 38)
+                .shadow(color: role.tint.opacity(0.18), radius: 12, x: 0, y: 6)
 
-                VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 5) {
                     HStack(spacing: 6) {
                         Text("\(role.prefix) · \(config.displayName)")
-                            .font(.subheadline.weight(.semibold))
+                            .font(.system(.subheadline, design: .rounded).weight(.bold))
                         Text(role.badge)
                             .font(.caption2.weight(.bold))
-                            .padding(.horizontal, 6).padding(.vertical, 2)
-                            .background(role.tint.opacity(0.16), in: Capsule())
                             .foregroundStyle(role.tint)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(role.tint.opacity(0.14), in: Capsule())
+                            .overlay {
+                                Capsule().strokeBorder(role.tint.opacity(0.20), lineWidth: 1)
+                            }
                     }
                     Text(config.model)
                         .font(.system(.caption2, design: .monospaced))
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
                 Spacer()
                 if isStreaming {
                     HStack(spacing: 6) {
                         ProgressView().controlSize(.small)
-                        Text(role.streamingHint).font(.caption).foregroundStyle(.secondary)
+                        Text(role.streamingHint)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(role.tint)
+                    }
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background(role.tint.opacity(0.10), in: Capsule())
+                    .overlay {
+                        Capsule().strokeBorder(role.tint.opacity(0.16), lineWidth: 1)
                     }
                 }
             }
 
-            Divider()
+            Rectangle()
+                .fill(Color.primary.opacity(0.07))
+                .frame(height: 1)
 
             content
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(14)
+        .padding(16)
         .background(
-            role.tint.opacity(0.06),
-            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+            ZStack {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(.regularMaterial)
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [role.tint.opacity(0.12), Color.platformControlBackground.opacity(0.28), Color.clear],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(role.tint.opacity(0.45), lineWidth: 1.2)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(role.tint.opacity(0.30), lineWidth: 1)
         }
+        .shadow(color: role.tint.opacity(0.08), radius: 20, x: 0, y: 10)
     }
 
     @ViewBuilder
@@ -513,11 +671,116 @@ struct ChairSummaryCard: View {
         } else if let liveText, !liveText.isEmpty {
             MarkdownText(text: liveText, streaming: isStreaming)
         } else if isStreaming {
-            Text("正在综合各模型回答...")
-                .font(.callout)
-                .foregroundStyle(.secondary)
+            HStack(spacing: 10) {
+                ProgressView()
+                    .controlSize(.small)
+                Text("正在综合各模型回答...")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(role.tint.opacity(0.07), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         } else if let text, !text.isEmpty {
             MarkdownText(text: text)
         }
+    }
+}
+
+/// Shared outer shell for a complete turn in Council / Compare / Debate modes.
+struct ModeTurnCard<Content: View>: View {
+    let title: String
+    let subtitle: String
+    let icon: String
+    let tint: Color
+    let isLive: Bool
+    private let content: Content
+
+    init(
+        title: String,
+        subtitle: String,
+        icon: String,
+        tint: Color,
+        isLive: Bool = false,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.icon = icon
+        self.tint = tint
+        self.isLive = isLive
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 11) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [tint.opacity(0.86), tint.opacity(0.44)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                    Image(systemName: icon)
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+                .frame(width: 38, height: 38)
+                .shadow(color: tint.opacity(0.16), radius: 12, x: 0, y: 6)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.system(.headline, design: .rounded).weight(.bold))
+                    if !subtitle.isEmpty {
+                        Text(subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 10)
+                if isLive {
+                    HStack(spacing: 6) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("Live")
+                    }
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(tint)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background(tint.opacity(0.11), in: Capsule())
+                    .overlay {
+                        Capsule().strokeBorder(tint.opacity(0.20), lineWidth: 1)
+                    }
+                }
+            }
+
+            content
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(
+            ZStack {
+                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    .fill(.regularMaterial)
+                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [tint.opacity(isLive ? 0.13 : 0.08), Color.platformControlBackground.opacity(0.30), Color.clear],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .strokeBorder(tint.opacity(isLive ? 0.30 : 0.15), lineWidth: 1)
+        }
+        .shadow(color: tint.opacity(isLive ? 0.11 : 0.06), radius: 24, x: 0, y: 12)
     }
 }

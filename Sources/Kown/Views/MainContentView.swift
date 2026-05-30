@@ -7,19 +7,22 @@ struct MainContentView: View {
     @Binding var showSettings: Bool
 
     var body: some View {
-        VStack(spacing: 0) {
-            #if os(iOS)
-            mobileModeBar
-            #endif
-            workspacePathBar
-            content
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            ActiveProviderBar(viewModel: viewModel)
-            InputBarView(
-                viewModel: viewModel,
-                showSystemPromptDrawer: $showSystemPromptDrawer,
-                inputFocused: $inputFocused
-            )
+        ZStack {
+            MainWorkspaceBackdrop(mode: viewModel.currentMode)
+            VStack(spacing: 0) {
+                #if os(iOS)
+                mobileModeBar
+                #endif
+                workspacePathBar
+                content
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ActiveProviderBar(viewModel: viewModel)
+                InputBarView(
+                    viewModel: viewModel,
+                    showSystemPromptDrawer: $showSystemPromptDrawer,
+                    inputFocused: $inputFocused
+                )
+            }
         }
         .navigationTitle(viewModel.selectedConversation?.title ?? "New Conversation")
         .onAppear {
@@ -122,28 +125,36 @@ struct MainContentView: View {
     @ViewBuilder
     private var workspacePathBar: some View {
         if let path = viewModel.currentWorkspaceDisplayPath {
-            HStack(spacing: 8) {
-                Image(systemName: "folder.fill")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color.accentColor)
-                Text("Workspace")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.secondary)
-                Text(path)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 10) {
+                HStack(spacing: 8) {
+                    Image(systemName: "folder.fill")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(Color.accentColor)
+                        .frame(width: 28, height: 28)
+                        .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    Text("Workspace")
+                        .font(.caption2.weight(.black))
+                        .tracking(0.5)
+                        .foregroundStyle(.secondary)
+                    Text(path)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
                 #if os(macOS)
                 Button {
                     let url = URL(fileURLWithPath: path)
                     Platform.revealInExplorer(url)
                 } label: {
                     Image(systemName: "arrow.up.right.square")
-                        .font(.caption.weight(.semibold))
+                        .font(.caption.weight(.bold))
                         .foregroundStyle(.secondary)
+                        .frame(width: 28, height: 28)
+                        .background(Color.primary.opacity(0.05), in: Circle())
                 }
                 .buttonStyle(.plain)
                 .help("在 Finder 里打开")
@@ -152,17 +163,41 @@ struct MainContentView: View {
                     viewModel.clearWorkspace()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.caption.weight(.semibold))
+                        .font(.caption.weight(.bold))
                         .foregroundStyle(.tertiary)
+                        .frame(width: 28, height: 28)
+                        .background(Color.primary.opacity(0.04), in: Circle())
                 }
                 .buttonStyle(.plain)
                 .help("移除 workspace")
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(.regularMaterial)
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.accentColor.opacity(0.10), Color.clear],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                }
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(Color.accentColor.opacity(0.18), lineWidth: 1)
+            }
             .padding(.horizontal, 14)
-            .padding(.vertical, 6)
-            .background(Color.accentColor.opacity(0.08))
+            .padding(.vertical, 8)
+            .background {
+                Rectangle().fill(.thinMaterial)
+            }
             .overlay(alignment: .bottom) {
-                Rectangle().fill(Color.accentColor.opacity(0.20)).frame(height: 1)
+                Rectangle().fill(Color.primary.opacity(0.07)).frame(height: 1)
             }
         }
     }
@@ -175,8 +210,17 @@ struct MainContentView: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(.bar)
+        .padding(.vertical, 9)
+        .background {
+            ZStack {
+                Rectangle().fill(.bar)
+                LinearGradient(
+                    colors: [Color.accentColor.opacity(0.08), Color.clear],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            }
+        }
         .overlay(alignment: .bottom) {
             Rectangle()
                 .fill(Color.primary.opacity(0.07))
@@ -184,4 +228,41 @@ struct MainContentView: View {
         }
     }
     #endif
+}
+
+private struct MainWorkspaceBackdrop: View {
+    let mode: ConversationMode
+
+    var body: some View {
+        ZStack {
+            Color.platformWindowBackground
+            RadialGradient(
+                colors: [tint.opacity(0.16), Color.clear],
+                center: .topLeading,
+                startRadius: 0,
+                endRadius: 560
+            )
+            RadialGradient(
+                colors: [Color.orange.opacity(mode == .debate ? 0.16 : 0.10), Color.clear],
+                center: .bottomTrailing,
+                startRadius: 80,
+                endRadius: 620
+            )
+            LinearGradient(
+                colors: [Color.white.opacity(0.035), Color.clear],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
+        .ignoresSafeArea()
+    }
+
+    private var tint: Color {
+        switch mode {
+        case .council: return Color(red: 0.10, green: 0.66, blue: 0.56)
+        case .direct:  return Color(red: 0.16, green: 0.48, blue: 0.94)
+        case .compare: return Color(red: 0.91, green: 0.55, blue: 0.20)
+        case .debate:  return Color(red: 0.88, green: 0.35, blue: 0.22)
+        }
+    }
 }

@@ -23,7 +23,7 @@ struct DebateTurnsView: View {
     }
 
     var body: some View {
-        LazyVStack(alignment: .leading, spacing: 18) {
+        LazyVStack(alignment: .leading, spacing: 22) {
             ForEach(conversation.turns) { turn in
                 historicalTurn(turn)
             }
@@ -31,12 +31,17 @@ struct DebateTurnsView: View {
                 liveTurn(prompt: livePrompt)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 16)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 18)
     }
 
     private func historicalTurn(_ turn: Turn) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        ModeTurnCard(
+            title: "Debate",
+            subtitle: "\(max((turn.debateRounds ?? []).count, 1)) 轮立论 / 反驳 / 修正",
+            icon: "quote.bubble.fill",
+            tint: debateTint
+        ) {
             PromptBubble(prompt: turn.prompt, timestamp: turn.timestamp)
 
             let rounds = (turn.debateRounds ?? []).sorted { $0.index < $1.index }
@@ -102,10 +107,22 @@ struct DebateTurnsView: View {
                 }
             }
         }
+        .padding(12)
+        .background(roundBackground)
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(debateTint.opacity(0.13), lineWidth: 1)
+        }
     }
 
     private func liveTurn(prompt: String) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        ModeTurnCard(
+            title: "Debate",
+            subtitle: liveDebateRounds.isEmpty ? "模型正在立论" : "模型正在阅读彼此观点并修正",
+            icon: "quote.bubble.fill",
+            tint: debateTint,
+            isLive: isRunning
+        ) {
             PromptBubble(prompt: prompt, timestamp: Date())
 
             ForEach(liveDebateRounds.sorted { $0.index < $1.index }) { round in
@@ -127,6 +144,12 @@ struct DebateTurnsView: View {
                             }
                         }
                     }
+                }
+                .padding(12)
+                .background(roundBackground)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .strokeBorder(debateTint.opacity(0.18), lineWidth: 1)
                 }
             }
 
@@ -158,18 +181,27 @@ struct DebateTurnsView: View {
                 }
             }
         }
+        .padding(12)
+        .background(roundBackground)
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(debateTint.opacity(0.13), lineWidth: 1)
+        }
     }
 
     private func roundHeader(index: Int, title: String, live: Bool) -> some View {
         HStack(spacing: 8) {
             Text("ROUND \(index)")
                 .font(.system(.caption2, design: .monospaced).weight(.bold))
-                .foregroundStyle(.indigo)
+                .foregroundStyle(debateTint)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .background(Color.indigo.opacity(0.12), in: Capsule())
+                .background(debateTint.opacity(0.12), in: Capsule())
+                .overlay {
+                    Capsule().strokeBorder(debateTint.opacity(0.20), lineWidth: 1)
+                }
             Text(title)
-                .font(.headline.weight(.semibold))
+                .font(.system(.headline, design: .rounded).weight(.bold))
             if live {
                 ProgressView()
                     .controlSize(.small)
@@ -181,10 +213,29 @@ struct DebateTurnsView: View {
     @ViewBuilder
     private func panelStack<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         if stacksVertically {
-            VStack(alignment: .leading, spacing: 12) { content() }
+            VStack(alignment: .leading, spacing: 14) { content() }
         } else {
-            HStack(alignment: .top, spacing: 12) { content() }
+            HStack(alignment: .top, spacing: 14) { content() }
         }
+    }
+
+    private var roundBackground: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.platformControlBackground.opacity(0.26))
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [debateTint.opacity(0.06), Color.clear],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        }
+    }
+
+    private var debateTint: Color {
+        Color.indigo
     }
 
     private func configs(

@@ -17,6 +17,9 @@ struct BackupSettingsView: View {
     @State private var resultMessage: String?
     @State private var errorMessage: String?
 
+    private let tint = Color(red: 0.91, green: 0.55, blue: 0.20)
+    private let secondaryTint = Color(red: 0.57, green: 0.42, blue: 0.82)
+
     var body: some View {
         platformBody
             .fileExporter(
@@ -63,6 +66,7 @@ struct BackupSettingsView: View {
     private var platformBody: some View {
         #if os(iOS)
         Form {
+            heroSection
             exportSection
             importSection
             statusSection
@@ -70,24 +74,76 @@ struct BackupSettingsView: View {
         #else
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
+                heroCard
                 exportCard
                 importCard
                 if resultMessage != nil || errorMessage != nil {
                     statusCard
                 }
             }
-            .padding(20)
-            .frame(maxWidth: 640, alignment: .topLeading)
+            .padding(24)
+            .frame(maxWidth: 860, alignment: .topLeading)
         }
         #endif
+    }
+
+    // MARK: - Hero
+
+    private var heroCard: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top, spacing: 16) {
+                iconTile("shippingbox.and.arrow.backward.fill", tint: tint, secondary: secondaryTint)
+                VStack(alignment: .leading, spacing: 7) {
+                    HStack(spacing: 8) {
+                        Text("导入 / 导出配置")
+                            .font(.system(.title2, design: .rounded).weight(.bold))
+                        statusBadge("JSON 备份", icon: "doc.text.fill", color: tint)
+                    }
+                    Text("把当前 Provider、Web Search 和偏好导出成一个备份文件,或从备份恢复。适合作为 iCloud 同步之外的离线迁移方案。")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                statusBadge(includeAPIKeys ? "包含 Key" : "不含 Key",
+                            icon: includeAPIKeys ? "key.fill" : "key.slash",
+                            color: includeAPIKeys ? .orange : .secondary)
+            }
+
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
+                metricTile(title: "导出内容",
+                           value: "配置",
+                           detail: "Provider / Web Search / Preference",
+                           icon: "square.and.arrow.up.fill",
+                           color: tint)
+                metricTile(title: "API Key",
+                           value: includeAPIKeys ? "明文" : "跳过",
+                           detail: includeAPIKeys ? "请妥善保存备份文件" : "新设备需重新填写",
+                           icon: includeAPIKeys ? "lock.open.fill" : "lock.fill",
+                           color: includeAPIKeys ? .orange : .secondary)
+                metricTile(title: "导入策略",
+                           value: "覆盖 / 合并",
+                           detail: "导入时再选择模式",
+                           icon: "arrow.triangle.merge",
+                           color: secondaryTint)
+            }
+        }
+        .padding(22)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(heroBackground)
+        .overlay {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .strokeBorder(tint.opacity(0.22), lineWidth: 1)
+        }
+        .shadow(color: tint.opacity(0.09), radius: 22, x: 0, y: 12)
     }
 
     // MARK: - 共用片段
 
     private var exportControls: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 14) {
             Toggle(isOn: $includeAPIKeys) {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 3) {
                     Text("包含 API Key").font(.body.weight(.semibold))
                     Text(includeAPIKeys
                          ? "导出文件含明文 Key,等同于完整凭据,请妥善保管。"
@@ -108,11 +164,15 @@ struct BackupSettingsView: View {
     }
 
     private var importControls: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 14) {
             Text("从 .kownbackup / .json 文件还原配置。导入后可选'覆盖'当前全部设置,或'合并'(只新增不存在的 provider)。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 10) {
+                statusBadge("覆盖", icon: "arrow.clockwise", color: .orange)
+                statusBadge("合并", icon: "plus.square.on.square", color: secondaryTint)
+            }
             Button {
                 showImporter = true
             } label: {
@@ -126,21 +186,22 @@ struct BackupSettingsView: View {
     @ViewBuilder
     private var statusContent: some View {
         if let errorMessage {
-            Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-                .font(.callout)
-                .foregroundStyle(.red)
-                .textSelection(.enabled)
+            messageBanner(errorMessage, icon: "exclamationmark.triangle.fill", color: .red)
         } else if let resultMessage {
-            Label(resultMessage, systemImage: "checkmark.circle.fill")
-                .font(.callout)
-                .foregroundStyle(.green)
-                .textSelection(.enabled)
+            messageBanner(resultMessage, icon: "checkmark.circle.fill", color: .green)
         }
     }
 
     // MARK: - iOS Form sections
 
     #if os(iOS)
+    private var heroSection: some View {
+        Section {
+            heroCard
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+        }
+    }
     private var exportSection: some View {
         Section { exportControls } header: { Text("导出") }
     }
@@ -158,37 +219,154 @@ struct BackupSettingsView: View {
     // MARK: - macOS cards
 
     private var exportCard: some View {
-        cardShell {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("导出").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+        cardShell(tint: tint) {
+            VStack(alignment: .leading, spacing: 14) {
+                sectionHeader("导出", subtitle: "生成一个可移动的配置备份文件。", icon: "square.and.arrow.up.fill", color: tint)
                 exportControls
             }
         }
     }
     private var importCard: some View {
-        cardShell {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("导入").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+        cardShell(tint: secondaryTint) {
+            VStack(alignment: .leading, spacing: 14) {
+                sectionHeader("导入", subtitle: "选择备份文件后,再决定覆盖或只合并新增项。", icon: "square.and.arrow.down.fill", color: secondaryTint)
                 importControls
             }
         }
     }
     private var statusCard: some View {
-        cardShell { statusContent }
+        cardShell(tint: errorMessage == nil ? .green : .red) { statusContent }
+    }
+
+    // MARK: - Styling helpers
+
+    private var heroBackground: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(.regularMaterial)
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [tint.opacity(0.16), secondaryTint.opacity(0.10), Color.clear],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        }
+    }
+
+    private func iconTile(_ symbol: String, tint: Color, secondary: Color) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [tint.opacity(0.95), secondary.opacity(0.78)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+            Image(systemName: symbol)
+                .font(.system(size: 24, weight: .bold))
+                .foregroundStyle(.white)
+        }
+        .frame(width: 58, height: 58)
+        .shadow(color: tint.opacity(0.20), radius: 14, x: 0, y: 8)
+    }
+
+    private func sectionHeader(_ title: String, subtitle: String, icon: String, color: Color) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(color)
+                .frame(width: 28, height: 28)
+                .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.headline)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func metricTile(title: String, value: String, detail: String, icon: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(color)
+                Text(title)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+            }
+            Text(value)
+                .font(.system(.title3, design: .rounded).weight(.bold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+            Text(detail)
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .lineLimit(2)
+        }
+        .padding(13)
+        .frame(maxWidth: .infinity, minHeight: 108, alignment: .topLeading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(color.opacity(0.18), lineWidth: 1)
+        }
+    }
+
+    private func statusBadge(_ text: String, icon: String, color: Color) -> some View {
+        Label(text, systemImage: icon)
+            .font(.caption.weight(.bold))
+            .foregroundStyle(color)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background(color.opacity(0.12), in: Capsule())
+            .overlay { Capsule().strokeBorder(color.opacity(0.18), lineWidth: 1) }
+            .fixedSize()
+    }
+
+    private func messageBanner(_ text: String, icon: String, color: Color) -> some View {
+        Label(text, systemImage: icon)
+            .font(.callout.weight(.semibold))
+            .foregroundStyle(color)
+            .textSelection(.enabled)
+            .padding(13)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(color.opacity(0.11), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(color.opacity(0.18), lineWidth: 1)
+            }
     }
 
     @ViewBuilder
-    private func cardShell<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+    private func cardShell<Content: View>(tint: Color, @ViewBuilder content: () -> Content) -> some View {
         content()
-            .padding(16)
+            .padding(18)
             .frame(maxWidth: .infinity, alignment: .topLeading)
             .background(
-                Color.platformControlBackground.opacity(0.55),
-                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                ZStack {
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .fill(.regularMaterial)
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [tint.opacity(0.08), Color.clear],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                }
             )
             .overlay {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.10), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .strokeBorder(tint.opacity(0.16), lineWidth: 1)
             }
     }
 

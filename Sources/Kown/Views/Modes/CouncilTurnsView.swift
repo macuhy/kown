@@ -26,7 +26,7 @@ struct CouncilTurnsView: View {
     }
 
     var body: some View {
-        LazyVStack(alignment: .leading, spacing: 18) {
+        LazyVStack(alignment: .leading, spacing: 22) {
             ForEach(conversation.turns) { turn in
                 historicalTurn(turn)
             }
@@ -34,12 +34,17 @@ struct CouncilTurnsView: View {
                 liveTurn(prompt: livePrompt)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 16)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 18)
     }
 
     private func historicalTurn(_ turn: Turn) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        ModeTurnCard(
+            title: "Council",
+            subtitle: "\(turn.orderedPanelConfigs.count) 位模型成员协作回答",
+            icon: "person.3.sequence.fill",
+            tint: councilTint
+        ) {
             PromptBubble(prompt: turn.prompt, timestamp: turn.timestamp)
             panelStack {
                 ForEach(turn.orderedPanelConfigs) { cfg in
@@ -90,7 +95,13 @@ struct CouncilTurnsView: View {
     }
 
     private func liveTurn(prompt: String) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        ModeTurnCard(
+            title: "Council",
+            subtitle: "\(livePanel.count) 位模型成员正在生成",
+            icon: "person.3.sequence.fill",
+            tint: councilTint,
+            isLive: isRunning
+        ) {
             PromptBubble(prompt: prompt, timestamp: Date())
             panelStack {
                 ForEach(livePanel) { cfg in
@@ -126,10 +137,14 @@ struct CouncilTurnsView: View {
     @ViewBuilder
     private func panelStack<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         if stacksVertically {
-            VStack(alignment: .leading, spacing: 12) { content() }
+            VStack(alignment: .leading, spacing: 14) { content() }
         } else {
-            HStack(alignment: .top, spacing: 12) { content() }
+            HStack(alignment: .top, spacing: 14) { content() }
         }
+    }
+
+    private var councilTint: Color {
+        Color(red: 0.06, green: 0.55, blue: 0.95)
     }
 
     private func isChairStreaming(_ state: ResponseState) -> Bool {
