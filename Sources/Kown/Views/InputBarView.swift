@@ -24,7 +24,7 @@ struct InputBarView: View {
     #endif
 
     var body: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: shellSpacing) {
             if showSystemPromptDrawer {
                 systemPromptEditor
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
@@ -47,8 +47,8 @@ struct InputBarView: View {
             }
             barRow
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.horizontal, shellHorizontalPadding)
+        .padding(.vertical, shellVerticalPadding)
         .background {
             ZStack(alignment: .top) {
                 Rectangle().fill(.thinMaterial)
@@ -123,7 +123,7 @@ struct InputBarView: View {
     @ViewBuilder
     private var barRow: some View {
         #if os(iOS)
-        VStack(spacing: 10) {
+        VStack(spacing: 6) {
             promptField
             HStack(spacing: 8) {
                 toolButtons
@@ -145,9 +145,9 @@ struct InputBarView: View {
             .textFieldStyle(.plain)
             .font(.body)
             .lineLimit(1...5)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .frame(minHeight: 48)
+            .padding(.horizontal, promptHorizontalPadding)
+            .padding(.vertical, promptVerticalPadding)
+            .frame(minHeight: promptMinHeight)
             .frame(maxWidth: .infinity)
             .background {
                 ZStack {
@@ -443,7 +443,55 @@ struct InputBarView: View {
                 }
         }
         .buttonStyle(.plain)
-        .help(help)
+            .help(help)
+    }
+
+    private var shellSpacing: CGFloat {
+        #if os(iOS)
+        return 6
+        #else
+        return 10
+        #endif
+    }
+
+    private var shellHorizontalPadding: CGFloat {
+        #if os(iOS)
+        return 12
+        #else
+        return 16
+        #endif
+    }
+
+    private var shellVerticalPadding: CGFloat {
+        #if os(iOS)
+        return 8
+        #else
+        return 12
+        #endif
+    }
+
+    private var promptHorizontalPadding: CGFloat {
+        #if os(iOS)
+        return 13
+        #else
+        return 16
+        #endif
+    }
+
+    private var promptVerticalPadding: CGFloat {
+        #if os(iOS)
+        return 9
+        #else
+        return 12
+        #endif
+    }
+
+    private var promptMinHeight: CGFloat {
+        #if os(iOS)
+        return 42
+        #else
+        return 48
+        #endif
     }
 
     /// 当前选中的会话是否就是后台正在跑的那个 — 决定停止按钮的行为/显示。

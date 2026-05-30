@@ -153,45 +153,29 @@ struct SettingsView: View {
 
     private var mobileTabBar: some View {
         ScrollViewReader { proxy in
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 10) {
                     SettingsAppIcon()
-                        .frame(width: 46, height: 46)
-                        .shadow(color: tab.tint.opacity(0.22), radius: 16, x: 0, y: 8)
+                        .frame(width: 34, height: 34)
+                        .shadow(color: tab.tint.opacity(0.16), radius: 10, x: 0, y: 5)
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .strokeBorder(tab.tint.opacity(0.18), lineWidth: 1)
+                        }
 
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Kown")
-                            .font(.system(.title3, design: .rounded).weight(.bold))
-                        Text("移动端设置中心")
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer(minLength: 10)
-
-                    HStack(spacing: 6) {
-                        Image(systemName: tab.symbol)
+                    VStack(alignment: .leading, spacing: 2) {
                         Text(tab.label)
+                            .font(.headline.weight(.bold))
+                        Text(headerSubtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(tab.tint)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
-                    .background(tab.tint.opacity(0.12), in: Capsule(style: .continuous))
-                }
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(tab.label)
-                        .font(.system(.title2, design: .rounded).weight(.bold))
-                    Text(headerSubtitle)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
                 }
-
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
+                    HStack(spacing: 8) {
                         ForEach(availableTabs) { t in
                             mobileTabPill(t)
                                 .id(t.id)
@@ -202,9 +186,9 @@ struct SettingsView: View {
                 }
                 .padding(.horizontal, -18)
             }
-            .padding(.horizontal, 18)
-            .padding(.top, 10)
-            .padding(.bottom, 14)
+            .padding(.horizontal, 16)
+            .padding(.top, 6)
+            .padding(.bottom, 8)
             .background(.ultraThinMaterial)
             .overlay(alignment: .bottom) {
                 Rectangle()
@@ -239,10 +223,10 @@ struct SettingsView: View {
             }
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(selected ? Color.white : Color.primary)
-            .padding(.leading, 8)
-            .padding(.trailing, 12)
-            .padding(.vertical, 8)
-            .frame(minHeight: 46)
+            .padding(.leading, 7)
+            .padding(.trailing, 10)
+            .padding(.vertical, 5)
+            .frame(minHeight: 36)
             .background {
                 Capsule(style: .continuous)
                     .fill(Color.platformControlBackground.opacity(selected ? 0 : 0.72))
@@ -271,7 +255,7 @@ struct SettingsView: View {
 
     private var mobileProvidersList: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 12) {
                 mobileProviderHero
                 mobileProviderMetrics
 
@@ -323,8 +307,8 @@ struct SettingsView: View {
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.top, 16)
-            .padding(.bottom, 34)
+            .padding(.top, 12)
+            .padding(.bottom, 24)
         }
         .scrollIndicators(.hidden)
     }
@@ -333,10 +317,10 @@ struct SettingsView: View {
         let total = viewModel.providers.count
         let enabled = viewModel.providers.filter(\.enabled).count
         let tint = enabled == 0 ? Color.orange : tab.tint
-        return VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .top, spacing: 14) {
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 12) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .fill(
                             LinearGradient(
                                 colors: [tint.opacity(0.24), tint.opacity(0.08)],
@@ -345,22 +329,22 @@ struct SettingsView: View {
                             )
                         )
                     Image(systemName: enabled == 0 ? "exclamationmark.triangle.fill" : "checkmark.seal.fill")
-                        .font(.system(size: 24, weight: .bold))
+                        .font(.system(size: 18, weight: .bold))
                         .foregroundStyle(tint)
                 }
-                .frame(width: 62, height: 62)
+                .frame(width: 46, height: 46)
                 .overlay {
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .strokeBorder(tint.opacity(0.22), lineWidth: 1)
                 }
 
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(enabled == 0 ? "先启用一个模型" : "模型已准备好")
-                        .font(.system(.title3, design: .rounded).weight(.bold))
+                        .font(.headline.weight(.bold))
                     Text(enabled == 0 ? "添加或打开任意 Provider 后即可开始对话。" : "当前有 \(enabled) 家 Provider 可参与回答, 可继续调整默认角色。")
-                        .font(.footnote)
+                        .font(.caption)
                         .foregroundStyle(.secondary)
-                        .lineLimit(3)
+                        .lineLimit(2)
                 }
 
                 Spacer(minLength: 0)
@@ -368,8 +352,8 @@ struct SettingsView: View {
                 addProviderMenu
                     .labelStyle(.iconOnly)
                     .font(.headline.weight(.bold))
-                    .frame(width: 44, height: 44)
-                    .background(tint.opacity(0.13), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .frame(width: 38, height: 38)
+                    .background(tint.opacity(0.13), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                     .foregroundStyle(tint)
             }
 
@@ -381,14 +365,14 @@ struct SettingsView: View {
                 }
             }
         }
-        .padding(18)
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .strokeBorder(tint.opacity(0.16), lineWidth: 1)
         }
-        .shadow(color: tint.opacity(0.08), radius: 18, x: 0, y: 12)
+        .shadow(color: tint.opacity(0.06), radius: 12, x: 0, y: 8)
     }
 
     private var mobileProviderMetrics: some View {
@@ -396,11 +380,14 @@ struct SettingsView: View {
         let chair = viewModel.providers.first(where: \.isChair)?.displayName ?? "未设置"
         let summary = viewModel.providers.first(where: \.isSummary)?.displayName ?? "未设置"
         let apiProviders = viewModel.providers.filter { !$0.kind.isCLI }.count
-        return LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-            mobileMetricCard(title: "可用模型", value: "\(enabled)", icon: "bolt.fill", color: enabled == 0 ? .orange : .green)
-            mobileMetricCard(title: "Chair", value: chair, icon: "crown.fill", color: .orange)
-            mobileMetricCard(title: "Summary", value: summary, icon: "list.bullet.rectangle.fill", color: .teal)
-            mobileMetricCard(title: "API Provider", value: "\(apiProviders)", icon: "network", color: .blue)
+        return ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                mobileMetricCard(title: "可用模型", value: "\(enabled)", icon: "bolt.fill", color: enabled == 0 ? .orange : .green)
+                mobileMetricCard(title: "Chair", value: chair, icon: "crown.fill", color: .orange)
+                mobileMetricCard(title: "Summary", value: summary, icon: "list.bullet.rectangle.fill", color: .teal)
+                mobileMetricCard(title: "API Provider", value: "\(apiProviders)", icon: "network", color: .blue)
+            }
+            .padding(.vertical, 1)
         }
     }
 
@@ -427,26 +414,30 @@ struct SettingsView: View {
     }
 
     private func mobileMetricCard(title: String, value: String, icon: String, color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 9) {
+        HStack(spacing: 9) {
             Image(systemName: icon)
-                .font(.system(size: 15, weight: .bold))
+                .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(color)
-                .frame(width: 30, height: 30)
-                .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-            Text(value)
-                .font(.system(.headline, design: .rounded).weight(.bold))
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .minimumScaleFactor(0.72)
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .frame(width: 28, height: 28)
+                .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(value)
+                    .font(.caption.weight(.bold))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .minimumScaleFactor(0.72)
+                Text(title)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, minHeight: 118, alignment: .topLeading)
-        .background(Color.platformControlBackground.opacity(0.78), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(width: 142, alignment: .leading)
+        .background(Color.platformControlBackground.opacity(0.78), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.07), lineWidth: 1)
         }
     }
@@ -994,13 +985,13 @@ private struct MobileProviderSummaryRow: View {
     let config: ProviderConfig
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 12) {
             providerMark
 
-            VStack(alignment: .leading, spacing: 7) {
+            VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 8) {
                     Text(config.displayName)
-                        .font(.system(.headline, design: .rounded).weight(.bold))
+                        .font(.system(.subheadline, design: .rounded).weight(.bold))
                         .lineLimit(1)
                     Spacer(minLength: 4)
                 }
@@ -1025,27 +1016,27 @@ private struct MobileProviderSummaryRow: View {
 
             Spacer()
 
-            VStack(alignment: .trailing, spacing: 10) {
+            VStack(alignment: .trailing, spacing: 8) {
                 statusChip
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(.tertiary)
             }
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, minHeight: 88, alignment: .leading)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .padding(11)
+        .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .strokeBorder(kindColor.opacity(config.enabled ? 0.20 : 0.08), lineWidth: 1)
         }
-        .shadow(color: kindColor.opacity(config.enabled ? 0.08 : 0.02), radius: 12, x: 0, y: 8)
-        .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .shadow(color: kindColor.opacity(config.enabled ? 0.06 : 0.015), radius: 9, x: 0, y: 5)
+        .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
     private var providerMark: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(
                     LinearGradient(
                         colors: [kindColor.opacity(0.22), kindColor.opacity(0.08)],
@@ -1054,12 +1045,12 @@ private struct MobileProviderSummaryRow: View {
                     )
                 )
             Image(systemName: providerSymbol)
-                .font(.system(size: 18, weight: .bold))
+                .font(.system(size: 16, weight: .bold))
                 .foregroundStyle(kindColor)
         }
-        .frame(width: 50, height: 50)
+        .frame(width: 42, height: 42)
         .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .strokeBorder(kindColor.opacity(0.16), lineWidth: 1)
         }
     }

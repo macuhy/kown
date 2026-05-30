@@ -134,7 +134,7 @@ struct ConversationRowView: View {
 
     private var iconSize: CGFloat {
         #if os(iOS)
-        return 38
+        return 34
         #else
         return 34
         #endif
@@ -142,7 +142,7 @@ struct ConversationRowView: View {
 
     private var iconCorner: CGFloat {
         #if os(iOS)
-        return 14
+        return 12
         #else
         return 12
         #endif
@@ -150,7 +150,7 @@ struct ConversationRowView: View {
 
     private var rowCorner: CGFloat {
         #if os(iOS)
-        return 20
+        return 16
         #else
         return 16
         #endif
@@ -158,7 +158,7 @@ struct ConversationRowView: View {
 
     private var rowVerticalPadding: CGFloat {
         #if os(iOS)
-        return 13
+        return 10
         #else
         return 11
         #endif

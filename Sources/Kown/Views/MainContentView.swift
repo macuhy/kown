@@ -214,36 +214,18 @@ struct MainContentView: View {
 
     #if os(iOS)
     private var mobileModeBar: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 10) {
-                Label("Mode", systemImage: "sparkles")
-                    .font(.caption.weight(.black))
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-                    .tracking(0.8)
-
-                Spacer(minLength: 0)
-
-                Text(viewModel.currentMode.displayName)
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(modeTint.opacity(0.92))
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 4)
-                    .background(modeTint.opacity(0.12), in: Capsule())
-            }
-
+        HStack(spacing: 8) {
             ModeTabsView(viewModel: viewModel)
         }
-        .padding(.horizontal, 14)
-        .padding(.top, 8)
-        .padding(.bottom, 10)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
         .background {
             ZStack {
                 Rectangle().fill(.ultraThinMaterial)
                 LinearGradient(
                     colors: [
-                        modeTint.opacity(0.12),
-                        Color.orange.opacity(viewModel.currentMode == .debate ? 0.08 : 0.03),
+                        modeTint.opacity(0.08),
+                        Color.orange.opacity(viewModel.currentMode == .debate ? 0.05 : 0.02),
                         Color.clear
                     ],
                     startPoint: .topLeading,
@@ -261,7 +243,6 @@ struct MainContentView: View {
     private var mobileComposerDock: some View {
         VStack(spacing: 0) {
             ActiveProviderBar(viewModel: viewModel)
-                .padding(.top, 4)
             InputBarView(
                 viewModel: viewModel,
                 showSystemPromptDrawer: $showSystemPromptDrawer,

@@ -6,12 +6,12 @@ struct ModeTabsView: View {
     @State private var confirmSwitch = false
 
     var body: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 4) {
             ForEach(ConversationMode.allCases, id: \.self) { mode in
                 tab(for: mode)
             }
         }
-        .padding(4)
+        .padding(3)
         #if os(iOS)
         .frame(maxWidth: .infinity)
         #endif
@@ -66,7 +66,7 @@ struct ModeTabsView: View {
             .padding(.horizontal, tabHorizontalPadding)
             .padding(.vertical, tabVerticalPadding)
             #if os(iOS)
-            .frame(maxWidth: .infinity, minHeight: 40)
+            .frame(maxWidth: .infinity, minHeight: 32)
             #endif
             .background {
                 if isActive {
@@ -111,7 +111,7 @@ struct ModeTabsView: View {
 
     private var tabHorizontalPadding: CGFloat {
         #if os(iOS)
-        4
+        3
         #else
         11
         #endif
@@ -119,7 +119,7 @@ struct ModeTabsView: View {
 
     private var tabVerticalPadding: CGFloat {
         #if os(iOS)
-        8
+        5
         #else
         6
         #endif

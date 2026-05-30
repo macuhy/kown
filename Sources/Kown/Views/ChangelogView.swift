@@ -52,7 +52,7 @@ struct ChangelogView: View {
 
     private var contentSpacing: CGFloat {
         #if os(iOS)
-        return embeddedInSettings ? 16 : 18
+        return embeddedInSettings ? 12 : 14
         #else
         return 18
         #endif
@@ -60,7 +60,7 @@ struct ChangelogView: View {
 
     private var contentInsets: EdgeInsets {
         #if os(iOS)
-        return EdgeInsets(top: embeddedInSettings ? 18 : 16, leading: 16, bottom: 28, trailing: 16)
+        return EdgeInsets(top: embeddedInSettings ? 12 : 14, leading: 14, bottom: 22, trailing: 14)
         #else
         return EdgeInsets(top: 22, leading: embeddedInSettings ? 24 : 22, bottom: 22, trailing: embeddedInSettings ? 24 : 22)
         #endif
@@ -76,7 +76,7 @@ struct ChangelogView: View {
 
     private var latestCardPadding: CGFloat {
         #if os(iOS)
-        return 18
+        return 14
         #else
         return 22
         #endif
@@ -92,7 +92,7 @@ struct ChangelogView: View {
 
     private var latestVersionFontSize: CGFloat {
         #if os(iOS)
-        return 30
+        return 26
         #else
         return 34
         #endif
@@ -100,7 +100,7 @@ struct ChangelogView: View {
 
     private var entryCardPadding: CGFloat {
         #if os(iOS)
-        return 15
+        return 12
         #else
         return 16
         #endif
@@ -163,7 +163,7 @@ struct ChangelogView: View {
                         historyHeader
 
                         #if os(iOS)
-                        LazyVStack(spacing: 14) {
+                        LazyVStack(spacing: 10) {
                             ForEach(Array(entries.dropFirst().enumerated()), id: \.offset) { index, entry in
                                 timelineEntryCard(
                                     entry,
@@ -205,7 +205,7 @@ struct ChangelogView: View {
 
     #if os(iOS)
     private var settingsIntroCard: some View {
-        HStack(alignment: .center, spacing: 13) {
+        HStack(alignment: .center, spacing: 11) {
             ZStack {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .fill(
@@ -216,14 +216,14 @@ struct ChangelogView: View {
                         )
                     )
                 Image(systemName: "clock.badge.checkmark")
-                    .font(.system(size: 22, weight: .bold))
+                    .font(.system(size: 18, weight: .bold))
                     .foregroundStyle(.white)
             }
-            .frame(width: 54, height: 54)
+            .frame(width: 42, height: 42)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("版本时间线")
-                    .font(.system(.title3, design: .rounded).weight(.bold))
+                    .font(.headline.weight(.bold))
                 Text("当前 v\(service.currentVersion) · 向下滚动查看每次迭代")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -231,11 +231,11 @@ struct ChangelogView: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(16)
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .strokeBorder(Color.teal.opacity(0.18), lineWidth: 1)
         }
     }
@@ -267,7 +267,7 @@ struct ChangelogView: View {
     #endif
 
     private func latestCard(_ entry: ChangelogEntry) -> some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 8) {
@@ -286,11 +286,11 @@ struct ChangelogView: View {
                 }
                 Spacer(minLength: 16)
                 Image(systemName: "app.badge.checkmark.fill")
-                    .font(.system(size: 36, weight: .semibold))
+                    .font(.system(size: 30, weight: .semibold))
                     .foregroundStyle(Color.orange.opacity(0.95))
             }
 
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 10) {
                 ForEach(Array(entry.sections.enumerated()), id: \.offset) { _, section in
                     sectionBlock(section, isLatest: true)
                 }

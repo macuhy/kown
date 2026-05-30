@@ -16,7 +16,7 @@ struct UsageSettingsView: View {
     var body: some View {
         #if os(iOS)
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 16) {
+            LazyVStack(alignment: .leading, spacing: 12) {
                 heroCard
                 scopePickerCard
                 if days.isEmpty {
@@ -28,8 +28,8 @@ struct UsageSettingsView: View {
                 }
                 resetCard
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 18)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .background(mobileSettingsBackground.ignoresSafeArea())

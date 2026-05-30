@@ -32,22 +32,22 @@ struct EmptyStateCard: View {
 
     #if os(iOS)
     private var mobileBody: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: 10) {
             mobileHeroCard
             mobileQuickStartCard
             mobileProviderSummaryCard
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 14)
-        .padding(.bottom, 18)
+        .padding(.horizontal, 14)
+        .padding(.top, 10)
+        .padding(.bottom, 14)
         .frame(maxWidth: .infinity, alignment: .top)
     }
 
     private var mobileHeroCard: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .top, spacing: 14) {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 12) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .fill(
                             LinearGradient(
                                 colors: [modeTint.opacity(0.20), Color.orange.opacity(0.12)],
@@ -58,20 +58,20 @@ struct EmptyStateCard: View {
                     Image("AppIcon")
                         .resizable()
                         .scaledToFill()
-                        .frame(width: 58, height: 58)
-                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .frame(width: 46, height: 46)
+                        .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
                         .shadow(color: modeTint.opacity(0.16), radius: 14, x: 0, y: 8)
                 }
-                .frame(width: 82, height: 82)
+                .frame(width: 60, height: 60)
                 .overlay {
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .strokeBorder(Color.white.opacity(0.22), lineWidth: 1)
                 }
 
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 6) {
                     modeBadge
                     Text(mode.emptyStateTitle)
-                        .font(.system(size: 25, weight: .black, design: .rounded))
+                        .font(.system(size: 22, weight: .black, design: .rounded))
                         .foregroundStyle(.primary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -79,7 +79,7 @@ struct EmptyStateCard: View {
             }
 
             Text(mode.emptyStateSubtitle)
-                .font(.callout)
+                .font(.footnote)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -89,7 +89,7 @@ struct EmptyStateCard: View {
                     .foregroundStyle(modeTint)
                     .lineLimit(1)
                     .padding(.horizontal, 11)
-                    .padding(.vertical, 8)
+                    .padding(.vertical, 6)
                     .background(modeTint.opacity(0.12), in: Capsule())
 
                 Spacer(minLength: 0)
@@ -100,7 +100,7 @@ struct EmptyStateCard: View {
                         .foregroundStyle(.white)
                         .lineLimit(1)
                         .padding(.horizontal, 12)
-                        .padding(.vertical, 9)
+                        .padding(.vertical, 7)
                         .background(
                             LinearGradient(
                                 colors: [modeTint.opacity(0.98), modeTint.opacity(0.72)],
@@ -113,18 +113,18 @@ struct EmptyStateCard: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(18)
+        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(cardBackground(tint: modeTint, cornerRadius: 28))
+        .background(cardBackground(tint: modeTint, cornerRadius: 22))
         .overlay {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .strokeBorder(modeTint.opacity(0.18), lineWidth: 1)
         }
-        .shadow(color: modeTint.opacity(0.10), radius: 22, x: 0, y: 14)
+        .shadow(color: modeTint.opacity(0.08), radius: 14, x: 0, y: 9)
     }
 
     private var mobileQuickStartCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 9) {
             sectionHeader(
                 title: "Quick start",
                 subtitle: "三个小动作让回答更稳定",
@@ -138,18 +138,18 @@ struct EmptyStateCard: View {
                 mobileTipRow("3", text: "发送前可用 Prompt Enhancer 做一次整理")
             }
         }
-        .padding(16)
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(cardBackground(tint: modeTint.opacity(0.88), cornerRadius: 24))
+        .background(cardBackground(tint: modeTint.opacity(0.88), cornerRadius: 20))
         .overlay {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.07), lineWidth: 1)
         }
     }
 
     private var mobileProviderSummaryCard: some View {
         let enabled = enabledProviders
-        return VStack(alignment: .leading, spacing: 12) {
+        return VStack(alignment: .leading, spacing: 9) {
             HStack(spacing: 12) {
                 sectionHeader(
                     title: enabled.isEmpty ? "Provider 未就绪" : "Provider 已就绪",
@@ -195,11 +195,11 @@ struct EmptyStateCard: View {
                 }
             }
         }
-        .padding(16)
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(cardBackground(tint: .orange, cornerRadius: 24))
+        .background(cardBackground(tint: .orange, cornerRadius: 20))
         .overlay {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.07), lineWidth: 1)
         }
     }
@@ -209,16 +209,16 @@ struct EmptyStateCard: View {
             Text(number)
                 .font(.caption.weight(.black))
                 .foregroundStyle(.white)
-                .frame(width: 24, height: 24)
+                .frame(width: 22, height: 22)
                 .background(modeTint, in: Circle())
             Text(text)
-                .font(.callout)
+                .font(.footnote)
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
         }
-        .padding(10)
-        .background(Color.platformControlBackground.opacity(0.38), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+        .padding(8)
+        .background(Color.platformControlBackground.opacity(0.38), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
     }
 
     private func mobileProviderPill(_ cfg: ProviderConfig) -> some View {

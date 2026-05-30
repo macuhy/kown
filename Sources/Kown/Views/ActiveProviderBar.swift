@@ -11,8 +11,8 @@ struct ActiveProviderBar: View {
             EmptyView()
         } else {
             content(mode: mode)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
+                .padding(.horizontal, outerHorizontalPadding)
+                .padding(.vertical, outerVerticalPadding)
                 .background {
                     ZStack(alignment: .bottom) {
                         Rectangle().fill(.thinMaterial)
@@ -38,7 +38,7 @@ struct ActiveProviderBar: View {
                 chips(mode)
                 picker(mode)
             }
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: compactStackSpacing) {
                 HStack {
                     label(mode)
                     Spacer(minLength: 8)
@@ -47,8 +47,8 @@ struct ActiveProviderBar: View {
                 chips(mode)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.horizontal, contentHorizontalPadding)
+        .padding(.vertical, contentVerticalPadding)
         .background {
             ZStack {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -84,9 +84,11 @@ struct ActiveProviderBar: View {
                 Text(mode == .direct ? "对话模型" : "对比模型")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(.primary)
+                #if !os(iOS)
                 Text(mode == .direct ? "Single responder" : "Same prompt, two reads")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+                #endif
             }
         }
         .fixedSize(horizontal: true, vertical: false)
@@ -139,15 +141,17 @@ struct ActiveProviderBar: View {
                     .font(.caption.weight(.bold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
+                #if !os(iOS)
                 Text(cfg.model)
                     .font(.system(.caption2, design: .monospaced))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                #endif
             }
         }
         .padding(.leading, 6)
-        .padding(.trailing, 10)
-        .padding(.vertical, 6)
+        .padding(.trailing, chipTrailingPadding)
+        .padding(.vertical, chipVerticalPadding)
         .background {
             Capsule()
                 .fill(tint.opacity(0.10))
@@ -187,6 +191,62 @@ struct ActiveProviderBar: View {
         .menuStyle(.borderlessButton)
         .fixedSize()
         .disabled(enabled.isEmpty)
+    }
+
+    private var outerHorizontalPadding: CGFloat {
+        #if os(iOS)
+        return 12
+        #else
+        return 14
+        #endif
+    }
+
+    private var outerVerticalPadding: CGFloat {
+        #if os(iOS)
+        return 5
+        #else
+        return 9
+        #endif
+    }
+
+    private var contentHorizontalPadding: CGFloat {
+        #if os(iOS)
+        return 10
+        #else
+        return 12
+        #endif
+    }
+
+    private var contentVerticalPadding: CGFloat {
+        #if os(iOS)
+        return 7
+        #else
+        return 10
+        #endif
+    }
+
+    private var compactStackSpacing: CGFloat {
+        #if os(iOS)
+        return 7
+        #else
+        return 10
+        #endif
+    }
+
+    private var chipTrailingPadding: CGFloat {
+        #if os(iOS)
+        return 8
+        #else
+        return 10
+        #endif
+    }
+
+    private var chipVerticalPadding: CGFloat {
+        #if os(iOS)
+        return 4
+        #else
+        return 6
+        #endif
     }
 
     /// 为单个 provider 生成菜单项 — 已知厂商展开成"厂商 → 模型列表"子菜单,
