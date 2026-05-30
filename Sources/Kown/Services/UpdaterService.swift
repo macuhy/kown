@@ -2,6 +2,7 @@
 import Foundation
 import Combine
 import SwiftUI
+import AppKit
 import Sparkle
 
 /// Sparkle 自动更新的封装 —— 整个 macOS 端的「检查 / 下载 / 安装更新」都走这里。
@@ -18,7 +19,7 @@ import Sparkle
 ///
 /// 更新源 / 公钥来自 Info.plist 的 `SUFeedURL` / `SUPublicEDKey`（见 release.sh / Info.plist）。
 @MainActor
-final class UpdaterService: ObservableObject {
+final class UpdaterService: NSObject, ObservableObject, SPUStandardUserDriverDelegate, SPUUpdaterDelegate {
     static let shared = UpdaterService()
 
     /// 检查频率选项。Sparkle 要求最小间隔 1 小时。
@@ -42,7 +43,7 @@ final class UpdaterService: ObservableObject {
         }
     }
 
-    private let controller: SPUStandardUpdaterController
+    private var controller: SPUStandardUpdaterController!
 
     /// 手动「检查更新」按钮是否可点（Sparkle 检查中会自动置灰）。
     @Published private(set) var canCheckForUpdates = false
@@ -50,25 +51,26 @@ final class UpdaterService: ObservableObject {
     @Published private(set) var lastUpdateCheckDate: Date?
 
     /// 启动时自动检查更新。
-    @Published var automaticallyChecksForUpdates: Bool {
+    @Published var automaticallyChecksForUpdates: Bool = true {
         didSet { updater.automaticallyChecksForUpdates = automaticallyChecksForUpdates }
     }
     /// 自动下载并安装更新（关闭则只提示、等用户确认）。
-    @Published var automaticallyDownloadsUpdates: Bool {
+    @Published var automaticallyDownloadsUpdates: Bool = false {
         didSet { updater.automaticallyDownloadsUpdates = automaticallyDownloadsUpdates }
     }
     /// 检查频率。
-    @Published var checkFrequency: CheckFrequency {
+    @Published var checkFrequency: CheckFrequency = .daily {
         didSet { updater.updateCheckInterval = checkFrequency.rawValue }
     }
 
     private var cancellables = Set<AnyCancellable>()
 
-    private init() {
+    private override init() {
+        super.init()
         controller = SPUStandardUpdaterController(
             startingUpdater: true,
-            updaterDelegate: nil,
-            userDriverDelegate: nil
+            updaterDelegate: self,
+            userDriverDelegate: self
         )
         let updater = controller.updater
         // 用 updater 当前（持久化）状态初始化 @Published，保证设置页显示真实值。
@@ -99,6 +101,35 @@ final class UpdaterService: ObservableObject {
     func checkInBackground() {
         guard updater.automaticallyChecksForUpdates else { return }
         updater.checkForUpdatesInBackground()
+    }
+
+    // MARK: - SPUStandardUserDriverDelegate
+
+    /// 声明本 app 支持「温和提醒」。
+    ///
+    /// **这是修「安装并重启按钮无效」的关键**:不声明时 Sparkle 把 Kown 判成
+    /// background app,点安装并重启后**不会替我们终止进程**(后台 app 由自己管生命周期),
+    /// 于是 `Autoupdate` / `Updater.app` 起来后死等 Kown 退出 → 用户看着就是"按钮没反应",
+    /// 必须手动 Cmd+Q 才装上。声明支持后,Sparkle 走正常前台流程,会正确终止并重启。
+    nonisolated var supportsGentleScheduledUpdateReminders: Bool { true }
+
+    /// 声明支持 gentle reminders 后必须配套实现:这里返回 true = 仍让 Sparkle 标准 UI
+    /// 负责展示更新弹窗(保持原行为,不自己接管),只是借此让 Sparkle 按"前台交互式 app"
+    /// 对待 Kown,从而在安装时正确终止并重启,而不是把它当后台进程死等。
+    nonisolated func standardUserDriverShouldHandleShowingScheduledUpdate(
+        _ update: SUAppcastItem, andInImmediateFocus immediateFocus: Bool
+    ) -> Bool {
+        true
+    }
+
+    // MARK: - SPUUpdaterDelegate
+
+    /// Sparkle 准备重启 app 时回调 —— 兜底强制终止当前进程,确保安装器能替换并重启。
+    /// (即使前面 Sparkle 没替我们终止,这里也补一刀,彻底治"安装并重启按钮不退出"。)
+    nonisolated func updaterWillRelaunchApplication(_ updater: SPUUpdater) {
+        Task { @MainActor in
+            NSApplication.shared.terminate(nil)
+        }
     }
 }
 

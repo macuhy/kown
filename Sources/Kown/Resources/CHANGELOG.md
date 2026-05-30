@@ -1,5 +1,9 @@
 # 更新日志
 
+## 0.6.16 — 2026-05-29
+### 修复
+- **「安装并重启」按钮无效、要手动退出才更新** — 进程级抓包确认:点按钮后 Sparkle 的安装器(`Autoupdate` / `Updater.app`)起来了,但 Kown 进程没退出,安装器就一直死等。根因:Sparkle 因后台更新检查未声明 gentle reminders,把 Kown 当 background app,不替它终止进程。修复:UpdaterService 实现 `SPUStandardUserDriverDelegate`(声明支持 gentle reminders,让 Sparkle 走前台「终止并重启」流程)+ `SPUUpdaterDelegate.updaterWillRelaunchApplication` 兜底强制 `terminate`。注:本修复在新版本生效——升到 0.6.16 之后,之后的更新点按钮即可自动重启
+
 ## 0.6.15 — 2026-05-29
 ### 改进
 - **每次打开 App 都做一次后台静默更新检查** — 之前只靠 Sparkle 的每日定时器(`SUScheduledCheckInterval=86400`),距上次检查不满 24h 就不查,所以新版发出来后不会马上发现。现在启动时额外强制一次 `checkForUpdatesInBackground`(尊重"自动检查"开关):开了自动下载就静默装、下次启动生效,否则弹更新窗
