@@ -57,6 +57,9 @@ struct SettingsView: View {
     }
 
     @State private var tab: Tab = .providers
+    #if os(iOS)
+    @Namespace private var mobileTabNamespace
+    #endif
     private static let desktopWidth: CGFloat = 960
     private static let desktopHeight: CGFloat = 660
 
@@ -131,8 +134,8 @@ struct SettingsView: View {
                     }
                 }
             }
-            .background(Color.platformWindowBackground)
-            .navigationTitle(tab.label)
+            .background(SettingsBackdrop())
+            .navigationTitle("设置")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -144,50 +147,70 @@ struct SettingsView: View {
                     }
                 }
             }
+            .toolbarBackground(.hidden, for: .navigationBar)
         }
     }
 
     private var mobileTabBar: some View {
         ScrollViewReader { proxy in
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(availableTabs) { t in
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.18)) {
-                                tab = t
-                            }
-                        } label: {
-                            Label {
-                                Text(t.label)
-                                    .lineLimit(1)
-                            } icon: {
-                                Image(systemName: t.symbol)
-                            }
-                            .font(.callout.weight(.semibold))
-                            .foregroundStyle(tab == t ? Color.white : Color.primary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(
-                                Capsule(style: .continuous)
-                                    .fill(tab == t ? Color.accentColor : Color.secondary.opacity(0.12))
-                            )
-                            .overlay(
-                                Capsule(style: .continuous)
-                                    .strokeBorder(
-                                        (tab == t ? Color.accentColor : Color.secondary).opacity(tab == t ? 0.35 : 0.20),
-                                        lineWidth: 1
-                                    )
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .id(t.id)
-                        .accessibilityAddTraits(tab == t ? .isSelected : [])
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 12) {
+                    SettingsAppIcon()
+                        .frame(width: 46, height: 46)
+                        .shadow(color: tab.tint.opacity(0.22), radius: 16, x: 0, y: 8)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Kown")
+                            .font(.system(.title3, design: .rounded).weight(.bold))
+                        Text("移动端设置中心")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.secondary)
                     }
+
+                    Spacer(minLength: 10)
+
+                    HStack(spacing: 6) {
+                        Image(systemName: tab.symbol)
+                        Text(tab.label)
+                    }
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(tab.tint)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(tab.tint.opacity(0.12), in: Capsule(style: .continuous))
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(tab.label)
+                        .font(.system(.title2, design: .rounded).weight(.bold))
+                    Text(headerSubtitle)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(availableTabs) { t in
+                            mobileTabPill(t)
+                                .id(t.id)
+                        }
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 2)
+                }
+                .padding(.horizontal, -18)
             }
-            .background(.bar)
+            .padding(.horizontal, 18)
+            .padding(.top, 10)
+            .padding(.bottom, 14)
+            .background(.ultraThinMaterial)
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(tab.tint.opacity(0.16))
+                    .frame(height: 1)
+            }
             .onChange(of: tab) { _, newTab in
                 withAnimation(.easeInOut(duration: 0.18)) {
                     proxy.scrollTo(newTab.id, anchor: .center)
@@ -196,63 +219,262 @@ struct SettingsView: View {
         }
     }
 
-    private var mobileProvidersList: some View {
-        List {
-            Section {
-                mobileActiveSummary
+    private func mobileTabPill(_ t: Tab) -> some View {
+        let selected = tab == t
+        return Button {
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                tab = t
             }
-
-            Section {
-                ForEach($viewModel.providers) { $cfg in
-                    NavigationLink {
-                        MobileProviderEditorView(
-                            config: $cfg,
-                            onDelete: {
-                                viewModel.removeProvider(cfg.id)
-                            },
-                            onSave: {
-                                viewModel.saveProviders()
-                            },
-                            onToggleChair: { newValue in
-                                viewModel.setChair(cfg.id, isChair: newValue)
-                            },
-                            onToggleSummary: { newValue in
-                                viewModel.setSummary(cfg.id, isSummary: newValue)
-                            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: t.symbol)
+                    .font(.system(size: 14, weight: .bold))
+                    .frame(width: 24, height: 24)
+                    .background(
+                        Circle()
+                            .fill(selected ? Color.white.opacity(0.22) : t.tint.opacity(0.12))
+                    )
+                Text(t.label)
+                    .lineLimit(1)
+            }
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(selected ? Color.white : Color.primary)
+            .padding(.leading, 8)
+            .padding(.trailing, 12)
+            .padding(.vertical, 8)
+            .frame(minHeight: 46)
+            .background {
+                Capsule(style: .continuous)
+                    .fill(Color.platformControlBackground.opacity(selected ? 0 : 0.72))
+                if selected {
+                    Capsule(style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [t.tint, t.tint.opacity(0.72)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
                         )
-                    } label: {
-                        MobileProviderSummaryRow(config: cfg)
-                    }
+                        .matchedGeometryEffect(id: "mobile-selected-tab", in: mobileTabNamespace)
                 }
-            } header: {
-                Text("供应商")
-            } footer: {
-                Text("点进任一家即可编辑 Base URL、模型、API Key 和 Council 角色。")
             }
+            .overlay {
+                Capsule(style: .continuous)
+                    .strokeBorder(selected ? Color.white.opacity(0.28) : Color.primary.opacity(0.08), lineWidth: 1)
+            }
+            .shadow(color: selected ? t.tint.opacity(0.24) : .clear, radius: 12, x: 0, y: 7)
+            .contentShape(Capsule(style: .continuous))
         }
-        .listStyle(.insetGrouped)
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
-    private var mobileActiveSummary: some View {
-        let active = viewModel.providers.filter(\.enabled).count
-        return HStack(spacing: 12) {
-            Image(systemName: active == 0 ? "exclamationmark.triangle.fill" : "checkmark.seal.fill")
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(active == 0 ? .orange : .green)
-                .frame(width: 34, height: 34)
-                .background((active == 0 ? Color.orange : Color.green).opacity(0.12), in: Circle())
-            VStack(alignment: .leading, spacing: 2) {
-                Text(active == 0 ? "还没有启用模型" : "\(active) 家模型已启用")
-                    .font(.headline)
-                Text("共 \(viewModel.providers.count) 家供应商配置")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+    private var mobileProvidersList: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                mobileProviderHero
+                mobileProviderMetrics
+
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Provider 配置")
+                            .font(.headline)
+                        Text("点进卡片即可编辑连接、模型、API Key 和 Council 角色。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 12)
+                    Text("\(viewModel.providers.count) 家")
+                        .font(.caption.weight(.bold))
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(Color.secondary.opacity(0.10), in: Capsule(style: .continuous))
+                }
+
+                if viewModel.providers.isEmpty {
+                    mobileEmptyProvidersCard
+                } else {
+                    LazyVStack(spacing: 12) {
+                        ForEach($viewModel.providers) { $cfg in
+                            NavigationLink {
+                                MobileProviderEditorView(
+                                    config: $cfg,
+                                    onDelete: {
+                                        viewModel.removeProvider(cfg.id)
+                                    },
+                                    onSave: {
+                                        viewModel.saveProviders()
+                                    },
+                                    onToggleChair: { newValue in
+                                        viewModel.setChair(cfg.id, isChair: newValue)
+                                    },
+                                    onToggleSummary: { newValue in
+                                        viewModel.setSummary(cfg.id, isSummary: newValue)
+                                    }
+                                )
+                            } label: {
+                                MobileProviderSummaryRow(config: cfg)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
             }
-            Spacer()
-            addProviderMenu
-                .labelStyle(.iconOnly)
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 34)
         }
-        .padding(.vertical, 4)
+        .scrollIndicators(.hidden)
+    }
+
+    private var mobileProviderHero: some View {
+        let total = viewModel.providers.count
+        let enabled = viewModel.providers.filter(\.enabled).count
+        let tint = enabled == 0 ? Color.orange : tab.tint
+        return VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [tint.opacity(0.24), tint.opacity(0.08)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                    Image(systemName: enabled == 0 ? "exclamationmark.triangle.fill" : "checkmark.seal.fill")
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundStyle(tint)
+                }
+                .frame(width: 62, height: 62)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .strokeBorder(tint.opacity(0.22), lineWidth: 1)
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(enabled == 0 ? "先启用一个模型" : "模型已准备好")
+                        .font(.system(.title3, design: .rounded).weight(.bold))
+                    Text(enabled == 0 ? "添加或打开任意 Provider 后即可开始对话。" : "当前有 \(enabled) 家 Provider 可参与回答, 可继续调整默认角色。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                }
+
+                Spacer(minLength: 0)
+
+                addProviderMenu
+                    .labelStyle(.iconOnly)
+                    .font(.headline.weight(.bold))
+                    .frame(width: 44, height: 44)
+                    .background(tint.opacity(0.13), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .foregroundStyle(tint)
+            }
+
+            HStack(spacing: 10) {
+                mobileHeroChip(title: "启用", value: "\(enabled)/\(total)", color: enabled == 0 ? .orange : .green)
+                mobileHeroChip(title: "总数", value: "\(total)", color: .secondary)
+                if let chair = viewModel.providers.first(where: \.isChair) {
+                    mobileHeroChip(title: "Chair", value: chair.displayName, color: .orange)
+                }
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .strokeBorder(tint.opacity(0.16), lineWidth: 1)
+        }
+        .shadow(color: tint.opacity(0.08), radius: 18, x: 0, y: 12)
+    }
+
+    private var mobileProviderMetrics: some View {
+        let enabled = viewModel.providers.filter(\.enabled).count
+        let chair = viewModel.providers.first(where: \.isChair)?.displayName ?? "未设置"
+        let summary = viewModel.providers.first(where: \.isSummary)?.displayName ?? "未设置"
+        let apiProviders = viewModel.providers.filter { !$0.kind.isCLI }.count
+        return LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+            mobileMetricCard(title: "可用模型", value: "\(enabled)", icon: "bolt.fill", color: enabled == 0 ? .orange : .green)
+            mobileMetricCard(title: "Chair", value: chair, icon: "crown.fill", color: .orange)
+            mobileMetricCard(title: "Summary", value: summary, icon: "list.bullet.rectangle.fill", color: .teal)
+            mobileMetricCard(title: "API Provider", value: "\(apiProviders)", icon: "network", color: .blue)
+        }
+    }
+
+    private func mobileHeroChip(title: String, value: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(color)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .monospacedDigit()
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(color.opacity(0.10), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(color.opacity(0.13), lineWidth: 1)
+        }
+    }
+
+    private func mobileMetricCard(title: String, value: String, icon: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Image(systemName: icon)
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(color)
+                .frame(width: 30, height: 30)
+                .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+            Text(value)
+                .font(.system(.headline, design: .rounded).weight(.bold))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .minimumScaleFactor(0.72)
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 118, alignment: .topLeading)
+        .background(Color.platformControlBackground.opacity(0.78), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.07), lineWidth: 1)
+        }
+    }
+
+    private var mobileEmptyProvidersCard: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "square.stack.3d.up.slash")
+                .font(.system(size: 30, weight: .bold))
+                .foregroundStyle(Color.orange)
+                .frame(width: 64, height: 64)
+                .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            Text("还没有 Provider")
+                .font(.headline)
+            Text("添加 OpenAI 兼容、Anthropic 或 Gemini Provider 后即可开始使用。")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            addProviderMenu
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+        }
+        .padding(28)
+        .frame(maxWidth: .infinity)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+        }
     }
     #endif
 
@@ -772,45 +994,83 @@ private struct MobileProviderSummaryRow: View {
     let config: ProviderConfig
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 14) {
             providerMark
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
+
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(spacing: 8) {
                     Text(config.displayName)
-                        .font(.headline)
+                        .font(.system(.headline, design: .rounded).weight(.bold))
                         .lineLimit(1)
+                    Spacer(minLength: 4)
+                }
+                Text("\(config.kind.displayName) · \(config.model)")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+
+                HStack(spacing: 6) {
                     if config.isChair {
                         roleChip("主席", color: .orange)
                     }
                     if config.isSummary {
                         roleChip("总结", color: .teal)
                     }
+                    if !config.kind.isCLI && !isEndpointComplete {
+                        roleChip("待补全", color: .orange)
+                    }
                 }
-                Text("\(config.kind.displayName) · \(config.model)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
             }
+
             Spacer()
-            Text(config.enabled ? "启用" : "关闭")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(config.enabled ? .green : .secondary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background((config.enabled ? Color.green : Color.secondary).opacity(0.12), in: Capsule())
+
+            VStack(alignment: .trailing, spacing: 10) {
+                statusChip
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.tertiary)
+            }
         }
-        .padding(.vertical, 4)
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 88, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .strokeBorder(kindColor.opacity(config.enabled ? 0.20 : 0.08), lineWidth: 1)
+        }
+        .shadow(color: kindColor.opacity(config.enabled ? 0.08 : 0.02), radius: 12, x: 0, y: 8)
+        .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
     private var providerMark: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(kindColor.opacity(0.13))
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [kindColor.opacity(0.22), kindColor.opacity(0.08)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
             Image(systemName: providerSymbol)
-                .font(.system(size: 16, weight: .semibold))
+                .font(.system(size: 18, weight: .bold))
                 .foregroundStyle(kindColor)
         }
-        .frame(width: 40, height: 40)
+        .frame(width: 50, height: 50)
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(kindColor.opacity(0.16), lineWidth: 1)
+        }
+    }
+
+    private var statusChip: some View {
+        Text(config.enabled ? "启用" : "关闭")
+            .font(.caption.weight(.bold))
+            .foregroundStyle(config.enabled ? .green : .secondary)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background((config.enabled ? Color.green : Color.secondary).opacity(0.12), in: Capsule(style: .continuous))
     }
 
     private func roleChip(_ text: String, color: Color) -> some View {
@@ -820,6 +1080,11 @@ private struct MobileProviderSummaryRow: View {
             .padding(.vertical, 2)
             .background(color.opacity(0.14), in: Capsule())
             .foregroundStyle(color)
+    }
+
+    private var isEndpointComplete: Bool {
+        !config.baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !config.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var kindColor: Color {
@@ -858,6 +1123,7 @@ private struct MobileProviderEditorView: View {
 
     var body: some View {
         Form {
+            editorHeroSection
             identitySection
             if config.kind.isCLI {
                 cliSection
@@ -871,6 +1137,8 @@ private struct MobileProviderEditorView: View {
         }
         .navigationTitle(config.displayName)
         .navigationBarTitleDisplayMode(.inline)
+        .scrollContentBackground(.hidden)
+        .background(SettingsBackdrop())
         .scrollDismissesKeyboard(.interactively)
         .onChange(of: config.displayName) { _, _ in onSave() }
         .onChange(of: config.enabled) { _, _ in onSave() }
@@ -887,21 +1155,56 @@ private struct MobileProviderEditorView: View {
         }
     }
 
-    private var identitySection: some View {
+    private var editorHeroSection: some View {
         Section {
-            HStack(spacing: 12) {
-                providerMark
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(config.kind.displayName)
-                        .font(.headline)
-                    Text(config.enabled ? "已启用" : "未启用")
-                        .font(.caption)
-                        .foregroundStyle(config.enabled ? .green : .secondary)
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top, spacing: 14) {
+                    providerMark
+                        .frame(width: 52, height: 52)
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(config.displayName)
+                            .font(.system(.title3, design: .rounded).weight(.bold))
+                            .lineLimit(1)
+                        Text("\(config.kind.displayName) · \(config.model)")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                    Spacer(minLength: 8)
+                    editorStatusChip
                 }
+
+                Text(config.enabled ? "这个 Provider 会参与回答。你可以在这里调整连接、模型和 Council 角色。" : "当前不会参与回答，打开后会立即保存到本机配置。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .strokeBorder(kindColor.opacity(0.18), lineWidth: 1)
+            }
+        }
+        .listRowInsets(EdgeInsets(top: 16, leading: 16, bottom: 8, trailing: 16))
+        .listRowBackground(Color.clear)
+    }
+
+    private var identitySection: some View {
+        Section("基础信息") {
             TextField("显示名", text: $config.displayName)
             Toggle("启用此供应商", isOn: $config.enabled)
         }
+    }
+
+    private var editorStatusChip: some View {
+        Text(config.enabled ? "已启用" : "未启用")
+            .font(.caption.weight(.bold))
+            .foregroundStyle(config.enabled ? .green : .secondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background((config.enabled ? Color.green : Color.secondary).opacity(0.12), in: Capsule(style: .continuous))
     }
 
     private var connectionSection: some View {

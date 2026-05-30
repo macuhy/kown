@@ -15,22 +15,25 @@ struct UsageSettingsView: View {
 
     var body: some View {
         #if os(iOS)
-        Form {
-            heroSection
-            scopePickerSection
-            if days.isEmpty {
-                Section { emptyState }
-            } else {
-                ForEach(days, id: \.self) { day in
-                    Section {
-                        daySectionContent(day)
-                    } header: {
-                        Text(prettyDate(day))
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 16) {
+                heroCard
+                scopePickerCard
+                if days.isEmpty {
+                    emptyStateCard
+                } else {
+                    ForEach(days, id: \.self) { day in
+                        dayCard(day)
                     }
                 }
+                resetCard
             }
-            resetSection
+            .padding(.horizontal, 16)
+            .padding(.vertical, 18)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
+        .background(mobileSettingsBackground.ignoresSafeArea())
+        .scrollIndicators(.hidden)
         #else
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
@@ -177,6 +180,43 @@ struct UsageSettingsView: View {
 
     private func modelRow(key: String, entry: UsageEntry) -> some View {
         let (provider, model) = UsageStore.splitKey(key)
+        #if os(iOS)
+        return VStack(alignment: .leading, spacing: 11) {
+            HStack(spacing: 10) {
+                Image(systemName: "cube.transparent.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(providerColor(provider))
+                    .frame(width: 30, height: 30)
+                    .background(providerColor(provider).opacity(0.11), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(model)
+                        .font(.system(.callout, design: .monospaced).weight(.semibold))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text(provider)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 8)
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(formatTokens(entry.total))
+                        .font(.callout.weight(.bold))
+                        .monospacedDigit()
+                    Text("\(entry.callCount) 次")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .monospacedDigit()
+                }
+            }
+            HStack(spacing: 7) {
+                tokenBadge(label: "in", value: entry.input, color: .blue)
+                tokenBadge(label: "out", value: entry.output, color: .orange)
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(12)
+        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        #else
         return HStack(spacing: 10) {
             Image(systemName: "cube.transparent.fill")
                 .font(.system(size: 13, weight: .semibold))
@@ -207,6 +247,7 @@ struct UsageSettingsView: View {
         }
         .padding(10)
         .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        #endif
     }
 
     private func tokenBadge(label: String, value: Int, color: Color) -> some View {
@@ -327,6 +368,15 @@ struct UsageSettingsView: View {
 
     private var resetCard: some View {
         cardShell(tint: .red) {
+            #if os(iOS)
+            VStack(alignment: .leading, spacing: 14) {
+                sectionHeader("管理", subtitle: "清空只会删除本机产生的用量文件,其他设备记录不会被本机覆盖。", icon: "trash", color: .red)
+                Button("清空所有用量记录", role: .destructive) {
+                    confirmReset = true
+                }
+                .buttonStyle(.bordered)
+            }
+            #else
             HStack(spacing: 12) {
                 sectionHeader("管理", subtitle: "清空只会删除本机产生的用量文件,其他设备记录不会被本机覆盖。", icon: "trash", color: .red)
                 Spacer(minLength: 0)
@@ -335,6 +385,7 @@ struct UsageSettingsView: View {
                 }
                 .buttonStyle(.bordered)
             }
+            #endif
         }
         .confirmationDialog("确定要清空全部 token 用量记录?", isPresented: $confirmReset) {
             Button("清空", role: .destructive) { store.reset() }
@@ -343,6 +394,26 @@ struct UsageSettingsView: View {
     }
 
     // MARK: - Styling helpers
+
+    #if os(iOS)
+    private var mobileSettingsBackground: some View {
+        ZStack {
+            Color.platformWindowBackground
+            RadialGradient(
+                colors: [tint.opacity(0.12), Color.clear],
+                center: .topLeading,
+                startRadius: 0,
+                endRadius: 420
+            )
+            RadialGradient(
+                colors: [secondaryTint.opacity(0.10), Color.clear],
+                center: .bottomTrailing,
+                startRadius: 60,
+                endRadius: 540
+            )
+        }
+    }
+    #endif
 
     private var heroBackground: some View {
         ZStack {

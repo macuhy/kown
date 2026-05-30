@@ -24,19 +24,18 @@ struct PerformanceSettingsView: View {
 
     var body: some View {
         #if os(iOS)
-        Form {
-            heroSection
-            Section {
-                picker
-            } header: {
-                Text("流式刷新间隔")
-            } footer: {
-                Text(footerText)
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 16) {
+                heroCard
+                settingCard
+                guideCard
             }
-            Section("档位说明") {
-                intervalGuide
-            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 18)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
+        .background(mobileSettingsBackground.ignoresSafeArea())
+        .scrollIndicators(.hidden)
         #else
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
@@ -163,6 +162,9 @@ struct PerformanceSettingsView: View {
                 Text("\(ms) ms").tag(ms)
             }
         }
+        #if os(iOS)
+        .pickerStyle(.segmented)
+        #endif
         #if os(macOS)
         .pickerStyle(.segmented)
         #endif
@@ -182,6 +184,24 @@ struct PerformanceSettingsView: View {
     // MARK: - Styling helpers
 
     #if os(iOS)
+    private var mobileSettingsBackground: some View {
+        ZStack {
+            Color.platformWindowBackground
+            RadialGradient(
+                colors: [tint.opacity(0.13), Color.clear],
+                center: .topLeading,
+                startRadius: 0,
+                endRadius: 420
+            )
+            RadialGradient(
+                colors: [secondaryTint.opacity(0.10), Color.clear],
+                center: .bottomTrailing,
+                startRadius: 50,
+                endRadius: 520
+            )
+        }
+    }
+
     private var heroSection: some View {
         Section {
             heroCard

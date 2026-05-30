@@ -65,12 +65,21 @@ struct BackupSettingsView: View {
     @ViewBuilder
     private var platformBody: some View {
         #if os(iOS)
-        Form {
-            heroSection
-            exportSection
-            importSection
-            statusSection
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 16) {
+                heroCard
+                exportCard
+                importCard
+                if resultMessage != nil || errorMessage != nil {
+                    statusCard
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 18)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
+        .background(mobileSettingsBackground.ignoresSafeArea())
+        .scrollIndicators(.hidden)
         #else
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
@@ -195,6 +204,24 @@ struct BackupSettingsView: View {
     // MARK: - iOS Form sections
 
     #if os(iOS)
+    private var mobileSettingsBackground: some View {
+        ZStack {
+            Color.platformWindowBackground
+            RadialGradient(
+                colors: [tint.opacity(0.13), Color.clear],
+                center: .topLeading,
+                startRadius: 0,
+                endRadius: 420
+            )
+            RadialGradient(
+                colors: [secondaryTint.opacity(0.10), Color.clear],
+                center: .bottomTrailing,
+                startRadius: 50,
+                endRadius: 520
+            )
+        }
+    }
+
     private var heroSection: some View {
         Section {
             heroCard

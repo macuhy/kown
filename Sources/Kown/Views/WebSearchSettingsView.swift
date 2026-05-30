@@ -13,6 +13,21 @@ struct WebSearchSettingsView: View {
     private let secondaryTint = Color(red: 0.08, green: 0.70, blue: 0.78)
 
     var body: some View {
+        #if os(iOS)
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 16) {
+                heroCard
+                configCard
+                keyCard
+                statusBar
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 18)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+        .background(mobileSettingsBackground.ignoresSafeArea())
+        .scrollIndicators(.hidden)
+        #else
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 heroCard
@@ -23,6 +38,7 @@ struct WebSearchSettingsView: View {
             .padding(24)
             .frame(maxWidth: 860, alignment: .topLeading)
         }
+        #endif
     }
 
     private var heroCard: some View {
@@ -179,47 +195,75 @@ struct WebSearchSettingsView: View {
     }
 
     private var keyButtons: some View {
-        HStack(spacing: 8) {
-            Button {
-                saveKey()
-            } label: {
-                Label("保存", systemImage: "key.fill")
+        #if os(iOS)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                saveKeyButton
+                testKeyButton
+                clearKeyButton
             }
-            .controlSize(.small)
-            .buttonStyle(.borderedProminent)
-            .disabled(apiKey.isEmpty || !keyDirty)
-
-            Button {
-                runTest()
-            } label: {
-                if testing {
-                    HStack(spacing: 6) {
-                        ProgressView().controlSize(.small)
-                        Text("测试中")
-                    }
-                } else {
-                    Label("测试", systemImage: "bolt.horizontal.circle")
+            VStack(alignment: .leading, spacing: 9) {
+                HStack(spacing: 8) {
+                    saveKeyButton
+                    testKeyButton
                 }
+                clearKeyButton
+            }
+        }
+        #else
+        HStack(spacing: 8) {
+            saveKeyButton
+            testKeyButton
+            clearKeyButton
+        }
+        .fixedSize(horizontal: true, vertical: false)
+        #endif
+    }
+
+    private var saveKeyButton: some View {
+        Button {
+            saveKey()
+        } label: {
+            Label("保存", systemImage: "key.fill")
+        }
+        .controlSize(.small)
+        .buttonStyle(.borderedProminent)
+        .disabled(apiKey.isEmpty || !keyDirty)
+    }
+
+    private var testKeyButton: some View {
+        Button {
+            runTest()
+        } label: {
+            if testing {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text("测试中")
+                }
+            } else {
+                Label("测试", systemImage: "bolt.horizontal.circle")
+            }
+        }
+        .controlSize(.small)
+        .buttonStyle(.bordered)
+        .disabled(!canTest)
+    }
+
+    @ViewBuilder
+    private var clearKeyButton: some View {
+        if viewModel.hasWebSearchKey {
+            Button(role: .destructive) {
+                viewModel.clearWebSearchKey()
+                apiKey = ""
+                keyDirty = false
+                flash(success: "Key 已清除")
+            } label: {
+                Label("清除", systemImage: "trash")
             }
             .controlSize(.small)
             .buttonStyle(.bordered)
-            .disabled(!canTest)
-
-            if viewModel.hasWebSearchKey {
-                Button(role: .destructive) {
-                    viewModel.clearWebSearchKey()
-                    apiKey = ""
-                    keyDirty = false
-                    flash(success: "Key 已清除")
-                } label: {
-                    Image(systemName: "trash")
-                }
-                .controlSize(.small)
-                .buttonStyle(.bordered)
-                .help("清除已保存的 Key")
-            }
+            .help("清除已保存的 Key")
         }
-        .fixedSize(horizontal: true, vertical: false)
     }
 
     @ViewBuilder
@@ -232,6 +276,26 @@ struct WebSearchSettingsView: View {
     }
 
     // MARK: - Styling helpers
+
+    #if os(iOS)
+    private var mobileSettingsBackground: some View {
+        ZStack {
+            Color.platformWindowBackground
+            RadialGradient(
+                colors: [tint.opacity(0.13), Color.clear],
+                center: .topLeading,
+                startRadius: 0,
+                endRadius: 420
+            )
+            RadialGradient(
+                colors: [secondaryTint.opacity(0.10), Color.clear],
+                center: .bottomTrailing,
+                startRadius: 40,
+                endRadius: 520
+            )
+        }
+    }
+    #endif
 
     private var shortBaseURL: String {
         let raw = viewModel.webSearchConfig.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)

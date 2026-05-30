@@ -38,13 +38,79 @@ struct ChangelogView: View {
         #else
         .navigationTitle("更新日志")
         .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button("知道了") {
-                    service.markCurrentSeen()
-                    dismiss()
+            if !embeddedInSettings {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("知道了") {
+                        service.markCurrentSeen()
+                        dismiss()
+                    }
                 }
             }
         }
+        #endif
+    }
+
+    private var contentSpacing: CGFloat {
+        #if os(iOS)
+        return embeddedInSettings ? 16 : 18
+        #else
+        return 18
+        #endif
+    }
+
+    private var contentInsets: EdgeInsets {
+        #if os(iOS)
+        return EdgeInsets(top: embeddedInSettings ? 18 : 16, leading: 16, bottom: 28, trailing: 16)
+        #else
+        return EdgeInsets(top: 22, leading: embeddedInSettings ? 24 : 22, bottom: 22, trailing: embeddedInSettings ? 24 : 22)
+        #endif
+    }
+
+    private var contentMaxWidth: CGFloat? {
+        #if os(iOS)
+        return .infinity
+        #else
+        return 860
+        #endif
+    }
+
+    private var latestCardPadding: CGFloat {
+        #if os(iOS)
+        return 18
+        #else
+        return 22
+        #endif
+    }
+
+    private var latestCornerRadius: CGFloat {
+        #if os(iOS)
+        return 24
+        #else
+        return 28
+        #endif
+    }
+
+    private var latestVersionFontSize: CGFloat {
+        #if os(iOS)
+        return 30
+        #else
+        return 34
+        #endif
+    }
+
+    private var entryCardPadding: CGFloat {
+        #if os(iOS)
+        return 15
+        #else
+        return 16
+        #endif
+    }
+
+    private var entryCornerRadius: CGFloat {
+        #if os(iOS)
+        return 20
+        #else
+        return 22
         #endif
     }
 
@@ -83,35 +149,122 @@ struct ChangelogView: View {
 
     private var content: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: contentSpacing) {
+                #if os(iOS)
+                if embeddedInSettings {
+                    settingsIntroCard
+                }
+                #endif
                 if entries.isEmpty {
                     emptyState
                 } else {
                     latestCard(entries[0])
                     if entries.count > 1 {
-                        HStack {
-                            Text("历史版本")
-                                .font(.headline)
-                            Spacer()
-                            Text("\(entries.count - 1) 个版本")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                                .monospacedDigit()
-                        }
-                        .padding(.top, 2)
+                        historyHeader
 
+                        #if os(iOS)
+                        LazyVStack(spacing: 14) {
+                            ForEach(Array(entries.dropFirst().enumerated()), id: \.offset) { index, entry in
+                                timelineEntryCard(
+                                    entry,
+                                    index: index,
+                                    isLast: index == entries.count - 2
+                                )
+                            }
+                        }
+                        #else
                         LazyVStack(spacing: 12) {
                             ForEach(Array(entries.dropFirst().enumerated()), id: \.offset) { _, entry in
                                 entryCard(entry)
                             }
                         }
+                        #endif
                     }
                 }
             }
-            .padding(embeddedInSettings ? 24 : 22)
-            .frame(maxWidth: 860, alignment: .topLeading)
+            .padding(contentInsets)
+            .frame(maxWidth: contentMaxWidth, alignment: .topLeading)
+        }
+        #if os(iOS)
+        .scrollIndicators(.hidden)
+        #endif
+    }
+
+    private var historyHeader: some View {
+        HStack {
+            Text("历史版本")
+                .font(.headline)
+            Spacer()
+            Text("\(max(entries.count - 1, 0)) 个版本")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+        }
+        .padding(.top, 2)
+    }
+
+    #if os(iOS)
+    private var settingsIntroCard: some View {
+        HStack(alignment: .center, spacing: 13) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.orange.opacity(0.95), Color.teal.opacity(0.82)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                Image(systemName: "clock.badge.checkmark")
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+            .frame(width: 54, height: 54)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("版本时间线")
+                    .font(.system(.title3, design: .rounded).weight(.bold))
+                Text("当前 v\(service.currentVersion) · 向下滚动查看每次迭代")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .strokeBorder(Color.teal.opacity(0.18), lineWidth: 1)
         }
     }
+
+    private func timelineEntryCard(_ entry: ChangelogEntry, index: Int, isLast: Bool) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(spacing: 7) {
+                ZStack {
+                    Circle()
+                        .fill(index == 0 ? Color.orange.opacity(0.18) : Color.teal.opacity(0.14))
+                    Circle()
+                        .fill(index == 0 ? Color.orange : Color.teal)
+                        .frame(width: 8, height: 8)
+                }
+                .frame(width: 20, height: 20)
+
+                if !isLast {
+                    Rectangle()
+                        .fill(Color.secondary.opacity(0.16))
+                        .frame(width: 2)
+                        .frame(maxHeight: .infinity)
+                }
+            }
+            .frame(width: 22)
+
+            entryCard(entry)
+        }
+    }
+    #endif
 
     private func latestCard(_ entry: ChangelogEntry) -> some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -124,7 +277,7 @@ struct ChangelogView: View {
                         }
                     }
                     Text("v\(entry.version)")
-                        .font(.system(size: 34, weight: .black, design: .rounded))
+                        .font(.system(size: latestVersionFontSize, weight: .black, design: .rounded))
                         .monospacedDigit()
                     Text("这次更新包含 \(entry.itemCount) 项改动")
                         .font(.callout)
@@ -143,13 +296,13 @@ struct ChangelogView: View {
                 }
             }
         }
-        .padding(22)
+        .padding(latestCardPadding)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .background(
             ZStack {
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                RoundedRectangle(cornerRadius: latestCornerRadius, style: .continuous)
                     .fill(.regularMaterial)
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                RoundedRectangle(cornerRadius: latestCornerRadius, style: .continuous)
                     .fill(
                         LinearGradient(
                             colors: [Color.orange.opacity(0.14), Color.teal.opacity(0.10), Color.clear],
@@ -160,7 +313,7 @@ struct ChangelogView: View {
             }
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
+            RoundedRectangle(cornerRadius: latestCornerRadius, style: .continuous)
                 .strokeBorder(Color.orange.opacity(0.22), lineWidth: 1)
         }
         .shadow(color: Color.orange.opacity(0.08), radius: 22, x: 0, y: 12)
@@ -195,11 +348,11 @@ struct ChangelogView: View {
                 }
             }
         }
-        .padding(16)
+        .padding(entryCardPadding)
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: entryCornerRadius, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
+            RoundedRectangle(cornerRadius: entryCornerRadius, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
         }
     }

@@ -16,12 +16,16 @@ struct MainContentView: View {
                 workspacePathBar
                 content
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                #if os(iOS)
+                mobileComposerDock
+                #else
                 ActiveProviderBar(viewModel: viewModel)
                 InputBarView(
                     viewModel: viewModel,
                     showSystemPromptDrawer: $showSystemPromptDrawer,
                     inputFocused: $inputFocused
                 )
+                #endif
             }
         }
         .navigationTitle(viewModel.selectedConversation?.title ?? "New Conversation")
@@ -49,6 +53,7 @@ struct MainContentView: View {
             }
             #if os(iOS)
             .scrollDismissesKeyboard(.interactively)
+            .contentMargins(.bottom, 10, for: .scrollContent)
             #endif
         } else {
             ScrollViewReader { proxy in
@@ -115,6 +120,7 @@ struct MainContentView: View {
                 }
                 #if os(iOS)
                 .scrollDismissesKeyboard(.interactively)
+                .contentMargins(.bottom, 14, for: .scrollContent)
                 #endif
             }
         }
@@ -192,7 +198,11 @@ struct MainContentView: View {
                     .strokeBorder(Color.accentColor.opacity(0.18), lineWidth: 1)
             }
             .padding(.horizontal, 14)
+            #if os(iOS)
+            .padding(.vertical, 6)
+            #else
             .padding(.vertical, 8)
+            #endif
             .background {
                 Rectangle().fill(.thinMaterial)
             }
@@ -204,18 +214,38 @@ struct MainContentView: View {
 
     #if os(iOS)
     private var mobileModeBar: some View {
-        HStack {
-            Spacer(minLength: 0)
+        VStack(spacing: 8) {
+            HStack(spacing: 10) {
+                Label("Mode", systemImage: "sparkles")
+                    .font(.caption.weight(.black))
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+                    .tracking(0.8)
+
+                Spacer(minLength: 0)
+
+                Text(viewModel.currentMode.displayName)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(modeTint.opacity(0.92))
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 4)
+                    .background(modeTint.opacity(0.12), in: Capsule())
+            }
+
             ModeTabsView(viewModel: viewModel)
-            Spacer(minLength: 0)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
+        .padding(.horizontal, 14)
+        .padding(.top, 8)
+        .padding(.bottom, 10)
         .background {
             ZStack {
-                Rectangle().fill(.bar)
+                Rectangle().fill(.ultraThinMaterial)
                 LinearGradient(
-                    colors: [Color.accentColor.opacity(0.08), Color.clear],
+                    colors: [
+                        modeTint.opacity(0.12),
+                        Color.orange.opacity(viewModel.currentMode == .debate ? 0.08 : 0.03),
+                        Color.clear
+                    ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
@@ -225,6 +255,43 @@ struct MainContentView: View {
             Rectangle()
                 .fill(Color.primary.opacity(0.07))
                 .frame(height: 1)
+        }
+    }
+
+    private var mobileComposerDock: some View {
+        VStack(spacing: 0) {
+            ActiveProviderBar(viewModel: viewModel)
+                .padding(.top, 4)
+            InputBarView(
+                viewModel: viewModel,
+                showSystemPromptDrawer: $showSystemPromptDrawer,
+                inputFocused: $inputFocused
+            )
+        }
+        .background {
+            ZStack(alignment: .top) {
+                Rectangle().fill(.ultraThinMaterial)
+                LinearGradient(
+                    colors: [modeTint.opacity(0.10), Color.clear],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            }
+            .ignoresSafeArea(edges: .bottom)
+        }
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(Color.primary.opacity(0.07))
+                .frame(height: 1)
+        }
+    }
+
+    private var modeTint: Color {
+        switch viewModel.currentMode {
+        case .council: return Color(red: 0.10, green: 0.66, blue: 0.56)
+        case .direct:  return Color(red: 0.16, green: 0.48, blue: 0.94)
+        case .compare: return Color(red: 0.91, green: 0.55, blue: 0.20)
+        case .debate:  return Color(red: 0.88, green: 0.35, blue: 0.22)
         }
     }
     #endif

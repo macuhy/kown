@@ -17,7 +17,7 @@ struct ConversationRowView: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             ZStack {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: iconCorner, style: .continuous)
                     .fill(
                         LinearGradient(
                             colors: [
@@ -32,9 +32,9 @@ struct ConversationRowView: View {
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(isSelected ? .white : modeColor)
             }
-            .frame(width: 34, height: 34)
+            .frame(width: iconSize, height: iconSize)
             .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: iconCorner, style: .continuous)
                     .strokeBorder((isSelected ? Color.white : modeColor).opacity(isSelected ? 0.25 : 0.16), lineWidth: 1)
             }
 
@@ -86,14 +86,23 @@ struct ConversationRowView: View {
             }
 
             Spacer(minLength: 0)
+
+            #if os(iOS)
+            if !isRenaming {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(isSelected ? modeColor.opacity(0.95) : Color.secondary.opacity(0.45))
+                    .padding(.top, 10)
+            }
+            #endif
         }
         .padding(.horizontal, 11)
-        .padding(.vertical, 11)
+        .padding(.vertical, rowVerticalPadding)
         .background(
             ZStack {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: rowCorner, style: .continuous)
                     .fill(isSelected ? modeColor.opacity(0.13) : Color.platformControlBackground.opacity(0.30))
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: rowCorner, style: .continuous)
                     .fill(
                         LinearGradient(
                             colors: [modeColor.opacity(isSelected ? 0.10 : 0.035), Color.clear],
@@ -104,12 +113,12 @@ struct ConversationRowView: View {
             }
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: rowCorner, style: .continuous)
                 .strokeBorder(isSelected ? modeColor.opacity(0.36) : Color.primary.opacity(0.06), lineWidth: 1)
         )
-        .shadow(color: modeColor.opacity(isSelected ? 0.10 : 0.03), radius: isSelected ? 14 : 8, x: 0, y: 6)
+        .shadow(color: modeColor.opacity(isSelected ? 0.12 : 0.035), radius: isSelected ? 16 : 9, x: 0, y: 7)
         // 整行可点 = 选中（重命名状态下不响应，避免点 TextField 退出 rename）
-        .contentShape(Rectangle())
+        .contentShape(RoundedRectangle(cornerRadius: rowCorner, style: .continuous))
         .onTapGesture {
             if !isRenaming { onSelect() }
         }
@@ -121,6 +130,38 @@ struct ConversationRowView: View {
             Button("删除", role: .destructive) { onDelete() }
             Button("取消", role: .cancel) { }
         }
+    }
+
+    private var iconSize: CGFloat {
+        #if os(iOS)
+        return 38
+        #else
+        return 34
+        #endif
+    }
+
+    private var iconCorner: CGFloat {
+        #if os(iOS)
+        return 14
+        #else
+        return 12
+        #endif
+    }
+
+    private var rowCorner: CGFloat {
+        #if os(iOS)
+        return 20
+        #else
+        return 16
+        #endif
+    }
+
+    private var rowVerticalPadding: CGFloat {
+        #if os(iOS)
+        return 13
+        #else
+        return 11
+        #endif
     }
 
     private var modeColor: Color {

@@ -12,6 +12,9 @@ struct ModeTabsView: View {
             }
         }
         .padding(4)
+        #if os(iOS)
+        .frame(maxWidth: .infinity)
+        #endif
         .background {
             ZStack {
                 Capsule()
@@ -53,14 +56,18 @@ struct ModeTabsView: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: mode.symbol)
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.system(size: tabIconSize, weight: .bold))
                 Text(mode.displayName)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.76)
             }
-            .font(.caption.weight(.bold))
+            .font(tabFont)
             .foregroundStyle(isActive ? Color.white : Color.secondary)
-            .padding(.horizontal, 11)
-            .padding(.vertical, 6)
+            .padding(.horizontal, tabHorizontalPadding)
+            .padding(.vertical, tabVerticalPadding)
+            #if os(iOS)
+            .frame(maxWidth: .infinity, minHeight: 40)
+            #endif
             .background {
                 if isActive {
                     Capsule()
@@ -84,6 +91,38 @@ struct ModeTabsView: View {
         }
         .buttonStyle(.plain)
         .help(mode.displayName)
+    }
+
+    private var tabFont: Font {
+        #if os(iOS)
+        .caption2.weight(.black)
+        #else
+        .caption.weight(.bold)
+        #endif
+    }
+
+    private var tabIconSize: CGFloat {
+        #if os(iOS)
+        12
+        #else
+        12
+        #endif
+    }
+
+    private var tabHorizontalPadding: CGFloat {
+        #if os(iOS)
+        4
+        #else
+        11
+        #endif
+    }
+
+    private var tabVerticalPadding: CGFloat {
+        #if os(iOS)
+        8
+        #else
+        6
+        #endif
     }
 
     private func handleTap(_ mode: ConversationMode) {

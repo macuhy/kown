@@ -13,15 +13,22 @@ struct ICloudSyncSettingsView: View {
 
     var body: some View {
         #if os(iOS)
-        Form {
-            heroSection
-            toggleSection
-            scopeSection
-            if conflictBackupCount > 0 {
-                conflictBackupSection
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 16) {
+                heroCard
+                toggleCard
+                scopeCard
+                if conflictBackupCount > 0 {
+                    conflictBackupCard
+                }
+                tipsCard
             }
-            tipsSection
+            .padding(.horizontal, 16)
+            .padding(.vertical, 18)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
+        .background(mobileSettingsBackground.ignoresSafeArea())
+        .scrollIndicators(.hidden)
         .task {
             conflictBackupCount = viewModel.iCloudSync.conflictBackupFileCount()
         }
@@ -239,6 +246,24 @@ struct ICloudSyncSettingsView: View {
     // MARK: - iOS Form sections
 
     #if os(iOS)
+    private var mobileSettingsBackground: some View {
+        ZStack {
+            Color.platformWindowBackground
+            RadialGradient(
+                colors: [tint.opacity(0.12), Color.clear],
+                center: .topLeading,
+                startRadius: 0,
+                endRadius: 420
+            )
+            RadialGradient(
+                colors: [secondaryTint.opacity(0.10), Color.clear],
+                center: .bottomTrailing,
+                startRadius: 60,
+                endRadius: 540
+            )
+        }
+    }
+
     private var heroSection: some View {
         Section {
             heroCard
