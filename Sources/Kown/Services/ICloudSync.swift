@@ -343,22 +343,49 @@ final class ICloudSync {
                 try? fm.createDirectory(at: target, withIntermediateDirectories: true)
                 continue
             }
-            if fm.fileExists(atPath: target.path) {
-                if !overwrite { continue }
-                try? fm.removeItem(at: target)
-            }
-            do {
-                try fm.createDirectory(
-                    at: target.deletingLastPathComponent(),
-                    withIntermediateDirectories: true
-                )
-                try fm.copyItem(at: url, to: target)
+            // 不覆盖模式:目标已存在直接跳过(coordinatedCopy 内部也会按需删旧)
+            if !overwrite, fm.fileExists(atPath: target.path) { continue }
+            // 走 NSFileCoordinator 协调拷贝 —— 单个失败静默跳过,不阻塞整体迁移
+            if coordinatedCopy(from: url, to: target) {
                 count += 1
-            } catch {
-                // 单个失败不阻塞整体迁移
-                continue
             }
         }
         return count
+    }
+
+    /// 用 `NSFileCoordinator` 协调地把单个文件从 `src` 拷到 `dst`。
+    ///
+    /// **为什么不能用裸 `FileManager.copyItem`**:`src`/`dst` 落在 iCloud ubiquity
+    /// 容器里时,容器由 FileProvider(`bird`/`fileproviderd`)托管。裸 copy:
+    /// 1. 读云端 placeholder 会**同步阻塞**等系统 materialize,FileProvider 忙时可能卡死
+    ///    (主迁移就是卡在某个 `copyItem` 上 100% 不动);
+    /// 2. 未协调的写入会让 iCloud 把同名文件 fork 成 `.kown 2/3/...` 冲突副本。
+    /// 协调访问:读端会先把云文件拉下来再给我们,写端拿到独占 slot 再落盘,
+    /// 既不会无限卡,也不会产生冲突副本。
+    private nonisolated static func coordinatedCopy(from src: URL, to dst: URL) -> Bool {
+        let fm = FileManager.default
+        let coordinator = NSFileCoordinator()
+        var coordError: NSError?
+        var copied = false
+        coordinator.coordinate(
+            readingItemAt: src, options: [],
+            writingItemAt: dst, options: .forReplacing,
+            error: &coordError
+        ) { readURL, writeURL in
+            do {
+                try fm.createDirectory(
+                    at: writeURL.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                if fm.fileExists(atPath: writeURL.path) {
+                    try fm.removeItem(at: writeURL)
+                }
+                try fm.copyItem(at: readURL, to: writeURL)
+                copied = true
+            } catch {
+                copied = false
+            }
+        }
+        return copied && coordError == nil
     }
 }

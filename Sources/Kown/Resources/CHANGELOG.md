@@ -1,5 +1,9 @@
 # 更新日志
 
+## 0.6.14 — 2026-05-29
+### 修复(严重)
+- **iCloud 迁移卡死 + 冲突副本根治** — `copyTree` 之前用裸 `FileManager.copyItem` 直接读写 iCloud 容器:读云端 placeholder 会同步阻塞等 materialize(FileProvider 忙时整迁移卡死在某个文件上 100% 不动),未协调的写入又让 iCloud 把同名文件 fork 成 `.kown 2/3/4...`(那上千个冲突文件的来源)。现在每个文件走 `NSFileCoordinator` 协调读写 —— 读端先把云文件拉下来再交付,写端拿独占 slot 再落盘,既不会无限卡,也不再生成冲突副本。migrate / mirror / reconcile 三条路径都受益
+
 ## 0.6.13 — 2026-05-29
 ### 修复(严重)
 - **自动更新无限循环 /「安装并重启」不生效** — 之前每个发布的包 `CFBundleVersion` 都被硬编码成 `1`,而 appcast 的 `sparkle:version` 用 git 提交数(单调递增)。装好新版后 app 仍报 build 1,Sparkle 一比 `8 > 1` 又弹更新,点安装重启后还是 build 1 → 死循环。现在 `CFBundleVersion` 走 `$(CURRENT_PROJECT_VERSION)`,由 CI 注入 git 提交数,和 appcast 对齐,Sparkle 正确识别"已是最新"
