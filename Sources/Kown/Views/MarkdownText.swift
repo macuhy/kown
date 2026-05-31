@@ -9,7 +9,8 @@ import MarkdownUI
 ///   - 默认走 `Text(AttributedString(markdown:))` — **整个回答作为单个 Text view**,
 ///     支持跨段/跨标题/跨列表的全文拖选。内联格式(粗体/斜体/inline code/链接)保留。
 ///     代价:H1/H2 标题不放大、列表无缩进 — 对 LLM chat 内容是可接受的取舍。
-///   - 含代码块(```或 ~~~)/ 表格 的回答 fallback 到 swift-markdown-ui,保留代码块视觉。
+///   - 含代码块(```或 ~~~)/ 表格 / 任务列表(`- [ ]`)的回答 fallback 到 swift-markdown-ui,
+///     保留代码块、表格、checkbox 视觉(`AttributedString` 的 inlineOnly 会把这些渲染成字面字符)。
 ///     这种回答跨块选择本来就少需求(代码块要复制有右上角按钮)。
 struct MarkdownText: View {
     let text: String
@@ -46,12 +47,15 @@ struct MarkdownText: View {
         }
     }
 
-    /// 含代码块 / 表格 / 表头分隔 — 这些 block 用 AttributedString 渲染体验差,继续走 MarkdownUI
+    /// 含代码块 / 表格 / 表头分隔 / 任务列表 — 这些 block 用 AttributedString 渲染体验差,继续走 MarkdownUI
     private static func hasBlockLevelExtras(_ text: String) -> Bool {
         text.contains("```")
         || text.contains("~~~")
         || text.range(of: #"^\|.+\|"#, options: [.regularExpression, .anchored]) != nil
         || text.range(of: #"\n\|.+\|"#, options: .regularExpression) != nil
+        // 任务列表:行首(允许缩进)`- [ ]` / `* [x]`。AttributedString 的 inlineOnly 会原样显示
+        // 成 `- [ ]`,只有 MarkdownUI 会渲染成 checkbox。
+        || text.range(of: #"(?m)^[ \t]*[-*] \[[ xX]\] "#, options: .regularExpression) != nil
     }
 
     /// `Theme` 不是 Sendable;计算属性每次实例化,SwiftUI 缓存渲染结果。
