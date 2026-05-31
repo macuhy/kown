@@ -385,6 +385,20 @@ struct AppliedWritesStrip: View {
     }
 }
 
+/// 在 Turn 回答下方渲染「引用来源」卡片 —— 当 `turn.sources` 非空时显示 `SourcesStrip`。
+/// 与 `AppliedWritesStrip` 同构,各模式视图(Direct / Council / Compare / Debate)在
+/// 渲染完回答(及 AppliedWritesStrip)后,直接 `TurnSourcesStrip(turn: turn)` 即可。
+/// turn.sources 为 nil / 空时返回 EmptyView,不占布局。
+struct TurnSourcesStrip: View {
+    let turn: Turn
+
+    var body: some View {
+        if let sources = turn.sources, !sources.isEmpty {
+            SourcesStrip(sources: sources)
+        }
+    }
+}
+
 /// 单条 AppliedWrite 卡片。点 path 那一行展开看新内容。
 struct AppliedWriteCard: View {
     let write: AppliedWrite

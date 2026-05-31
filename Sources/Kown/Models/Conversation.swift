@@ -123,6 +123,8 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
     var appliedWrites: [AppliedWrite]?
     /// 用户本轮附带的图片(引用,字节单独存盘)。旧会话没有该字段,保持 optional 兼容旧 JSON。
     var images: [TurnImage]?
+    /// 本轮 web_search 命中的引用来源(结构化留痕)。旧会话没有该字段,保持 optional 兼容旧 JSON。
+    var sources: [SourceRef]?
 
     init(id: UUID = UUID(),
          timestamp: Date = Date(),
@@ -140,7 +142,8 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
          panelOrder: [String] = [],
          debateRounds: [DebateRound]? = nil,
          appliedWrites: [AppliedWrite]? = nil,
-         images: [TurnImage]? = nil) {
+         images: [TurnImage]? = nil,
+         sources: [SourceRef]? = nil) {
         self.id = id
         self.timestamp = timestamp
         self.prompt = prompt
@@ -158,6 +161,37 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
         self.debateRounds = debateRounds
         self.appliedWrites = appliedWrites
         self.images = images
+        self.sources = sources
+    }
+
+    // 兼容旧 JSON(缺新字段时 sources 等以 decodeIfPresent 解码,默认 nil),不破坏现有存档/同步。
+    enum CodingKeys: String, CodingKey {
+        case id, timestamp, prompt, systemPrompt, responses, errors
+        case chairProviderID, chairSummary, chairError
+        case summaryProviderID, summaryText, summaryError
+        case providerSnapshot, panelOrder, debateRounds, appliedWrites, images, sources
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(UUID.self, forKey: .id)
+        self.timestamp = try c.decode(Date.self, forKey: .timestamp)
+        self.prompt = try c.decode(String.self, forKey: .prompt)
+        self.systemPrompt = try c.decode(String.self, forKey: .systemPrompt)
+        self.responses = try c.decodeIfPresent([String: String].self, forKey: .responses) ?? [:]
+        self.errors = try c.decodeIfPresent([String: String].self, forKey: .errors) ?? [:]
+        self.chairProviderID = try c.decodeIfPresent(String.self, forKey: .chairProviderID)
+        self.chairSummary = try c.decodeIfPresent(String.self, forKey: .chairSummary)
+        self.chairError = try c.decodeIfPresent(String.self, forKey: .chairError)
+        self.summaryProviderID = try c.decodeIfPresent(String.self, forKey: .summaryProviderID)
+        self.summaryText = try c.decodeIfPresent(String.self, forKey: .summaryText)
+        self.summaryError = try c.decodeIfPresent(String.self, forKey: .summaryError)
+        self.providerSnapshot = try c.decodeIfPresent([String: ProviderConfig].self, forKey: .providerSnapshot) ?? [:]
+        self.panelOrder = try c.decodeIfPresent([String].self, forKey: .panelOrder) ?? []
+        self.debateRounds = try c.decodeIfPresent([DebateRound].self, forKey: .debateRounds)
+        self.appliedWrites = try c.decodeIfPresent([AppliedWrite].self, forKey: .appliedWrites)
+        self.images = try c.decodeIfPresent([TurnImage].self, forKey: .images)
+        self.sources = try c.decodeIfPresent([SourceRef].self, forKey: .sources)
     }
 
     /// 取顺序化的 panel 配置（按发送顺序，Chair 不在内）
@@ -175,6 +209,24 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
     var summaryConfig: ProviderConfig? {
         guard let id = summaryProviderID else { return nil }
         return providerSnapshot[id]
+    }
+}
+
+/// 一条 web_search 命中的引用来源(结构化留痕),随 Turn 一起存盘/同步,并在回答下方展示。
+struct SourceRef: Identifiable, Codable, Hashable, Sendable {
+    /// 以 url 作稳定标识(同一回合内来源 url 已去重)。
+    var id: String { url }
+    /// 来源标题
+    var title: String
+    /// 来源链接
+    var url: String
+    /// 摘要片段
+    var snippet: String
+
+    init(title: String, url: String, snippet: String) {
+        self.title = title
+        self.url = url
+        self.snippet = snippet
     }
 }
 

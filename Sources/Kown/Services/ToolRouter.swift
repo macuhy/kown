@@ -53,6 +53,28 @@ struct WebSearchSession: Sendable {
 struct ToolRouter: Sendable {
     let session: WebSearchSession
 
+    /// 从一次 web_search 的 `ToolResult` 里把命中来源解析成 `[SourceRef]`,用于结构化留痕。
+    /// 由于 `ToolRouter` 是无状态值类型(每次工具调用都新建),来源不在实例里累积,
+    /// 而是由调用方(AgentRunner / AppViewModel)在拿到 `ToolResult` 后调此静态方法收集,
+    /// 再写回对应 `Turn.sources`。解析的是 `runWebSearch` 自己产出的 JSON,字段保持一致。
+    /// 失败 / 非 web_search / 错误结果一律返回空数组,绝不抛错。
+    static func sources(from result: ToolResult) -> [SourceRef] {
+        guard result.name == ToolCatalog.webSearch.name, !result.isError else { return [] }
+        guard let data = result.content.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let results = json["results"] as? [[String: Any]] else { return [] }
+        var seen = Set<String>()
+        var refs: [SourceRef] = []
+        for item in results {
+            guard let url = item["url"] as? String, !url.isEmpty, !seen.contains(url) else { continue }
+            seen.insert(url)
+            let title = (item["title"] as? String) ?? url
+            let snippet = (item["snippet"] as? String) ?? ""
+            refs.append(SourceRef(title: title, url: url, snippet: snippet))
+        }
+        return refs
+    }
+
     func execute(_ call: ToolCall) async -> ToolResult {
         switch call.name {
         case ToolCatalog.webSearch.name:
