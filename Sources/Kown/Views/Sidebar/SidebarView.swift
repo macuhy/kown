@@ -6,6 +6,8 @@ struct SidebarView: View {
     var onSelectConversation: () -> Void = {}
     @State private var renamingID: UUID?
     @State private var renameDraft: String = ""
+    /// 正在编辑会话系统提示的会话(nil = 未打开)。包一层以满足 `.sheet(item:)` 的 Identifiable。
+    @State private var promptEditTarget: IdentifiedID?
     /// 跨会话全文搜索:内存倒排索引,随侧栏生命周期存在,不落盘(重启重建)。
     @State private var searchIndex = ConversationSearchIndex()
     /// 搜索框输入
@@ -48,6 +50,9 @@ struct SidebarView: View {
         .onAppear { searchIndex.rebuild(viewModel.conversations) }
         .onChange(of: viewModel.conversations) { _, newValue in
             searchIndex.rebuild(newValue)
+        }
+        .sheet(item: $promptEditTarget) { target in
+            ConversationPromptSheet(viewModel: viewModel, conversationID: target.id)
         }
     }
 
@@ -280,7 +285,8 @@ struct SidebarView: View {
                                     renamingID = nil
                                 },
                                 onCancelRename: { renamingID = nil },
-                                onDelete: { viewModel.deleteConversation(conv.id) }
+                                onDelete: { viewModel.deleteConversation(conv.id) },
+                                onEditSystemPrompt: { promptEditTarget = IdentifiedID(id: conv.id) }
                             )
                             // 搜索态下,在行下方展示命中片段(带关键词高亮)
                             if let hit = hits[conv.id], let snippet = highlightedSnippet(hit) {
@@ -347,4 +353,9 @@ struct SidebarView: View {
             + Text(match).foregroundColor(.accentColor).fontWeight(.semibold)
             + Text(post)
     }
+}
+
+/// 把裸 `UUID` 包成 `Identifiable`,供 `.sheet(item:)` 使用(会话系统提示编辑等)。
+struct IdentifiedID: Identifiable, Hashable {
+    let id: UUID
 }

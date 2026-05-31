@@ -245,6 +245,20 @@ final class AppViewModel {
         conversations.insert(moved, at: 0)
     }
 
+    /// 设置(或清空)会话级系统提示。传入 nil/空白即清空,发送时回退全局 systemPrompt。
+    func setConversationSystemPrompt(_ id: UUID, prompt: String?) {
+        guard let idx = conversations.firstIndex(where: { $0.id == id }) else { return }
+        let trimmed = prompt?.trimmingCharacters(in: .whitespacesAndNewlines)
+        conversations[idx].systemPrompt = (trimmed?.isEmpty == false) ? trimmed : nil
+        conversations[idx].updatedAt = Date()
+        ConversationStore.save(conversations[idx])
+    }
+
+    /// 取某会话当前的系统提示(用于编辑入口回填)。
+    func conversationSystemPrompt(_ id: UUID) -> String {
+        conversations.first(where: { $0.id == id })?.systemPrompt ?? ""
+    }
+
     /// 切换 tab：当前会话空 → 直接改模式；非空 → 新建会话。返回 true 表示进行了切换。
     func switchMode(to mode: ConversationMode) -> Bool {
         if let id = selectedConversationID,
@@ -758,7 +772,9 @@ final class AppViewModel {
             WorkspaceManager.buildContext(workspaceURL: $0)
         }
         let sysSnapshot: String = {
-            let base = systemPrompt
+            // 会话级系统提示优先;非 nil 且非空才覆盖全局,否则回退全局 systemPrompt。
+            let convPrompt = conversations[convIdx].systemPrompt?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let base = (convPrompt?.isEmpty == false) ? convPrompt! : systemPrompt
             guard let ws = workspaceContext else { return base }
             if base.isEmpty { return ws }
             return ws + "\n\n" + base

@@ -253,6 +253,8 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
     var workspaceBookmark: Data?
     /// Working folder 的显示路径(仅 UI 展示,实际写入用 bookmark 解析后的 URL)。
     var workspaceDisplayPath: String?
+    /// 本会话的系统提示覆盖。非 nil 且非空时取代全局 `AppViewModel.systemPrompt`;nil/空则回退全局。
+    var systemPrompt: String?
 
     init(id: UUID = UUID(),
          title: String = "New Conversation",
@@ -265,7 +267,8 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
          activeProviderIDs: [UUID] = [],
          activeModelChoices: [ProviderModelChoice] = [],
          workspaceBookmark: Data? = nil,
-         workspaceDisplayPath: String? = nil) {
+         workspaceDisplayPath: String? = nil,
+         systemPrompt: String? = nil) {
         self.id = id
         self.title = title
         self.mode = mode
@@ -278,6 +281,7 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
         self.activeModelChoices = activeModelChoices
         self.workspaceBookmark = workspaceBookmark
         self.workspaceDisplayPath = workspaceDisplayPath
+        self.systemPrompt = systemPrompt
     }
 
     // 兼容旧 JSON(缺新字段)
@@ -295,6 +299,7 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
         self.activeModelChoices = try c.decodeIfPresent([ProviderModelChoice].self, forKey: .activeModelChoices) ?? []
         self.workspaceBookmark = try c.decodeIfPresent(Data.self, forKey: .workspaceBookmark)
         self.workspaceDisplayPath = try c.decodeIfPresent(String.self, forKey: .workspaceDisplayPath)
+        self.systemPrompt = try c.decodeIfPresent(String.self, forKey: .systemPrompt)
     }
 
     var lastPromptPreview: String {

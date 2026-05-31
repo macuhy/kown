@@ -10,6 +10,7 @@ struct ConversationRowView: View {
     let onCommitRename: () -> Void
     let onCancelRename: () -> Void
     let onDelete: () -> Void
+    var onEditSystemPrompt: () -> Void = {}
 
     @State private var confirmDelete = false
     @FocusState private var renameFocused: Bool
@@ -124,6 +125,7 @@ struct ConversationRowView: View {
         }
         .contextMenu {
             Button("重命名") { onStartRename() }
+            Button("会话系统提示…") { onEditSystemPrompt() }
             Button("删除", role: .destructive) { confirmDelete = true }
         }
         .confirmationDialog("删除「\(conversation.title)」?", isPresented: $confirmDelete) {
