@@ -7,6 +7,9 @@ struct DirectTurnsView: View {
     let livePrompt: String?
     var liveImages: [TurnImage] = []
     let livePanel: [ProviderConfig]
+    /// 历史 turn 的分支/编辑动作(由持有 viewModel 的父视图注入)。
+    var onForkTurn: ((UUID) -> Void)? = nil
+    var onEditTurn: ((UUID) -> Void)? = nil
 
     @Environment(\.horizontalSizeClass) private var hSizeClass
 
@@ -26,7 +29,9 @@ struct DirectTurnsView: View {
 
     private func historicalTurn(_ turn: Turn) -> some View {
         directTurnShell(isLive: false) {
-            userBubble(prompt: turn.prompt, timestamp: turn.timestamp, images: turn.images ?? [])
+            userBubble(prompt: turn.prompt, timestamp: turn.timestamp, images: turn.images ?? [],
+                       onFork: onForkTurn.map { f in { f(turn.id) } },
+                       onEdit: onEditTurn.map { f in { f(turn.id) } })
             if let cfg = turn.orderedPanelConfigs.first {
                 let key = cfg.id.uuidString
                 assistantBubble(
@@ -103,7 +108,8 @@ struct DirectTurnsView: View {
         .shadow(color: directTint.opacity(isLive ? 0.10 : 0.05), radius: 22, x: 0, y: 10)
     }
 
-    private func userBubble(prompt: String, timestamp: Date, images: [TurnImage] = []) -> some View {
+    private func userBubble(prompt: String, timestamp: Date, images: [TurnImage] = [],
+                            onFork: (() -> Void)? = nil, onEdit: (() -> Void)? = nil) -> some View {
         HStack {
             Spacer(minLength: userLeadingGutter)
             VStack(alignment: .trailing, spacing: 4) {
@@ -129,9 +135,28 @@ struct DirectTurnsView: View {
                                 .strokeBorder(Color.accentColor.opacity(0.24), lineWidth: 1)
                         }
                 }
-                Text(timestamp, style: .time)
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                HStack(spacing: 6) {
+                    if onFork != nil || onEdit != nil {
+                        Menu {
+                            if let onEdit {
+                                Button { onEdit() } label: { Label("编辑并重发", systemImage: "pencil") }
+                            }
+                            if let onFork {
+                                Button { onFork() } label: { Label("从这里分支", systemImage: "arrow.triangle.branch") }
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                        .menuStyle(.borderlessButton)
+                        .menuIndicator(.hidden)
+                        .fixedSize()
+                    }
+                    Text(timestamp, style: .time)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
             }
         }
     }

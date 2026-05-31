@@ -42,7 +42,8 @@ struct CompareTurnsView: View {
             icon: "rectangle.split.2x1.fill",
             tint: compareTint
         ) {
-            PromptBubble(prompt: turn.prompt, timestamp: turn.timestamp, images: turn.images ?? [])
+            PromptBubble(prompt: turn.prompt, timestamp: turn.timestamp, images: turn.images ?? [],
+                         onFork: { viewModel.forkConversation(fromTurnID: turn.id) })
             comparePanels {
                 ForEach(Array(turn.orderedPanelConfigs.prefix(2))) { cfg in
                     let key = cfg.id.uuidString

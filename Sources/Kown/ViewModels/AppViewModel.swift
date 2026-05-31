@@ -172,6 +172,35 @@ final class AppViewModel {
         }
     }
 
+    /// 从某轮(含)分支出一个新会话:拷贝 turns[0...N] 到新会话,保留模式/模型选择/workspace/会话提示,
+    /// 摘要清零重算。新会话顶到最前并选中。图片引用共享同一同步目录文件(image store 仅追加不删,安全)。
+    func forkConversation(fromTurnID turnID: UUID) {
+        guard let convID = selectedConversationID,
+              let convIdx = conversations.firstIndex(where: { $0.id == convID }),
+              let turnIdx = conversations[convIdx].turns.firstIndex(where: { $0.id == turnID }) else { return }
+        let source = conversations[convIdx]
+        let keptTurns = Array(source.turns[0...turnIdx])
+        let fork = Conversation(
+            title: source.title + " (分支)",
+            mode: source.mode,
+            turns: keptTurns,
+            contextSummary: nil,
+            summarizedThroughTurnCount: 0,
+            activeProviderIDs: source.activeProviderIDs,
+            activeModelChoices: source.activeModelChoices,
+            workspaceBookmark: source.workspaceBookmark,
+            workspaceDisplayPath: source.workspaceDisplayPath,
+            systemPrompt: source.systemPrompt
+        )
+        conversations.insert(fork, at: 0)
+        selectedConversationID = fork.id
+        activeMode = fork.mode
+        ConversationStore.save(fork)
+        applyAlwaysEnableWebSearchIfNeeded()
+        // 复制了多轮 → 后台重算摘要(自身按阈值 self-gate)
+        scheduleSummarization(for: fork.id)
+    }
+
     func selectConversation(_ id: UUID) {
         // 不打断后台运行的请求 — 它绑定的还是原会话 ID(send() 闭包里 captured),
         // 结束后会正确把 turn 写回 `conversations[原 idx]`。当前选中切换只影响 UI 显示。

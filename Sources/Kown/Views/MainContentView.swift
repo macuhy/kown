@@ -153,7 +153,8 @@ struct MainContentView: View {
                                 liveStates: lStates,
                                 livePrompt: lPrompt,
                                 liveImages: lImages,
-                                livePanel: viewModel.providersForCurrentSend().panel
+                                livePanel: viewModel.providersForCurrentSend().panel,
+                                onForkTurn: { viewModel.forkConversation(fromTurnID: $0) }
                             )
                         case .compare:
                             CompareTurnsView(

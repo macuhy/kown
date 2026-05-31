@@ -43,7 +43,8 @@ struct DebateTurnsView: View {
             icon: "quote.bubble.fill",
             tint: debateTint
         ) {
-            PromptBubble(prompt: turn.prompt, timestamp: turn.timestamp, images: turn.images ?? [])
+            PromptBubble(prompt: turn.prompt, timestamp: turn.timestamp, images: turn.images ?? [],
+                         onFork: { viewModel.forkConversation(fromTurnID: turn.id) })
 
             let rounds = (turn.debateRounds ?? []).sorted { $0.index < $1.index }
             if rounds.isEmpty {

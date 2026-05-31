@@ -46,7 +46,8 @@ struct CouncilTurnsView: View {
             icon: "person.3.sequence.fill",
             tint: councilTint
         ) {
-            PromptBubble(prompt: turn.prompt, timestamp: turn.timestamp, images: turn.images ?? [])
+            PromptBubble(prompt: turn.prompt, timestamp: turn.timestamp, images: turn.images ?? [],
+                         onFork: { viewModel.forkConversation(fromTurnID: turn.id) })
             panelStack {
                 ForEach(turn.orderedPanelConfigs) { cfg in
                     let key = cfg.id.uuidString

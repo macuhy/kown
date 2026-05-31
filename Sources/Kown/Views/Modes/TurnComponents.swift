@@ -5,6 +5,10 @@ struct PromptBubble: View {
     let prompt: String
     let timestamp: Date?
     var images: [TurnImage] = []
+    /// 历史 turn 才传:从这条消息分支出新会话。live turn 不传(为 nil 时不显示)。
+    var onFork: (() -> Void)? = nil
+    /// 历史 turn 才传:编辑这条消息并从此处重新生成(截断其后各轮)。
+    var onEdit: (() -> Void)? = nil
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -38,6 +42,24 @@ struct PromptBubble: View {
                         Text(timestamp, style: .time)
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
+                    }
+                    if onFork != nil || onEdit != nil {
+                        Spacer(minLength: 8)
+                        Menu {
+                            if let onEdit {
+                                Button { onEdit() } label: { Label("编辑并重发", systemImage: "pencil") }
+                            }
+                            if let onFork {
+                                Button { onFork() } label: { Label("从这里分支", systemImage: "arrow.triangle.branch") }
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                        .menuStyle(.borderlessButton)
+                        .menuIndicator(.hidden)
+                        .fixedSize()
                     }
                 }
                 if !prompt.isEmpty {
