@@ -58,13 +58,84 @@ struct MarkdownText: View {
     private static var kownTheme: Theme {
         Theme.gitHub
             .text { FontSize(.em(1.0)) }
+            // 行内代码:等宽 + 略小字号 + 淡底色,和正文区分开
             .code {
                 FontFamilyVariant(.monospaced)
                 FontSize(.em(0.92))
+                BackgroundColor(Self.inlineCodeBackground)
             }
+            // 链接:强调色 + 下划线;MarkdownUI 默认即可点击打开
             .link {
                 ForegroundColor(.accentColor)
                 UnderlineStyle(.single)
             }
+            // 代码块:等宽字体 + 横向滚动不换行 + 右上角复制按钮
+            .codeBlock { configuration in
+                CodeBlockView(configuration: configuration)
+            }
+    }
+
+    /// 行内代码底色(深浅色自适应)。
+    fileprivate static var inlineCodeBackground: Color {
+        Color.primary.opacity(0.08)
+    }
+}
+
+/// 代码块渲染:等宽字体 + 横向滚动(长行不换行)+ 右上角「复制」按钮。
+/// macOS 上指针悬停时按钮高亮,iOS 上常驻可点。复制走 `Platform.copyText`。
+private struct CodeBlockView: View {
+    let configuration: CodeBlockConfiguration
+
+    @State private var copied = false
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            // 横向滚动:代码长行保持不换行,溢出可左右滑
+            ScrollView(.horizontal, showsIndicators: true) {
+                configuration.label
+                    .markdownTextStyle {
+                        FontFamilyVariant(.monospaced)
+                        FontSize(.em(0.88))
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    // 让短代码块也能撑满宽度,文字左对齐
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            .background(Self.blockBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(Color.primary.opacity(0.10), lineWidth: 1)
+            )
+
+            copyButton
+                .padding(8)
+        }
+        .markdownMargin(top: .em(0.6), bottom: .em(0.6))
+    }
+
+    private var copyButton: some View {
+        Button {
+            Platform.copyText(configuration.content)
+            withAnimation { copied = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                withAnimation { copied = false }
+            }
+        } label: {
+            Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(copied ? Color.green : Color.secondary)
+                .padding(6)
+                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 6))
+        }
+        .buttonStyle(.plain)
+        .help(copied ? "已复制" : "复制代码")
+        .accessibilityLabel(copied ? "已复制" : "复制代码")
+    }
+
+    private static var blockBackground: Color {
+        Color.primary.opacity(0.05)
     }
 }
