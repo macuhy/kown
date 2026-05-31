@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 /// Settings → "配置备份" tab。
 /// 导出当前 Provider/Web Search/Preference 配置(API Key 可选)→ 一个 JSON 文件;
 /// 导入时支持"覆盖"或"合并"。两端通用(SwiftUI fileExporter / fileImporter)。
+/// 另含"自动备份"(关闭/每日/每周)与"立即备份" + 最近备份列表。
 struct BackupSettingsView: View {
     @Bindable var viewModel: AppViewModel
 
@@ -17,11 +18,18 @@ struct BackupSettingsView: View {
     @State private var resultMessage: String?
     @State private var errorMessage: String?
 
+    // 自动备份状态(镜像 BackupStore 的持久化偏好,binding 改动即写回)。
+    @State private var autoFrequency: BackupFrequency = .off
+    @State private var keepCount: Int = BackupStore.defaultKeepCount
+    @State private var lastBackupDate: Date?
+    @State private var snapshots: [BackupSnapshot] = []
+
     private let tint = Color(red: 0.91, green: 0.55, blue: 0.20)
     private let secondaryTint = Color(red: 0.57, green: 0.42, blue: 0.82)
 
     var body: some View {
         platformBody
+            .onAppear { onAppearSetup() }
             .fileExporter(
                 isPresented: $showExporter,
                 document: pendingExportDocument,
@@ -68,6 +76,7 @@ struct BackupSettingsView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 12) {
                 heroCard
+                autoBackupCard
                 exportCard
                 importCard
                 if resultMessage != nil || errorMessage != nil {
@@ -84,6 +93,7 @@ struct BackupSettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 heroCard
+                autoBackupCard
                 exportCard
                 importCard
                 if resultMessage != nil || errorMessage != nil {
@@ -210,6 +220,102 @@ struct BackupSettingsView: View {
     }
     #endif
 
+    // MARK: - 自动备份
+
+    /// 自动备份控件(频率 / 保留份数 / 立即备份 / 最近时间 + 列表)。
+    private var autoBackupControls: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Picker("自动备份频率", selection: $autoFrequency) {
+                ForEach(BackupFrequency.allCases) { freq in
+                    Text(freq.displayName).tag(freq)
+                }
+            }
+            .pickerStyle(.segmented)
+            .onChange(of: autoFrequency) { _, newValue in
+                BackupStore.autoBackupFrequency = newValue
+            }
+
+            if autoFrequency != .off {
+                Stepper(value: $keepCount, in: 1...50) {
+                    HStack {
+                        Text("保留份数").font(.body.weight(.semibold))
+                        Spacer()
+                        Text("\(keepCount)").foregroundStyle(.secondary)
+                    }
+                }
+                .onChange(of: keepCount) { _, newValue in
+                    BackupStore.autoBackupKeepCount = newValue
+                }
+            }
+
+            HStack {
+                Text("最近备份").font(.caption.weight(.bold)).foregroundStyle(.secondary)
+                Spacer()
+                Text(lastBackupText).font(.caption).foregroundStyle(.secondary)
+            }
+
+            Button {
+                runBackupNow()
+            } label: {
+                Label("立即备份", systemImage: "externaldrive.badge.plus")
+                    .font(.body.weight(.semibold))
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(secondaryTint)
+
+            if snapshots.isEmpty {
+                Text("暂无自动备份。开启频率后会在打开本页 / 进入后台时按计划生成。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("最近 \(snapshots.count) 份")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.secondary)
+                    ForEach(snapshots) { snapshot in
+                        snapshotRow(snapshot)
+                    }
+                }
+            }
+        }
+    }
+
+    private func snapshotRow(_ snapshot: BackupSnapshot) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "doc.zipper")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(secondaryTint)
+                .frame(width: 25, height: 25)
+                .background(secondaryTint.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(Self.dateText(snapshot.createdAt))
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+                Text(Self.sizeText(snapshot.size))
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            Spacer(minLength: 8)
+            Button {
+                BackupStore.deleteSnapshot(snapshot)
+                refreshSnapshots()
+            } label: {
+                Image(systemName: "trash")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.red)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(secondaryTint.opacity(0.14), lineWidth: 1)
+        }
+    }
+
     // MARK: - 共用片段
 
     private var exportControls: some View {
@@ -228,7 +334,7 @@ struct BackupSettingsView: View {
             Button {
                 triggerExport()
             } label: {
-                Label("导出配置...", systemImage: "square.and.arrow.up")
+                Label("一键全量导出...", systemImage: "square.and.arrow.up")
                     .font(.body.weight(.semibold))
             }
             .buttonStyle(.borderedProminent)
@@ -308,6 +414,17 @@ struct BackupSettingsView: View {
 
     // MARK: - macOS cards
 
+    private var autoBackupCard: some View {
+        cardShell(tint: secondaryTint) {
+            VStack(alignment: .leading, spacing: 14) {
+                sectionHeader("自动备份",
+                              subtitle: "按频率在打开本页 / 进入后台时把配置写入 backups 目录,仅保留最近若干份。",
+                              icon: "clock.arrow.circlepath",
+                              color: secondaryTint)
+                autoBackupControls
+            }
+        }
+    }
     private var exportCard: some View {
         cardShell(tint: tint) {
             VStack(alignment: .leading, spacing: 14) {
@@ -535,7 +652,58 @@ struct BackupSettingsView: View {
         #endif
     }
 
-    // MARK: - Actions
+    // MARK: - Auto-backup actions
+
+    private func onAppearSetup() {
+        autoFrequency = BackupStore.autoBackupFrequency
+        keepCount = BackupStore.autoBackupKeepCount
+        // 进入设置时:执行到期的自动备份。备份内容用现有导出能力按当前 include 选项生成。
+        // App 启动 / 进入后台的钩子见文件底部说明。
+        BackupStore.runScheduledBackupIfNeeded {
+            try viewModel.exportBackup(includeAPIKeys: includeAPIKeys)
+        }
+        refreshState()
+    }
+
+    private func refreshState() {
+        lastBackupDate = BackupStore.lastAutoBackupDate
+        refreshSnapshots()
+    }
+
+    private func refreshSnapshots() {
+        snapshots = BackupStore.listSnapshots()
+    }
+
+    private func runBackupNow() {
+        do {
+            let data = try viewModel.exportBackup(includeAPIKeys: includeAPIKeys)
+            try BackupStore.writeSnapshot(data)
+            resultMessage = "已创建备份。"
+            errorMessage = nil
+            refreshState()
+        } catch {
+            errorMessage = "备份失败: \(error.localizedDescription)"
+            resultMessage = nil
+        }
+    }
+
+    private var lastBackupText: String {
+        guard let date = lastBackupDate else { return "从未" }
+        return Self.dateText(date)
+    }
+
+    private static func dateText(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .short
+        return f.string(from: date)
+    }
+
+    private static func sizeText(_ bytes: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+    }
+
+    // MARK: - Export / Import actions
 
     private func triggerExport() {
         do {
@@ -612,3 +780,13 @@ struct BackupDocument: FileDocument {
         FileWrapper(regularFileWithContents: data)
     }
 }
+
+// 说明:自动备份的"到期触发"目前在本视图 onAppear 调用 BackupStore.runScheduledBackupIfNeeded。
+// 若需在 App 启动 / 进入后台时也触发(无需打开本页),可在 App 入口(KownApp.swift)对
+// scenePhase 变化时调用同一方法,例如:
+//   .onChange(of: scenePhase) { _, phase in
+//       if phase == .background {
+//           BackupStore.runScheduledBackupIfNeeded { try viewModel.exportBackup(includeAPIKeys: true) }
+//       }
+//   }
+// 该接线需改动 App 入口文件,不在本任务的独占文件范围内,故未实施。
