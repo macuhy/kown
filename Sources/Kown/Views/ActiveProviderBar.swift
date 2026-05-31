@@ -96,13 +96,15 @@ struct ActiveProviderBar: View {
 
     @ViewBuilder
     private func chips(_ mode: ConversationMode) -> some View {
-        let (panel, _) = viewModel.providersForCurrentSend()
-        if panel.isEmpty {
+        // 展示「当前可参与回答」的 provider 集合:enabled 的(可点击停用)+ 真正进 panel 的。
+        // 全为空(一个 provider 都没配)才报警告。点 chip 可快速启停。
+        let chipList = chipProviders()
+        if chipList.isEmpty {
             statusChip("无可用 provider", icon: "exclamationmark.triangle.fill", tint: .orange)
         } else {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ForEach(panel) { cfg in
+                    ForEach(chipList) { cfg in
                         providerChip(cfg)
                     }
                 }
@@ -110,6 +112,15 @@ struct ActiveProviderBar: View {
             }
             .frame(maxWidth: 520)
         }
+    }
+
+    /// chip 列表 = 真正进 panel 的(本轮会回答的)∪ 其余 enabled 的(随手可停用)。
+    /// 全部 enabled 都展示,这样关掉某家后仍能在条上把它重新点亮。
+    private func chipProviders() -> [ProviderConfig] {
+        let (panel, _) = viewModel.providersForCurrentSend()
+        let panelIDs = Set(panel.map(\.id))
+        let extras = viewModel.providers.filter { $0.enabled && !panelIDs.contains($0.id) }
+        return panel + extras
     }
 
     private func statusChip(_ text: String, icon: String, tint: Color) -> some View {
@@ -130,35 +141,83 @@ struct ActiveProviderBar: View {
 
     private func providerChip(_ cfg: ProviderConfig) -> some View {
         let tint = accentColor(cfg)
-        return HStack(spacing: 8) {
-            Image(systemName: providerSymbol(cfg))
-                .font(.caption.weight(.bold))
-                .foregroundStyle(tint)
-                .frame(width: 26, height: 26)
-                .background(tint.opacity(0.13), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-            VStack(alignment: .leading, spacing: 1) {
-                Text(cfg.displayName)
+        let isOn = cfg.enabled
+        // 点 chip 即快速开关该 provider 的启用态(沿用 setChair/setSummary 的
+        // 「直接改 providers[i] + saveProviders()」模式,只动 public 接口)。
+        return Button {
+            toggleEnabled(cfg)
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: providerSymbol(cfg))
                     .font(.caption.weight(.bold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                #if !os(iOS)
-                Text(cfg.model)
-                    .font(.system(.caption2, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                #endif
+                    .foregroundStyle(isOn ? tint : Color.secondary)
+                    .frame(width: 26, height: 26)
+                    .background((isOn ? tint : Color.secondary).opacity(0.13),
+                                in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 5) {
+                        Text(cfg.displayName)
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(isOn ? Color.primary : Color.secondary)
+                            .lineLimit(1)
+                        if cfg.isChair { roleBadge("主席", icon: "crown.fill", tint: chairTint) }
+                        if cfg.isSummary { roleBadge("总结", icon: "list.bullet.rectangle.fill", tint: summaryTint) }
+                    }
+                    #if !os(iOS)
+                    Text(cfg.model)
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    #endif
+                }
+                // 启用态的小指示器:开 = 实心点,关 = 空心(灰)。
+                Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(isOn ? tint : Color.secondary.opacity(0.6))
             }
+            .padding(.leading, 6)
+            .padding(.trailing, chipTrailingPadding)
+            .padding(.vertical, chipVerticalPadding)
+            .background {
+                Capsule()
+                    .fill((isOn ? tint : Color.secondary).opacity(isOn ? 0.10 : 0.06))
+            }
+            .overlay {
+                Capsule().strokeBorder((isOn ? tint : Color.secondary).opacity(isOn ? 0.24 : 0.16), lineWidth: 1)
+            }
+            .opacity(isOn ? 1 : 0.6)
+            .contentShape(Capsule())
         }
-        .padding(.leading, 6)
-        .padding(.trailing, chipTrailingPadding)
-        .padding(.vertical, chipVerticalPadding)
-        .background {
-            Capsule()
-                .fill(tint.opacity(0.10))
+        .buttonStyle(.plain)
+        #if os(iOS)
+        .hoverEffect(.lift)
+        #endif
+        .help(isOn ? "点按停用 \(cfg.displayName)" : "点按启用 \(cfg.displayName)")
+    }
+
+    /// Chair / Summary 角色小徽标 — 紧凑 capsule,跟 chip 内文对齐。
+    private func roleBadge(_ text: String, icon: String, tint: Color) -> some View {
+        HStack(spacing: 2) {
+            Image(systemName: icon)
+                .font(.system(size: 8, weight: .bold))
+            Text(text)
+                .font(.system(size: 9, weight: .bold))
         }
+        .foregroundStyle(tint)
+        .padding(.horizontal, 5)
+        .padding(.vertical, 2)
+        .background(tint.opacity(0.16), in: Capsule())
         .overlay {
-            Capsule().strokeBorder(tint.opacity(0.24), lineWidth: 1)
+            Capsule().strokeBorder(tint.opacity(0.30), lineWidth: 0.5)
         }
+    }
+
+    /// 快速开关某个 provider 的启用态。直接改 `viewModel.providers` 并持久化,
+    /// 与 AppViewModel 内 setChair / setSummary 一致的写法,只用 public 接口。
+    private func toggleEnabled(_ cfg: ProviderConfig) {
+        guard let idx = viewModel.providers.firstIndex(where: { $0.id == cfg.id }) else { return }
+        viewModel.providers[idx].enabled.toggle()
+        viewModel.saveProviders()
     }
 
     @ViewBuilder
@@ -326,6 +385,12 @@ struct ActiveProviderBar: View {
         case .debate:  return Color(red: 0.88, green: 0.35, blue: 0.22)
         }
     }
+
+    /// Chair 角色徽标色（金/橙系，呼应「主席」)。
+    private var chairTint: Color { Color(red: 0.84, green: 0.60, blue: 0.13) }
+
+    /// Summary 角色徽标色(青/绿系,呼应 Council 主色)。
+    private var summaryTint: Color { Color(red: 0.10, green: 0.62, blue: 0.55) }
 
     private func accentColor(_ cfg: ProviderConfig) -> Color {
         switch cfg.kind {
