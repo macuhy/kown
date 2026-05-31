@@ -1,10 +1,19 @@
 import SwiftUI
+#if os(macOS)
+import AppKit
+#else
+import UIKit
+#endif
 
 struct MainContentView: View {
     @Bindable var viewModel: AppViewModel
     @State private var showSystemPromptDrawer = false
     @FocusState private var inputFocused: Bool
     @Binding var showSettings: Bool
+    #if os(iOS)
+    /// iOS 导出时待分享的文件(包成 Identifiable 以驱动 .sheet(item:))。
+    @State private var shareSheet: ShareSheetPayload?
+    #endif
 
     var body: some View {
         ZStack {
@@ -29,6 +38,16 @@ struct MainContentView: View {
             }
         }
         .navigationTitle(viewModel.selectedConversation?.title ?? "New Conversation")
+        .toolbar {
+            ToolbarItem(placement: .automatic) {
+                exportMenu
+            }
+        }
+        #if os(iOS)
+        .sheet(item: $shareSheet) { payload in
+            ShareSheet(activityItems: [payload.url])
+        }
+        #endif
         .onAppear {
             #if !os(iOS)
             // iOS 上不 auto-focus(避免 NavigationStack push 动画与 @FocusState 抢占),
@@ -36,6 +55,50 @@ struct MainContentView: View {
             inputFocused = true
             #endif
         }
+    }
+
+    // MARK: - 整会话导出
+
+    /// 会话区工具栏的「导出」菜单 — 导出当前会话为 Markdown / JSON。
+    /// 无当前会话时整个菜单禁用。
+    @ViewBuilder
+    private var exportMenu: some View {
+        let conv = viewModel.selectedConversation
+        Menu {
+            ForEach(ConversationExporter.Format.allCases, id: \.self) { format in
+                Button {
+                    if let conv { export(conv, as: format) }
+                } label: {
+                    Label(format.menuTitle, systemImage: format.symbol)
+                }
+            }
+        } label: {
+            Image(systemName: "square.and.arrow.up")
+        }
+        .disabled(conv == nil)
+        .help("导出当前会话")
+    }
+
+    /// 把会话导出成指定格式:macOS 弹 NSSavePanel 存盘;iOS 走系统分享。
+    private func export(_ conversation: Conversation, as format: ConversationExporter.Format) {
+        let text = ConversationExporter.text(for: conversation, format: format)
+        let fileName = ConversationExporter.suggestedFileName(for: conversation, format: format)
+
+        #if os(macOS)
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = fileName
+        panel.canCreateDirectories = true
+        panel.isExtensionHidden = false
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            try? text.data(using: .utf8)?.write(to: url, options: .atomic)
+        }
+        #else
+        // iOS:先落到临时文件再用系统分享(保留文件名 / 扩展名)。
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+        try? text.data(using: .utf8)?.write(to: url, options: .atomic)
+        shareSheet = ShareSheetPayload(url: url)
+        #endif
     }
 
     @ViewBuilder
@@ -282,6 +345,25 @@ struct MainContentView: View {
     }
     #endif
 }
+
+#if os(iOS)
+/// iOS 导出分享用的载荷 — 包一个临时文件 URL,Identifiable 以驱动 .sheet(item:)。
+private struct ShareSheetPayload: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+/// UIActivityViewController 的 SwiftUI 封装(iOS 系统分享面板)。
+private struct ShareSheet: UIViewControllerRepresentable {
+    let activityItems: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
+}
+#endif
 
 private struct MainWorkspaceBackdrop: View {
     let mode: ConversationMode
