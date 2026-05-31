@@ -12,6 +12,8 @@ struct DebateTurnsView: View {
     let isRunning: Bool
     let livePanel: [ProviderConfig]
     let liveChair: ProviderConfig?
+    /// 历史 turn 的「编辑并重发」动作(由父视图注入,打开编辑 sheet)。
+    var onEditTurn: ((UUID) -> Void)? = nil
 
     @Environment(\.horizontalSizeClass) private var hSizeClass
 
@@ -44,7 +46,8 @@ struct DebateTurnsView: View {
             tint: debateTint
         ) {
             PromptBubble(prompt: turn.prompt, timestamp: turn.timestamp, images: turn.images ?? [],
-                         onFork: { viewModel.forkConversation(fromTurnID: turn.id) })
+                         onFork: { viewModel.forkConversation(fromTurnID: turn.id) },
+                         onEdit: onEditTurn.map { f in { f(turn.id) } })
 
             let rounds = (turn.debateRounds ?? []).sorted { $0.index < $1.index }
             if rounds.isEmpty {

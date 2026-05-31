@@ -14,6 +14,8 @@ struct CouncilTurnsView: View {
     let livePanel: [ProviderConfig]
     let liveChair: ProviderConfig?
     let liveSummary: ProviderConfig?
+    /// 历史 turn 的「编辑并重发」动作(由父视图注入,打开编辑 sheet)。
+    var onEditTurn: ((UUID) -> Void)? = nil
 
     /// iPhone compact 宽度下 panel 改成垂直堆叠;iPad / Mac 仍并排
     @Environment(\.horizontalSizeClass) private var hSizeClass
@@ -47,7 +49,8 @@ struct CouncilTurnsView: View {
             tint: councilTint
         ) {
             PromptBubble(prompt: turn.prompt, timestamp: turn.timestamp, images: turn.images ?? [],
-                         onFork: { viewModel.forkConversation(fromTurnID: turn.id) })
+                         onFork: { viewModel.forkConversation(fromTurnID: turn.id) },
+                         onEdit: onEditTurn.map { f in { f(turn.id) } })
             panelStack {
                 ForEach(turn.orderedPanelConfigs) { cfg in
                     let key = cfg.id.uuidString

@@ -765,28 +765,7 @@ final class AppViewModel {
         }
         guard let convIdx = conversations.firstIndex(where: { $0.id == selectedConversationID }) else { return }
 
-        runningTask?.cancel()
-        isRunning = true
-        runningConvID = conversations[convIdx].id
-
-        // iOS:申请通知权限(首次)+ 拿后台 token + 启动无声音频保活(切到后台仍能跑网络)
-        BackgroundCompanion.shared.ensureNotificationPermission()
-        BackgroundAudioKeepalive.shared.start()
-        BackgroundCompanion.shared.beginIfNeeded { [weak self] in
-            // 系统给的后台时间到了 — 取消流并让 UI 显示"被系统挂起"
-            guard let self else { return }
-            for state in self.liveStates.values where self.isStreaming(state) {
-                state.fail("iOS 后台时间已到,流被系统挂起 — 切回前台重发可继续")
-            }
-            self.liveChairState.map { if self.isStreaming($0) { $0.fail("已挂起") } }
-            self.liveSummaryState.map { if self.isStreaming($0) { $0.fail("已挂起") } }
-            self.runningTask?.cancel()
-            self.runningTask = nil
-            self.isRunning = false
-            self.runningConvID = nil
-            BackgroundAudioKeepalive.shared.stop()
-        }
-
+        // ---- send():采集 live 输入 + 算 snapshot,把发送编排交给 runSend ----
         // 把文件附件文本拼到 prompt 前面；图片走 options.images
         let fileBlocks = attachments.compactMap { att -> String? in
             switch att {
@@ -824,8 +803,6 @@ final class AppViewModel {
             if base.isEmpty { return ws }
             return ws + "\n\n" + base
         }()
-        let roundDate = Date()
-        let roundID = String(UUID().uuidString.prefix(8))
         let imageSnapshot = imagePayloads
         // 把本轮图片字节落盘到同步目录,拿到轻量引用 → 历史里能看到 + 随 iCloud 同步。
         let turnImages = persistTurnImages(imageSnapshot)
@@ -837,6 +814,83 @@ final class AppViewModel {
         let toolsSnapshot: [LLMTool] = ToolCatalog.enabledTools(forSession: toolSessionSnapshot)
         let modeSnapshot = currentMode
         let debateRoundsSnapshot = debateRoundsForNextSend
+        // Summary 只在 Council 模式跑
+        let summarySnapshot = (modeSnapshot == .council) ? summaryProvider : nil
+
+        // 清空 prompt 输入框 + 附件(🌐 状态保留,跨发送/跨重启持久化)
+        prompt = ""
+        attachments = []
+
+        let convID = conversations[convIdx].id
+        runSend(
+            convID: convID, panel: panel, chair: chair, summary: summarySnapshot,
+            promptText: promptSnapshot, systemPromptText: sysSnapshot, mode: modeSnapshot,
+            turnImages: turnImages, imagePayloads: imageSnapshot,
+            contextSummary: contextSummarySnapshot, priorTurns: priorTurnsSnapshot,
+            toolSession: toolSessionSnapshot, tools: toolsSnapshot,
+            debateRoundsCount: debateRoundsSnapshot, workspaceURL: workspaceURLForSend
+        )
+    }
+
+    /// 真正执行一次发送编排:种 live 状态 → 跑 panel/chair/summary → 建 Turn 落盘。
+    /// send()(新输入)和 editAndRegenerate(改历史轮)都复用这里。
+    /// 铁律:本方法只引用其参数与 self.conversations / self.live* / self.running*,
+    /// 不读 self.prompt / self.attachments / self.systemPrompt / self.*ForNextSend。
+    private func runSend(
+        convID: UUID,
+        panel: [ProviderConfig],
+        chair: ProviderConfig?,
+        summary: ProviderConfig?,
+        promptText: String,
+        systemPromptText: String,
+        mode: ConversationMode,
+        turnImages: [TurnImage],
+        imagePayloads: [Attachment.ImagePayload],
+        contextSummary: String?,
+        priorTurns: [PriorTurn],
+        toolSession: WebSearchSession?,
+        tools: [LLMTool],
+        debateRoundsCount: Int,
+        workspaceURL: URL?
+    ) {
+        guard !panel.isEmpty else { return }
+        // 别名:让下方异步体与原 send() 逐行一致,降低抽取风险
+        let promptSnapshot = promptText
+        let sysSnapshot = systemPromptText
+        let modeSnapshot = mode
+        let imageSnapshot = imagePayloads
+        let contextSummarySnapshot = contextSummary
+        let priorTurnsSnapshot = priorTurns
+        let toolsSnapshot = tools
+        let toolSessionSnapshot = toolSession
+        let debateRoundsSnapshot = debateRoundsCount
+        let summarySnapshot = summary
+        let workspaceURLForSend = workspaceURL
+
+        runningTask?.cancel()
+        isRunning = true
+        runningConvID = convID
+
+        // iOS:申请通知权限(首次)+ 拿后台 token + 启动无声音频保活(切到后台仍能跑网络)
+        BackgroundCompanion.shared.ensureNotificationPermission()
+        BackgroundAudioKeepalive.shared.start()
+        BackgroundCompanion.shared.beginIfNeeded { [weak self] in
+            // 系统给的后台时间到了 — 取消流并让 UI 显示"被系统挂起"
+            guard let self else { return }
+            for state in self.liveStates.values where self.isStreaming(state) {
+                state.fail("iOS 后台时间已到,流被系统挂起 — 切回前台重发可继续")
+            }
+            self.liveChairState.map { if self.isStreaming($0) { $0.fail("已挂起") } }
+            self.liveSummaryState.map { if self.isStreaming($0) { $0.fail("已挂起") } }
+            self.runningTask?.cancel()
+            self.runningTask = nil
+            self.isRunning = false
+            self.runningConvID = nil
+            BackgroundAudioKeepalive.shared.stop()
+        }
+
+        let roundDate = Date()
+        let roundID = String(UUID().uuidString.prefix(8))
 
         // 初始化 live 状态
         liveStates.removeAll()
@@ -855,23 +909,16 @@ final class AppViewModel {
             // Chair 先空着,等 panel 完成再 reset
             liveChairState = s
         }
-        // Summary 只在 Council 模式跑;一并预创建占位 state
-        let summarySnapshot = (modeSnapshot == .council) ? summaryProvider : nil
         if let s = summarySnapshot {
             let st = ResponseState(id: s.id)
             liveSummaryState = st
         }
 
-        // 清空 prompt 输入框 + 附件(🌐 状态保留,跨发送/跨重启持久化)
-        prompt = ""
-        attachments = []
-
         // 如果会话标题还是默认的，用首问截断作标题
-        if conversations[convIdx].title == "New Conversation" || conversations[convIdx].title.isEmpty {
-            conversations[convIdx].title = String(promptSnapshot.prefix(30))
+        if let titleIdx = conversations.firstIndex(where: { $0.id == convID }),
+           conversations[titleIdx].title == "New Conversation" || conversations[titleIdx].title.isEmpty {
+            conversations[titleIdx].title = String(promptSnapshot.prefix(30))
         }
-
-        let convID = conversations[convIdx].id
 
         runningTask = Task { [weak self] in
             guard let self else { return }
@@ -887,7 +934,7 @@ final class AppViewModel {
             }
             let panelOrder = panel.map { $0.id.uuidString }
 
-            let convTitleSnapshot = conversations[convIdx].title
+            let convTitleSnapshot = self.conversations.first(where: { $0.id == convID })?.title ?? ""
             let convIDString = convID.uuidString
             let modeAtSend = modeSnapshot
 
@@ -1152,6 +1199,46 @@ final class AppViewModel {
             self.isRunning = false
             self.runningConvID = nil
         }
+    }
+
+    /// 编辑历史某轮的用户消息并从该轮重新生成:丢弃该轮(含)之后的所有轮,
+    /// 用原轮的 panel/chair/summary 与系统提示、在截断后的历史上重跑(纯文本,不带图片重发,与 retry 一致)。
+    /// 截断不可逆 —— UI 侧需二次确认后再调用。
+    func editAndRegenerate(turnID: UUID, newPrompt: String) {
+        guard !isRunning else { return }
+        guard let convID = selectedConversationID,
+              let convIdx = conversations.firstIndex(where: { $0.id == convID }),
+              let turnIdx = conversations[convIdx].turns.firstIndex(where: { $0.id == turnID }) else { return }
+        let trimmed = newPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let original = conversations[convIdx].turns[turnIdx]
+        let panel = original.orderedPanelConfigs
+        guard !panel.isEmpty else { return }
+
+        // 截断:丢弃第 N 轮(含)及其后所有轮,从干净历史重跑;立即落盘保持一致。
+        conversations[convIdx].turns = Array(conversations[convIdx].turns[..<turnIdx])
+        // 摘要水位回退,避免指向已删除的轮(否则摘要器会从错误基线继续)。
+        conversations[convIdx].summarizedThroughTurnCount = min(
+            conversations[convIdx].summarizedThroughTurnCount,
+            conversations[convIdx].turns.count
+        )
+        conversations[convIdx].updatedAt = Date()
+        ConversationStore.save(conversations[convIdx])
+
+        let mode = conversations[convIdx].mode
+        activeMode = mode
+        let contextSummary = ConversationSummarizer.summaryForNextSend(conversations[convIdx])
+        let priorTurns = ConversationSummarizer.priorTurnsForReplay(conversations[convIdx])
+
+        runSend(
+            convID: convID, panel: panel, chair: original.chairConfig, summary: original.summaryConfig,
+            promptText: trimmed, systemPromptText: original.systemPrompt, mode: mode,
+            turnImages: original.images ?? [], imagePayloads: [],
+            contextSummary: contextSummary, priorTurns: priorTurns,
+            toolSession: nil, tools: [],
+            debateRoundsCount: original.debateRounds?.count ?? debateRoundsForNextSend,
+            workspaceURL: currentWorkspaceURL
+        )
     }
 
     // MARK: - 摘要调度

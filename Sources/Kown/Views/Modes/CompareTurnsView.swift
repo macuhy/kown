@@ -11,6 +11,8 @@ struct CompareTurnsView: View {
     var liveImages: [TurnImage] = []
     let livePanel: [ProviderConfig]
     let liveChair: ProviderConfig?
+    /// 历史 turn 的「编辑并重发」动作(由父视图注入,打开编辑 sheet)。
+    var onEditTurn: ((UUID) -> Void)? = nil
 
     @Environment(\.horizontalSizeClass) private var hSizeClass
 
@@ -43,7 +45,8 @@ struct CompareTurnsView: View {
             tint: compareTint
         ) {
             PromptBubble(prompt: turn.prompt, timestamp: turn.timestamp, images: turn.images ?? [],
-                         onFork: { viewModel.forkConversation(fromTurnID: turn.id) })
+                         onFork: { viewModel.forkConversation(fromTurnID: turn.id) },
+                         onEdit: onEditTurn.map { f in { f(turn.id) } })
             comparePanels {
                 ForEach(Array(turn.orderedPanelConfigs.prefix(2))) { cfg in
                     let key = cfg.id.uuidString

@@ -10,6 +10,8 @@ struct MainContentView: View {
     @State private var showSystemPromptDrawer = false
     @FocusState private var inputFocused: Bool
     @Binding var showSettings: Bool
+    /// 正在编辑/重发的历史轮(nil = 未打开)。
+    @State private var editRequest: EditTurnRequest?
     #if os(iOS)
     /// iOS 导出时待分享的文件(包成 Identifiable 以驱动 .sheet(item:))。
     @State private var shareSheet: ShareSheetPayload?
@@ -48,6 +50,9 @@ struct MainContentView: View {
             ShareSheet(activityItems: [payload.url])
         }
         #endif
+        .sheet(item: $editRequest) { req in
+            EditTurnSheet(viewModel: viewModel, turnID: req.id, initialText: req.text)
+        }
         .onAppear {
             #if !os(iOS)
             // iOS 上不 auto-focus(避免 NavigationStack push 动画与 @FocusState 抢占),
@@ -55,6 +60,12 @@ struct MainContentView: View {
             inputFocused = true
             #endif
         }
+    }
+
+    /// 打开「编辑并重发」sheet,初值用该轮原始 prompt。
+    private func requestEdit(_ turnID: UUID) {
+        guard let t = viewModel.selectedConversation?.turns.first(where: { $0.id == turnID }) else { return }
+        editRequest = EditTurnRequest(id: turnID, text: t.prompt)
     }
 
     // MARK: - 整会话导出
@@ -145,7 +156,8 @@ struct MainContentView: View {
                                 isRunning: lIsRunning,
                                 livePanel: viewModel.providersForCurrentSend().panel,
                                 liveChair: viewModel.chairProvider,
-                                liveSummary: viewModel.summaryProvider
+                                liveSummary: viewModel.summaryProvider,
+                                onEditTurn: { requestEdit($0) }
                             )
                         case .direct:
                             DirectTurnsView(
@@ -154,7 +166,8 @@ struct MainContentView: View {
                                 livePrompt: lPrompt,
                                 liveImages: lImages,
                                 livePanel: viewModel.providersForCurrentSend().panel,
-                                onForkTurn: { viewModel.forkConversation(fromTurnID: $0) }
+                                onForkTurn: { viewModel.forkConversation(fromTurnID: $0) },
+                                onEditTurn: { requestEdit($0) }
                             )
                         case .compare:
                             CompareTurnsView(
@@ -165,7 +178,8 @@ struct MainContentView: View {
                                 livePrompt: lPrompt,
                                 liveImages: lImages,
                                 livePanel: viewModel.providersForCurrentSend().panel,
-                                liveChair: viewModel.providersForCurrentSend().chair
+                                liveChair: viewModel.providersForCurrentSend().chair,
+                                onEditTurn: { requestEdit($0) }
                             )
                         case .debate:
                             DebateTurnsView(
@@ -178,7 +192,8 @@ struct MainContentView: View {
                                 liveImages: lImages,
                                 isRunning: lIsRunning,
                                 livePanel: viewModel.providersForCurrentSend().panel,
-                                liveChair: viewModel.chairProvider
+                                liveChair: viewModel.chairProvider,
+                                onEditTurn: { requestEdit($0) }
                             )
                         }
                     }
@@ -345,6 +360,12 @@ struct MainContentView: View {
         }
     }
     #endif
+}
+
+/// 编辑/重发请求 — 携带目标轮 id 与初始文本,Identifiable 以驱动 .sheet(item:)。
+struct EditTurnRequest: Identifiable {
+    let id: UUID
+    let text: String
 }
 
 #if os(iOS)

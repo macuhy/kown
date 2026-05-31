@@ -49,6 +49,7 @@
 		8341991AF39A8425B699B75E /* BackgroundCompanion.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE6EDBB6EE19B3E06EB8BA46 /* BackgroundCompanion.swift */; };
 		84B6CA7E670EF4C075F60B44 /* TurnComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = D81083A7840915BC31B8ED68 /* TurnComponents.swift */; };
 		885C193991424F3917955116 /* WorkspaceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B33D99C78787CD1C29BF517 /* WorkspaceManager.swift */; };
+		8BBD742F51B41452CD0D5313 /* EditTurnSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BA28F122FF3BA73CED7836F /* EditTurnSheet.swift */; };
 		8C122A039F0ABC0D0CEC5D5D /* OpenAICompatibleClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6652CB52E9921B5880BDFCFB /* OpenAICompatibleClient.swift */; };
 		91AF69BB07BE8A51A139E82D /* UsageSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7667D7656095A4C06D33EDC /* UsageSettingsView.swift */; };
 		94020BCDD1E4A8B713E565D8 /* ResponseState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26CAD432F91BE031EB0B7CBD /* ResponseState.swift */; };
@@ -94,6 +95,7 @@
 		1B7F9872024209C57342066E /* ProviderRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderRegistry.swift; sourceTree = "<group>"; };
 		26CAD432F91BE031EB0B7CBD /* ResponseState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResponseState.swift; sourceTree = "<group>"; };
 		2B0DA510C06622816A4DCB83 /* CompareTurnsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompareTurnsView.swift; sourceTree = "<group>"; };
+		2BA28F122FF3BA73CED7836F /* EditTurnSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditTurnSheet.swift; sourceTree = "<group>"; };
 		347ED1793B406F4531957878 /* ActiveProviderBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveProviderBar.swift; sourceTree = "<group>"; };
 		34C72CDAE2197001F9B3E4B0 /* GeminiClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiClient.swift; sourceTree = "<group>"; };
 		388EA7D29142973723D271A4 /* CHANGELOG.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = CHANGELOG.md; sourceTree = "<group>"; };
@@ -190,6 +192,7 @@
 				E7535A84A46BDAE9B8137DC4 /* CommandPaletteView.swift */,
 				C4FAB15E12FFD38053F8D124 /* ConversationImageView.swift */,
 				A6E3D82CE18FAF01C9C7F884 /* ConversationPromptSheet.swift */,
+				2BA28F122FF3BA73CED7836F /* EditTurnSheet.swift */,
 				C55ADFE111F5EA812F1CBAFC /* EmptyStateCard.swift */,
 				6B29360ED33194AE1781A5D7 /* ICloudSyncSettingsView.swift */,
 				C04EF4455512C9A909E259AD /* InputBarView.swift */,
@@ -433,6 +436,7 @@
 				A2A68B59B1C8C4A5CAA85FCC /* CouncilTurnsView.swift in Sources */,
 				1A22AB7EC16FE8D7ED5F7106 /* DebateTurnsView.swift in Sources */,
 				38123390632F07ACF834D2E5 /* DirectTurnsView.swift in Sources */,
+				8BBD742F51B41452CD0D5313 /* EditTurnSheet.swift in Sources */,
 				6D2E44573433660608F68953 /* EmptyStateCard.swift in Sources */,
 				04AA2820B08DD9FACE8D1F50 /* FirecrawlClient.swift in Sources */,
 				C0166D275D0C24361F06DDBD /* GeminiClient.swift in Sources */,
