@@ -9,6 +9,7 @@ struct SettingsView: View {
 
     enum Tab: String, CaseIterable, Identifiable {
         case providers
+        case prompts
         case webSearch
         case sync
         case backup
@@ -21,6 +22,7 @@ struct SettingsView: View {
         var label: String {
             switch self {
             case .providers:   return "厂商"
+            case .prompts:     return "Prompt 库"
             case .webSearch:   return "Web Search"
             case .sync:        return "iCloud 同步"
             case .backup:      return "导入/导出"
@@ -33,6 +35,7 @@ struct SettingsView: View {
         var symbol: String {
             switch self {
             case .providers:   return "square.stack.3d.up"
+            case .prompts:     return "text.badge.plus"
             case .webSearch:   return "globe"
             case .sync:        return "icloud"
             case .backup:      return "square.and.arrow.up.on.square"
@@ -45,6 +48,7 @@ struct SettingsView: View {
         var tint: Color {
             switch self {
             case .providers:   return Color(red: 0.10, green: 0.66, blue: 0.56)
+            case .prompts:     return Color(red: 0.56, green: 0.40, blue: 0.86)
             case .webSearch:   return Color(red: 0.16, green: 0.48, blue: 0.94)
             case .sync:        return Color(red: 0.18, green: 0.58, blue: 0.92)
             case .backup:      return Color(red: 0.91, green: 0.55, blue: 0.20)
@@ -57,6 +61,7 @@ struct SettingsView: View {
     }
 
     @State private var tab: Tab = .providers
+    @State private var promptLibrary = PromptLibraryStore()
     #if os(iOS)
     @Namespace private var mobileTabNamespace
     #endif
@@ -117,6 +122,8 @@ struct SettingsView: View {
                     switch tab {
                     case .providers:
                         mobileProvidersList
+                    case .prompts:
+                        PromptLibraryView(viewModel: promptLibrary)
                     case .webSearch:
                         WebSearchSettingsView(viewModel: viewModel)
                     case .sync:
@@ -622,6 +629,8 @@ struct SettingsView: View {
             switch tab {
             case .providers:
                 providersList
+            case .prompts:
+                PromptLibraryView(viewModel: promptLibrary)
             case .webSearch:
                 WebSearchSettingsView(viewModel: viewModel)
             case .sync:
@@ -868,6 +877,7 @@ struct SettingsView: View {
     private var headerSubtitle: String {
         switch tab {
         case .providers:   return "管理连接、密钥和每个模型的默认生成参数。"
+        case .prompts:     return "保存可复用的 Prompt 模板,用 {{变量}} 占位,填充后一键复制。"
         case .webSearch:   return "配置 Firecrawl 让模型在需要时调用 web_search。"
         case .sync:        return "iCloud 同步 会话、Provider 配置、Web Search 配置 与 API Key。容器对 Files app 隐藏。"
         case .backup:      return "把当前配置(不含会话)导出成 JSON 文件,或从备份恢复。可作为多设备同步的离线备选。"
