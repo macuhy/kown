@@ -473,8 +473,18 @@ final class AppViewModel {
     // MARK: - 附件
 
     func attachFile(at url: URL) throws {
+        // PDF 单独抽文本;其它按纯文本读。
+        if url.pathExtension.lowercased() == "pdf" {
+            try attachPDF(at: url)
+            return
+        }
         let f = try AttachmentLoader.loadFile(at: url)
         attachments.append(.file(f))
+    }
+
+    func attachPDF(at url: URL) throws {
+        let p = try AttachmentLoader.loadPDF(at: url)
+        attachments.append(.pdf(p))
     }
 
     func attachImage(at url: URL) throws {
@@ -748,10 +758,14 @@ final class AppViewModel {
 
         // 把文件附件文本拼到 prompt 前面；图片走 options.images
         let fileBlocks = attachments.compactMap { att -> String? in
-            if case .file(let f) = att {
+            switch att {
+            case .file(let f):
                 return "<attached file=\"\(f.name)\">\n\(f.content)\n</attached>"
+            case .pdf(let p):
+                return "<attached pdf=\"\(p.name)\" pages=\(p.pageCount)>\n\(p.extractedText)\n</attached>"
+            case .image:
+                return nil
             }
-            return nil
         }
         let imagePayloads = attachments.compactMap { att -> Attachment.ImagePayload? in
             if case .image(let i) = att { return i }

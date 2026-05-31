@@ -72,7 +72,7 @@ struct InputBarView: View {
         #if os(macOS)
         .fileImporter(
             isPresented: $showFileImporter,
-            allowedContentTypes: [.plainText, .utf8PlainText, .text, .json, .yaml, .sourceCode, .swiftSource, .pythonScript, .shellScript, .xml, .html]
+            allowedContentTypes: [.plainText, .utf8PlainText, .text, .json, .yaml, .sourceCode, .swiftSource, .pythonScript, .shellScript, .xml, .html, .pdf]
         ) { result in
             handlePicked(result, isImage: false)
         }
@@ -328,6 +328,10 @@ struct InputBarView: View {
         case .file(let f):
             chipShell(label: f.name, detail: "\(f.byteCount / 1024)KB", id: f.id, color: .blue) {
                 chipIconBox("doc.text", color: .blue)
+            }
+        case .pdf(let p):
+            chipShell(label: p.name, detail: "\(p.pageCount) 页", id: p.id, color: .red) {
+                chipIconBox("doc.richtext", color: .red)
             }
         case .image(let i):
             // 图片附件:展示真实缩略图(粘贴 / 拖入 / 选取都走这里),不再只显示图标 + 名称。
