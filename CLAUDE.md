@@ -43,9 +43,23 @@ git add ios/Kown.xcodeproj/project.pbxproj mac/Kown.xcodeproj/project.pbxproj
       -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO build
   ```
 
+## 更新日志(CHANGELOG)铁律 ⚠️
+
+`Sources/Kown/Resources/CHANGELOG.md` 跟 app 一起打包,`ChangelogService` 按 `CFBundleShortVersionString`(= `MARKETING_VERSION`)判断「有没有没看过的更新」并弹 What's New。
+
+- **每次发版前**,必须在 `CHANGELOG.md` **顶部**(`# 更新日志` 之下)新增该版本条目,**最新版本在最上面**。
+- 条目格式与现有保持一致:
+  ```markdown
+  ## <version> — <YYYY-MM-DD>
+  ### 新增 / 改进 / 修复 / 修复(严重) / 维护
+  - **一句话标题** — 给用户看的说明:做了什么、解决什么问题、带来什么好处
+  ```
+- 版本号用当次发版的版本(历史上以 **mac 版本**为时间线主线)。漏写会导致用户升级后 What's New 弹出空/旧内容。
+- **顺序**:先写好 CHANGELOG 并 commit,再 bump 版本号、打 tag(见下)。
+
 ## 发版 / push 规则
 
-通用:**先 `git push origin main`,再 push tag**(保证 tag 指向的 commit 已在远端)。版本递增:多个新功能 → minor,纯 bugfix → patch。版本号由 **tag 名**决定,build 号 = **git 提交数**(单调递增,每次上传唯一)。
+通用:**先 `git push origin main`,再 push tag**(保证 tag 指向的 commit 已在远端)。版本递增:多个新功能 → minor,纯 bugfix → patch。版本号由 **tag 名**决定,build 号 = **git 提交数**(单调递增,每次上传唯一)。**打 tag 前先确认 CHANGELOG.md 已补好当次版本条目**(见上)。
 
 ### iOS → TestFlight
 
