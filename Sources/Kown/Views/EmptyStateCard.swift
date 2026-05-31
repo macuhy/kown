@@ -4,9 +4,46 @@ struct EmptyStateCard: View {
     let mode: ConversationMode
     let providers: [ProviderConfig]
     let onOpenSettings: () -> Void
+    /// 点击示例提问时回调,调用方负责新建会话并填入/发送(默认空实现,老调用方无需改动)
+    var onUseSamplePrompt: (String) -> Void = { _ in }
 
     private var enabledProviders: [ProviderConfig] { providers.filter(\.enabled) }
     private var modeTint: Color { mode.workspaceTint }
+
+    /// 覆盖不同模式典型用法的示例提问(对比 / 头脑风暴 / 代码 / 决策等)
+    private var samplePrompts: [String] {
+        switch mode {
+        case .council:
+            return [
+                "帮我头脑风暴一个面向开发者的副业产品,列 5 个方向并各给一句话理由",
+                "对比 PostgreSQL、MongoDB、SQLite 在中小型项目里的取舍",
+                "用 Swift 写一个带重试和超时的异步网络请求封装",
+                "我想三个月内提升英语口语,请给一份可执行的周计划",
+                "评审这段产品文案,指出问题并给出改写版本"
+            ]
+        case .direct:
+            return [
+                "解释一下 Swift 的 async/await 和 GCD 有什么区别",
+                "帮我把这段需求拆成可执行的开发任务清单",
+                "写一个 Python 脚本,批量重命名目录下的图片文件",
+                "帮我润色这封求职邮件,语气专业且简洁"
+            ]
+        case .compare:
+            return [
+                "对比 SwiftUI 和 UIKit,分别适合什么场景",
+                "对比 REST 和 GraphQL 的优缺点,给出选型建议",
+                "对比远程办公和坐班对团队协作的影响",
+                "对比三种缓存策略:本地缓存、Redis、CDN"
+            ]
+        case .debate:
+            return [
+                "辩一辩:创业初期应该先做 MVP 还是先打磨完整体验",
+                "辩一辩:大型项目该用单体架构还是微服务",
+                "辩一辩:团队是否值得为了类型安全全面迁移到 TypeScript",
+                "辩一辩:AI 编程助手会让初级工程师更强还是更弱"
+            ]
+        }
+    }
 
     @ViewBuilder
     var body: some View {
@@ -18,6 +55,9 @@ struct EmptyStateCard: View {
 
             heroCard
                 .frame(maxWidth: 760)
+
+            samplePromptCard
+                .frame(maxWidth: 920)
 
             cardGrid
                 .frame(maxWidth: 920)
@@ -34,6 +74,7 @@ struct EmptyStateCard: View {
     private var mobileBody: some View {
         VStack(spacing: 10) {
             mobileHeroCard
+            samplePromptCard
             mobileQuickStartCard
             mobileProviderSummaryCard
         }
@@ -417,6 +458,57 @@ struct EmptyStateCard: View {
         }
     }
 
+    private var samplePromptCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionHeader(
+                title: "试试这些提问",
+                subtitle: "点一下即可新建会话并直接开聊",
+                icon: "bolt.fill",
+                tint: modeTint
+            )
+
+            FlowLayout(spacing: 8, lineSpacing: 8) {
+                ForEach(samplePrompts, id: \.self) { prompt in
+                    samplePromptChip(prompt)
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardBackground(tint: modeTint.opacity(0.9), cornerRadius: 22))
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+        }
+    }
+
+    private func samplePromptChip(_ prompt: String) -> some View {
+        Button {
+            onUseSamplePrompt(prompt)
+        } label: {
+            HStack(spacing: 7) {
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 11, weight: .black))
+                    .foregroundStyle(modeTint)
+                Text(prompt)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(modeTint.opacity(0.10), in: Capsule())
+            .overlay {
+                Capsule().strokeBorder(modeTint.opacity(0.20), lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+        #if os(iOS)
+        .contentShape(Capsule())
+        #endif
+    }
+
     private func sectionHeader(title: String, subtitle: String, icon: String, tint: Color) -> some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
@@ -635,6 +727,61 @@ private extension ProviderKind {
         case .anthropic:        return "anthropic"
         case .gemini:           return "google"
         case .cliCommand:       return "cli"
+        }
+    }
+}
+
+/// 自动换行的流式布局,用于示例提问胶囊(macOS 13 / iOS 16 起可用)
+private struct FlowLayout: Layout {
+    var spacing: CGFloat = 8
+    var lineSpacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var rowWidth: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        var totalHeight: CGFloat = 0
+        var totalWidth: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if rowWidth > 0, rowWidth + spacing + size.width > maxWidth {
+                totalHeight += rowHeight + lineSpacing
+                totalWidth = max(totalWidth, rowWidth)
+                rowWidth = size.width
+                rowHeight = size.height
+            } else {
+                rowWidth += (rowWidth > 0 ? spacing : 0) + size.width
+                rowHeight = max(rowHeight, size.height)
+            }
+        }
+        totalHeight += rowHeight
+        totalWidth = max(totalWidth, rowWidth)
+
+        let resolvedWidth = proposal.width ?? totalWidth
+        return CGSize(width: resolvedWidth, height: totalHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) {
+        let maxWidth = bounds.width
+        var x = bounds.minX
+        var y = bounds.minY
+        var rowHeight: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > bounds.minX, x + size.width > bounds.minX + maxWidth {
+                x = bounds.minX
+                y += rowHeight + lineSpacing
+                rowHeight = 0
+            }
+            subview.place(
+                at: CGPoint(x: x, y: y),
+                anchor: .topLeading,
+                proposal: ProposedViewSize(width: size.width, height: size.height)
+            )
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
         }
     }
 }
