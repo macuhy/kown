@@ -4,6 +4,14 @@ struct ResponseColumnView: View {
     let config: ProviderConfig
     @Bindable var state: ResponseState
     @State private var copied = false
+    // 折叠/展开:超长「已完成」回答默认折叠,点按展开。
+    // 仅作用于 finished 阶段的纯展示;streaming 期间不折叠,保证自动滚动正常。
+    @State private var expanded = false
+
+    /// 超过该字符数的已完成回答默认折叠。
+    private let collapseThreshold = 1_400
+    /// 折叠态最多显示的行数。
+    private let collapsedLineLimit = 14
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -360,10 +368,62 @@ struct ResponseColumnView: View {
                 .foregroundStyle(.tertiary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else {
-            // streaming 期间走纯 Text,不让 cmark 在每个 chunk 上 O(N) 重解析
-            MarkdownText(text: state.text, streaming: isStreamingPhase)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 8) {
+                // streaming 期间走纯 Text,不让 cmark 在每个 chunk 上 O(N) 重解析
+                MarkdownText(text: state.text, streaming: isStreamingPhase)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    // 折叠态:限制行数 + 底部渐隐,提示「下面还有内容」。
+                    .lineLimit(isCollapsed ? collapsedLineLimit : nil)
+                    .mask(isCollapsed ? AnyView(collapseMask) : AnyView(Rectangle()))
+
+                if canCollapse {
+                    expandToggle
+                }
+            }
         }
+    }
+
+    /// 是否具备折叠能力:已完成且文本超过阈值(streaming 期间不折叠,避免影响自动滚动)。
+    private var canCollapse: Bool {
+        guard case .finished = state.phase else { return false }
+        return state.text.count > collapseThreshold
+    }
+
+    /// 当前是否处于折叠态。
+    private var isCollapsed: Bool {
+        canCollapse && !expanded
+    }
+
+    /// 折叠态底部渐隐遮罩。
+    private var collapseMask: some View {
+        LinearGradient(
+            colors: [.black, .black, .black.opacity(0.08)],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    private var expandToggle: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 10, weight: .bold))
+                Text(expanded ? "收起" : "展开全部 (\(state.text.count) 字)")
+                    .font(.caption.weight(.semibold))
+            }
+            .foregroundStyle(accentColor)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(accentColor.opacity(0.10), in: Capsule())
+            .overlay {
+                Capsule().strokeBorder(accentColor.opacity(0.22), lineWidth: 1)
+            }
+        }
+        .buttonStyle(.borderless)
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.top, 2)
     }
 
     private var isStreamingPhase: Bool {
@@ -400,7 +460,7 @@ struct ResponseColumnView: View {
             }
             .buttonStyle(.borderless)
             .disabled(state.text.isEmpty)
-            .help("复制当前回答")
+            .help("复制本列回答")
         }
     }
 
