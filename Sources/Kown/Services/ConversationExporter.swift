@@ -124,6 +124,36 @@ enum ConversationExporter {
         return out
     }
 
+    // MARK: - 单轮报告
+
+    /// 单轮报告:渲染一个 Turn(用户问题 + 该模式的回答/结论)为 Markdown。
+    /// 用于 Council / Debate 的「导出报告」,复用整会话的逐轮渲染逻辑。
+    static func turnReportMarkdown(_ turn: Turn, mode: ConversationMode, index: Int? = nil) -> String {
+        var out = ""
+        let header = index.map { "第 \($0 + 1) 轮" } ?? "单轮报告"
+        out += "# \(header) · \(format(turn.timestamp))\n\n"
+        out += "- 模式: \(mode.displayName)\n\n---\n\n"
+        out += renderPrompt(turn)
+        switch mode {
+        case .direct:  out += renderDirect(turn)
+        case .compare: out += renderCompare(turn)
+        case .council: out += renderCouncil(turn)
+        case .debate:  out += renderDebate(turn)
+        }
+        out += "\n"
+        return out
+    }
+
+    /// 单轮报告的建议文件名(会话标题 + -report.md)。
+    static func suggestedTurnReportFileName(_ turn: Turn, conversationTitle: String) -> String {
+        let raw = conversationTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleaned = raw.isEmpty ? "Conversation" : raw
+        let illegal = CharacterSet(charactersIn: "/\\:?%*|\"<>")
+        let safe = cleaned.components(separatedBy: illegal).joined(separator: "-")
+        let trimmed = safe.count > 60 ? String(safe.prefix(60)) : safe
+        return "\(trimmed)-report.md"
+    }
+
     // MARK: - 各模式渲染
 
     /// 用户 prompt(含 system prompt / 图片附件提示)。

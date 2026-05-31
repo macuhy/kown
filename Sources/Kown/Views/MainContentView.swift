@@ -68,6 +68,33 @@ struct MainContentView: View {
         editRequest = EditTurnRequest(id: turnID, text: t.prompt)
     }
 
+    /// 追问:聚焦输入框继续在该轮结论之上提问。若该轮不是最新轮,先分支再聚焦。
+    private func requestFollowUp(_ turnID: UUID) {
+        if let conv = viewModel.selectedConversation, conv.turns.last?.id != turnID {
+            viewModel.forkConversation(fromTurnID: turnID)
+        }
+        inputFocused = true
+    }
+
+    /// 导出单轮报告:复用整会话导出的存盘 / 分享管线。
+    private func exportTurnReport(_ turnID: UUID) {
+        guard let report = viewModel.turnReport(turnID: turnID) else { return }
+        #if os(macOS)
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = report.fileName
+        panel.canCreateDirectories = true
+        panel.isExtensionHidden = false
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            try? report.text.data(using: .utf8)?.write(to: url, options: .atomic)
+        }
+        #else
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(report.fileName)
+        try? report.text.data(using: .utf8)?.write(to: url, options: .atomic)
+        shareSheet = ShareSheetPayload(url: url)
+        #endif
+    }
+
     // MARK: - 整会话导出
 
     /// 会话区工具栏的「导出」菜单 — 导出当前会话为 Markdown / JSON。
@@ -157,7 +184,9 @@ struct MainContentView: View {
                                 livePanel: viewModel.providersForCurrentSend().panel,
                                 liveChair: viewModel.chairProvider,
                                 liveSummary: viewModel.summaryProvider,
-                                onEditTurn: { requestEdit($0) }
+                                onEditTurn: { requestEdit($0) },
+                                onFollowUpTurn: { requestFollowUp($0) },
+                                onExportTurn: { exportTurnReport($0) }
                             )
                         case .direct:
                             DirectTurnsView(
@@ -167,7 +196,9 @@ struct MainContentView: View {
                                 liveImages: lImages,
                                 livePanel: viewModel.providersForCurrentSend().panel,
                                 onForkTurn: { viewModel.forkConversation(fromTurnID: $0) },
-                                onEditTurn: { requestEdit($0) }
+                                onEditTurn: { requestEdit($0) },
+                                onFollowUpTurn: { requestFollowUp($0) },
+                                onExportTurn: { exportTurnReport($0) }
                             )
                         case .compare:
                             CompareTurnsView(
@@ -179,7 +210,9 @@ struct MainContentView: View {
                                 liveImages: lImages,
                                 livePanel: viewModel.providersForCurrentSend().panel,
                                 liveChair: viewModel.providersForCurrentSend().chair,
-                                onEditTurn: { requestEdit($0) }
+                                onEditTurn: { requestEdit($0) },
+                                onFollowUpTurn: { requestFollowUp($0) },
+                                onExportTurn: { exportTurnReport($0) }
                             )
                         case .debate:
                             DebateTurnsView(
@@ -193,7 +226,9 @@ struct MainContentView: View {
                                 isRunning: lIsRunning,
                                 livePanel: viewModel.providersForCurrentSend().panel,
                                 liveChair: viewModel.chairProvider,
-                                onEditTurn: { requestEdit($0) }
+                                onEditTurn: { requestEdit($0) },
+                                onFollowUpTurn: { requestFollowUp($0) },
+                                onExportTurn: { exportTurnReport($0) }
                             )
                         }
                     }

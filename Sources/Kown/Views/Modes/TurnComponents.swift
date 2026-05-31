@@ -9,6 +9,14 @@ struct PromptBubble: View {
     var onFork: (() -> Void)? = nil
     /// 历史 turn 才传:编辑这条消息并从此处重新生成(截断其后各轮)。
     var onEdit: (() -> Void)? = nil
+    /// 历史 turn 才传:基于该轮结论追问(聚焦输入,必要时先分支)。
+    var onFollowUp: (() -> Void)? = nil
+    /// 历史 turn 才传:把该轮导出成单轮报告。
+    var onExportReport: (() -> Void)? = nil
+
+    private var hasMenu: Bool {
+        onFork != nil || onEdit != nil || onFollowUp != nil || onExportReport != nil
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -43,14 +51,20 @@ struct PromptBubble: View {
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
                     }
-                    if onFork != nil || onEdit != nil {
+                    if hasMenu {
                         Spacer(minLength: 8)
                         Menu {
                             if let onEdit {
                                 Button { onEdit() } label: { Label("编辑并重发", systemImage: "pencil") }
                             }
+                            if let onFollowUp {
+                                Button { onFollowUp() } label: { Label("追问", systemImage: "arrowshape.turn.up.left") }
+                            }
                             if let onFork {
                                 Button { onFork() } label: { Label("从这里分支", systemImage: "arrow.triangle.branch") }
+                            }
+                            if let onExportReport {
+                                Button { onExportReport() } label: { Label("导出本轮报告", systemImage: "square.and.arrow.up") }
                             }
                         } label: {
                             Image(systemName: "ellipsis.circle")

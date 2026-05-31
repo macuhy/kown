@@ -7,9 +7,11 @@ struct DirectTurnsView: View {
     let livePrompt: String?
     var liveImages: [TurnImage] = []
     let livePanel: [ProviderConfig]
-    /// 历史 turn 的分支/编辑动作(由持有 viewModel 的父视图注入)。
+    /// 历史 turn 的分支/编辑/追问/导出动作(由持有 viewModel 的父视图注入)。
     var onForkTurn: ((UUID) -> Void)? = nil
     var onEditTurn: ((UUID) -> Void)? = nil
+    var onFollowUpTurn: ((UUID) -> Void)? = nil
+    var onExportTurn: ((UUID) -> Void)? = nil
 
     @Environment(\.horizontalSizeClass) private var hSizeClass
 
@@ -31,7 +33,9 @@ struct DirectTurnsView: View {
         directTurnShell(isLive: false) {
             userBubble(prompt: turn.prompt, timestamp: turn.timestamp, images: turn.images ?? [],
                        onFork: onForkTurn.map { f in { f(turn.id) } },
-                       onEdit: onEditTurn.map { f in { f(turn.id) } })
+                       onEdit: onEditTurn.map { f in { f(turn.id) } },
+                       onFollowUp: onFollowUpTurn.map { f in { f(turn.id) } },
+                       onExportReport: onExportTurn.map { f in { f(turn.id) } })
             if let cfg = turn.orderedPanelConfigs.first {
                 let key = cfg.id.uuidString
                 assistantBubble(
@@ -109,7 +113,8 @@ struct DirectTurnsView: View {
     }
 
     private func userBubble(prompt: String, timestamp: Date, images: [TurnImage] = [],
-                            onFork: (() -> Void)? = nil, onEdit: (() -> Void)? = nil) -> some View {
+                            onFork: (() -> Void)? = nil, onEdit: (() -> Void)? = nil,
+                            onFollowUp: (() -> Void)? = nil, onExportReport: (() -> Void)? = nil) -> some View {
         HStack {
             Spacer(minLength: userLeadingGutter)
             VStack(alignment: .trailing, spacing: 4) {
@@ -136,13 +141,19 @@ struct DirectTurnsView: View {
                         }
                 }
                 HStack(spacing: 6) {
-                    if onFork != nil || onEdit != nil {
+                    if onFork != nil || onEdit != nil || onFollowUp != nil || onExportReport != nil {
                         Menu {
                             if let onEdit {
                                 Button { onEdit() } label: { Label("编辑并重发", systemImage: "pencil") }
                             }
+                            if let onFollowUp {
+                                Button { onFollowUp() } label: { Label("追问", systemImage: "arrowshape.turn.up.left") }
+                            }
                             if let onFork {
                                 Button { onFork() } label: { Label("从这里分支", systemImage: "arrow.triangle.branch") }
+                            }
+                            if let onExportReport {
+                                Button { onExportReport() } label: { Label("导出本轮报告", systemImage: "square.and.arrow.up") }
                             }
                         } label: {
                             Image(systemName: "ellipsis.circle")

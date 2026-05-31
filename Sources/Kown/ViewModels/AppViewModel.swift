@@ -201,6 +201,17 @@ final class AppViewModel {
         scheduleSummarization(for: fork.id)
     }
 
+    /// 单轮报告文本(Markdown)+ 建议文件名 —— 供「导出报告」用。找不到轮返回 nil。
+    func turnReport(turnID: UUID) -> (text: String, fileName: String)? {
+        guard let conv = selectedConversation,
+              let idx = conv.turns.firstIndex(where: { $0.id == turnID }) else { return nil }
+        let turn = conv.turns[idx]
+        return (
+            ConversationExporter.turnReportMarkdown(turn, mode: conv.mode, index: idx),
+            ConversationExporter.suggestedTurnReportFileName(turn, conversationTitle: conv.title)
+        )
+    }
+
     func selectConversation(_ id: UUID) {
         // 不打断后台运行的请求 — 它绑定的还是原会话 ID(send() 闭包里 captured),
         // 结束后会正确把 turn 写回 `conversations[原 idx]`。当前选中切换只影响 UI 显示。
