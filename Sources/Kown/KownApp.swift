@@ -127,6 +127,40 @@ struct KownApp: App {
             CommandGroup(after: .appInfo) {
                 CheckForUpdatesMenuItem()
             }
+            // 「对话」菜单 —— 模式切换 + 停止 + 删除当前会话。
+            // 这里只调用 AppViewModel 已暴露的 public 接口,不触碰其它文件。
+            CommandMenu("对话") {
+                // ⌘1~⌘4 切换对话模式。固定顺序与 InputBar 上的 tab 一致:
+                // 直接 / 对比 / 议会 / 辩论。switchMode(to:) 自身会处理「空会话原地切 / 非空开新会话」。
+                Button("直接问答") { _ = viewModel.switchMode(to: .direct) }
+                    .keyboardShortcut("1", modifiers: .command)
+                Button("模型对比") { _ = viewModel.switchMode(to: .compare) }
+                    .keyboardShortcut("2", modifiers: .command)
+                Button("模型议会") { _ = viewModel.switchMode(to: .council) }
+                    .keyboardShortcut("3", modifiers: .command)
+                Button("模型辩论") { _ = viewModel.switchMode(to: .debate) }
+                    .keyboardShortcut("4", modifiers: .command)
+
+                Divider()
+
+                // ⌘. 停止正在生成的回复(等价于输入栏的「停止」)。
+                Button("停止生成") {
+                    viewModel.cancel()
+                }
+                .keyboardShortcut(".", modifiers: .command)
+                .disabled(!viewModel.isRunning)
+
+                Divider()
+
+                // ⌘⇧⌫ 删除当前选中的会话。
+                Button("删除当前会话") {
+                    if let id = viewModel.selectedConversationID {
+                        viewModel.deleteConversation(id)
+                    }
+                }
+                .keyboardShortcut(.delete, modifiers: [.command, .shift])
+                .disabled(viewModel.selectedConversationID == nil)
+            }
         }
         #endif
     }
