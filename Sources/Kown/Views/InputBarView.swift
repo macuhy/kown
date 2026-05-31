@@ -12,6 +12,9 @@ struct InputBarView: View {
     @Binding var showSystemPromptDrawer: Bool
     @FocusState.Binding var inputFocused: Bool
 
+    /// 发送历史回溯(↑/↓ 调取最近输入)。视图本地持有即可,跨会话靠自身持久化。
+    @State private var history = PromptHistoryStore()
+
     @State private var pickerError: String?
     @State private var showEnhancer = false
     #if os(macOS)
@@ -178,6 +181,29 @@ struct InputBarView: View {
             .focused($inputFocused)
             .submitLabel(.send)
             .onSubmit { sendIfCan() }
+            // 用户改动文本就退出历史浏览态(下次 ↑ 从最新一条重新数起)。
+            // 历史回填本身也会改 prompt,这里用 isBrowsing 把回填动作排除掉。
+            .onChange(of: viewModel.prompt) { _, _ in
+                if !history.isBrowsing { history.resetBrowsing() }
+            }
+            // ↑ 取更早一条:仅当输入框为空、或正在浏览历史时拦截,避免破坏正常多行编辑的光标上移。
+            .onKeyPress(.upArrow) {
+                guard inputFocused, canBrowseHistory else { return .ignored }
+                if let text = history.older(current: viewModel.prompt) {
+                    viewModel.prompt = text
+                    return .handled
+                }
+                return .ignored
+            }
+            // ↓ 取更晚一条:仅当正在浏览历史时拦截,否则放行给正常多行编辑。
+            .onKeyPress(.downArrow) {
+                guard inputFocused, history.isBrowsing else { return .ignored }
+                if let text = history.newer() {
+                    viewModel.prompt = text
+                    return .handled
+                }
+                return .ignored
+            }
             #if os(iOS)
             .onTapGesture { inputFocused = true }
             #endif
@@ -187,6 +213,12 @@ struct InputBarView: View {
                 handlePasteImage()
             }
             #endif
+    }
+
+    /// 是否允许 ↑ 进入历史回溯:输入框为空(光标必在首行)或已经在浏览中。
+    /// 输入框有内容时不拦截 ↑,让它当作正常的多行光标上移。
+    private var canBrowseHistory: Bool {
+        history.isBrowsing || viewModel.prompt.isEmpty
     }
 
     private var toolButtons: some View {
@@ -544,6 +576,8 @@ struct InputBarView: View {
         if isViewingRunningConv {
             viewModel.cancel()
         } else if viewModel.canSend {
+            // 发送前把当前文本记进历史(record 内部会去重相邻重复 + 重置浏览游标)。
+            history.record(viewModel.prompt)
             viewModel.send()
         }
     }
