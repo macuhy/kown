@@ -208,8 +208,10 @@ struct InputBarView: View {
             .onTapGesture { inputFocused = true }
             #endif
             #if os(macOS)
-            // ⌘V 粘贴图片直接成附件 — 普通文本粘贴让 TextField 自己处理(不消费这条 paste)
-            .onPasteCommand(of: ["public.image", "public.png", "public.jpeg", "public.tiff"]) { _ in
+            // ⌘V 粘贴图片/文件直接成附件 — 普通文本粘贴让 TextField 自己处理(不消费这条 paste)。
+            // 含 public.file-url:从 Finder 复制的图片/文件,剪贴板里是文件引用而非位图数据,
+            // 不拦截就会被 TextField 当成路径文本贴进来(只显示路径、没缩略图)。
+            .onPasteCommand(of: ["public.image", "public.png", "public.jpeg", "public.tiff", "public.file-url"]) { _ in
                 handlePasteImage()
             }
             #endif
@@ -656,10 +658,12 @@ struct InputBarView: View {
     private func pickFile()  { showFileImporter = true }
     private func pickImage() { showImageImporter = true }
 
-    /// 从 NSPasteboard 拿图片数据塞进 attachments — 触发条件:用户在输入框聚焦 ⌘V。
-    /// 优先 PNG;退而求其次 TIFF → 转 PNG。
+    /// 从 NSPasteboard 拿图片/文件塞进 attachments — 触发条件:用户在输入框聚焦 ⌘V。
+    /// 优先位图数据(截图 / 浏览器复制图片):PNG → TIFF→PNG;
+    /// 再退到文件引用(从 Finder 复制的图片/文件):按扩展名分流成图片或文件附件。
     private func handlePasteImage() {
         let pb = NSPasteboard.general
+        // 1) 剪贴板里就是位图字节(截图 / 浏览器「复制图片」)。
         if let pngData = pb.data(forType: .png),
            (try? viewModel.attachImageData(pngData, name: pastedName(ext: "png"), mime: "image/png")) != nil {
             pickerError = nil
@@ -672,11 +676,35 @@ struct InputBarView: View {
             pickerError = nil
             return
         }
-        // 真没图片就当 NSPasteboard 让 TextField 自己处理普通文本(本回调已被消费,但 SwiftUI
-        // 通常会同时把粘贴文本写进 TextField — 如果没,用户体感上"复制纯文本时按一下"应该会贴。
-        // 这里给个温和的错误提示作为兜底。
-        pickerError = "剪贴板里没有可识别的图片数据"
+        // 2) 剪贴板里是文件引用(从 Finder 复制了图片/文件)。按扩展名分流:
+        //    图片 → 走 attachImageNormalized(HEIC 自动转 JPEG、展示缩略图);其它 → attachFile(文本/PDF)。
+        if let urls = pb.readObjects(forClasses: [NSURL.self],
+                                     options: [.urlReadingFileURLsOnly: true]) as? [URL],
+           !urls.isEmpty {
+            var attached = false
+            for url in urls {
+                do {
+                    if Self.pasteImageExtensions.contains(url.pathExtension.lowercased()) {
+                        let data = try Data(contentsOf: url)
+                        try viewModel.attachImageNormalized(data, name: url.lastPathComponent)
+                    } else {
+                        try viewModel.attachFile(at: url)
+                    }
+                    attached = true
+                } catch {
+                    pickerError = error.localizedDescription
+                }
+            }
+            if attached { pickerError = nil }
+            return
+        }
+        // 真没图片/文件就给个兜底提示(普通文本粘贴不会进到这里)。
+        pickerError = "剪贴板里没有可识别的图片或文件"
     }
+
+    /// 粘贴文件引用时按扩展名识别图片(走缩略图路径)。
+    private static let pasteImageExtensions: Set<String> =
+        ["png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "bmp", "tiff", "tif"]
 
     private func pastedName(ext: String) -> String {
         let f = DateFormatter()
