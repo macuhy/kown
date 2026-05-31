@@ -230,10 +230,12 @@ struct UsageSettingsView: View {
             var s = sum; s.input += e.value.input; s.output += e.value.output
             s.callCount += e.value.callCount; return s
         }
+        let dayCost = store.cost(for: day, scope: scope)
         return VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 statusBadge("当日合计", icon: "sum", color: tint)
                 Spacer(minLength: 0)
+                costBadge(dayCost)
                 Text("\(formatTokens(dayTotal.total))")
                     .font(.callout.weight(.bold))
                     .monospacedDigit()
@@ -248,8 +250,28 @@ struct UsageSettingsView: View {
         }
     }
 
+    /// 成本小徽章:显示已知金额,含未知价条目时追加「+未知」灰字。
+    private func costBadge(_ cost: CostBreakdown) -> some View {
+        HStack(spacing: 3) {
+            Text(CostFormat.usd(cost.knownCostUSD))
+                .font(.caption.weight(.bold))
+                .monospacedDigit()
+                .foregroundStyle(tint)
+            if cost.hasUnknown {
+                Text("+未知")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(tint.opacity(0.10), in: Capsule())
+        .overlay { Capsule().strokeBorder(tint.opacity(0.16), lineWidth: 1) }
+    }
+
     private func modelRow(key: String, entry: UsageEntry) -> some View {
         let (provider, model) = UsageStore.splitKey(key)
+        let cost = UsageStore.cost(forKey: key, entry: entry)
         #if os(iOS)
         return VStack(alignment: .leading, spacing: 11) {
             HStack(spacing: 10) {
@@ -272,6 +294,7 @@ struct UsageSettingsView: View {
                     Text(formatTokens(entry.total))
                         .font(.callout.weight(.bold))
                         .monospacedDigit()
+                    costText(cost)
                     Text("\(entry.callCount) 次")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
@@ -309,6 +332,8 @@ struct UsageSettingsView: View {
                 .font(.callout.weight(.semibold))
                 .monospacedDigit()
                 .frame(minWidth: 64, alignment: .trailing)
+            costText(cost)
+                .frame(minWidth: 64, alignment: .trailing)
             Text("\(entry.callCount)×")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
@@ -318,6 +343,21 @@ struct UsageSettingsView: View {
         .padding(10)
         .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         #endif
+    }
+
+    /// 单条成本文本:已知价显示金额(橙色),未知价显示「未知」(置灰)。
+    @ViewBuilder
+    private func costText(_ cost: Double?) -> some View {
+        if let cost {
+            Text(CostFormat.usd(cost))
+                .font(.caption2.weight(.semibold))
+                .monospacedDigit()
+                .foregroundStyle(tint)
+        } else {
+            Text("价格未知")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
     }
 
     private func tokenBadge(label: String, value: Int, color: Color) -> some View {
@@ -340,6 +380,7 @@ struct UsageSettingsView: View {
 
     private var summaryRow: some View {
         let total = store.grandTotal(scope: scope)
+        let totalCost = store.totalCost(scope: scope)
         let devices = store.deviceCount
         let isThisDeviceOnly = (scope == .thisDevice)
         return HStack {
@@ -374,6 +415,17 @@ struct UsageSettingsView: View {
                         .foregroundStyle(.orange)
                 }
                 .monospacedDigit()
+                HStack(spacing: 4) {
+                    Text("约 \(CostFormat.usd(totalCost.knownCostUSD))")
+                        .font(.caption2.weight(.bold))
+                        .monospacedDigit()
+                        .foregroundStyle(tint)
+                    if totalCost.hasUnknown {
+                        Text("· \(totalCost.unknownEntryCount) 项价格未知")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
             }
         }
         .padding(12)

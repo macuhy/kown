@@ -135,6 +135,73 @@ final class UsageStore {
         return ("unknown", key)
     }
 
+    // MARK: - 成本聚合(纯读侧派生,不落盘、不迁移)
+
+    /// 单个 (provider::model) 条目的成本(美元)。查不到单价时返回 nil(视为未知)。
+    /// 价格表见 `ProviderModelCatalog.priceTable`。
+    static func cost(forKey key: String, entry: UsageEntry) -> Double? {
+        let (providerRaw, model) = splitKey(key)
+        let kind = ProviderKind(rawValue: providerRaw)
+        guard let price = ProviderModelCatalog.price(forModel: model, providerKind: kind) else {
+            return nil
+        }
+        return Double(entry.input) / 1_000_000 * price.inputPerMTok
+            + Double(entry.output) / 1_000_000 * price.outputPerMTok
+    }
+
+    /// 把一个 (key → entry) bucket 聚合成成本明细:已知价累加 + 未知价统计。
+    private static func aggregateCost(_ bucket: [String: UsageEntry]) -> CostBreakdown {
+        var known = 0.0
+        var unknownTokens = 0
+        var unknownEntries = 0
+        for (key, entry) in bucket {
+            if let c = cost(forKey: key, entry: entry) {
+                known += c
+            } else {
+                unknownTokens += entry.total
+                unknownEntries += 1
+            }
+        }
+        return CostBreakdown(knownCostUSD: known, unknownTokens: unknownTokens, unknownEntryCount: unknownEntries)
+    }
+
+    /// 指定 scope 下的总成本(跨全部天 / 全部模型)。
+    func totalCost(scope: Scope) -> CostBreakdown {
+        var acc = CostBreakdown.zero
+        for bucket in snapshot(scope: scope).days.values {
+            acc = acc.adding(Self.aggregateCost(bucket))
+        }
+        return acc
+    }
+
+    /// 某一天的成本明细。
+    func cost(for day: String, scope: Scope) -> CostBreakdown {
+        Self.aggregateCost(snapshot(scope: scope).days[day] ?? [:])
+    }
+
+    /// 按模型聚合的成本,key 与 usage 记录一致(`providerKind::model`)。
+    func costByModel(scope: Scope) -> [String: CostBreakdown] {
+        var grouped: [String: UsageEntry] = [:]
+        for bucket in snapshot(scope: scope).days.values {
+            for (key, entry) in bucket {
+                var e = grouped[key] ?? UsageEntry()
+                e.input += entry.input
+                e.output += entry.output
+                e.callCount += entry.callCount
+                grouped[key] = e
+            }
+        }
+        // 复用单条成本逻辑:每个 key 单独算,合成 breakdown
+        var out: [String: CostBreakdown] = [:]
+        for (key, entry) in grouped {
+            out[key] = Self.aggregateCost([key: entry])
+        }
+        return out
+    }
+
+    /// 向后兼容(默认 .all)
+    var totalCost: CostBreakdown { totalCost(scope: .all) }
+
     /// 参与累加的设备数(包括本机)
     var deviceCount: Int {
         Self.deviceCount(excludingDeviceID: nil)
@@ -238,4 +305,37 @@ struct UsageEntry: Codable, Hashable, Sendable {
     var callCount: Int = 0
 
     var total: Int { input + output }
+}
+
+/// 成本聚合结果(纯读侧派生,不落盘)。
+/// - knownCostUSD: 能查到单价的条目累计美元成本
+/// - unknownTokens / unknownEntryCount: 查不到单价的条目统计(不计入金额,UI 单独标注)
+struct CostBreakdown: Sendable {
+    var knownCostUSD: Double
+    var unknownTokens: Int
+    var unknownEntryCount: Int
+
+    /// 是否存在未知价格的条目(UI 用来决定要不要标注)
+    var hasUnknown: Bool { unknownEntryCount > 0 }
+
+    static let zero = CostBreakdown(knownCostUSD: 0, unknownTokens: 0, unknownEntryCount: 0)
+
+    /// 两份明细相加(已知金额相加、未知统计相加)
+    func adding(_ other: CostBreakdown) -> CostBreakdown {
+        CostBreakdown(
+            knownCostUSD: knownCostUSD + other.knownCostUSD,
+            unknownTokens: unknownTokens + other.unknownTokens,
+            unknownEntryCount: unknownEntryCount + other.unknownEntryCount
+        )
+    }
+}
+
+/// 成本金额格式化(美元)。极小金额(< $0.01)多给几位小数,避免一律显示成 "$0.00"。
+enum CostFormat {
+    static func usd(_ amount: Double) -> String {
+        if amount > 0 && amount < 0.01 {
+            return String(format: "$%.4f", amount)
+        }
+        return String(format: "$%.2f", amount)
+    }
 }
