@@ -326,19 +326,35 @@ struct InputBarView: View {
     private func attachmentChip(_ att: Attachment) -> some View {
         switch att {
         case .file(let f):
-            chipShell(icon: "doc.text", label: f.name, detail: "\(f.byteCount / 1024)KB", id: f.id, color: .blue)
+            chipShell(label: f.name, detail: "\(f.byteCount / 1024)KB", id: f.id, color: .blue) {
+                chipIconBox("doc.text", color: .blue)
+            }
         case .image(let i):
-            chipShell(icon: "photo", label: i.name, detail: "\(i.pixelWidth)×\(i.pixelHeight)", id: i.id, color: .purple)
+            // 图片附件:展示真实缩略图(粘贴 / 拖入 / 选取都走这里),不再只显示图标 + 名称。
+            chipShell(label: i.name, detail: "\(i.pixelWidth)×\(i.pixelHeight)", id: i.id, color: .purple) {
+                AttachmentImageThumb(payload: i)
+            }
         }
     }
 
-    private func chipShell(icon: String, label: String, detail: String, id: UUID, color: Color) -> some View {
+    /// 文件附件用的彩色图标方块(图片附件改用真实缩略图,见 AttachmentImageThumb)。
+    private func chipIconBox(_ icon: String, color: Color) -> some View {
+        Image(systemName: icon)
+            .font(.caption.weight(.bold))
+            .foregroundStyle(color)
+            .frame(width: 30, height: 30)
+            .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private func chipShell<Leading: View>(
+        label: String,
+        detail: String,
+        id: UUID,
+        color: Color,
+        @ViewBuilder leading: () -> Leading
+    ) -> some View {
         HStack(spacing: 6) {
-            Image(systemName: icon)
-                .font(.caption.weight(.bold))
-                .foregroundStyle(color)
-                .frame(width: 24, height: 24)
-                .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            leading()
             Text(label)
                 .font(.caption.weight(.semibold))
                 .lineLimit(1)
@@ -664,6 +680,41 @@ struct InputBarView: View {
         return "Pasted-\(f.string(from: Date())).\(ext)"
     }
     #endif
+}
+
+// MARK: - 附件缩略图
+
+/// 输入区图片附件的缩略图。
+/// base64 只解码一次(放进 .task,按 id 缓存),避免每次输入框重绘都解一遍大图。
+private struct AttachmentImageThumb: View {
+    let payload: Attachment.ImagePayload
+    var side: CGFloat = 30
+
+    @State private var image: Image?
+
+    var body: some View {
+        Group {
+            if let image {
+                image.resizable().aspectRatio(contentMode: .fill)
+            } else {
+                // 解码完成前的占位(也兜底解码失败)。
+                Rectangle()
+                    .fill(Color.purple.opacity(0.12))
+                    .overlay {
+                        Image(systemName: "photo")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.purple)
+                    }
+            }
+        }
+        .frame(width: side, height: side)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .task(id: payload.id) {
+            guard image == nil,
+                  let data = Data(base64Encoded: payload.base64) else { return }
+            image = ConversationImageView.makeImage(from: data)
+        }
+    }
 }
 
 // MARK: - Prompt Enhancer Sheet
