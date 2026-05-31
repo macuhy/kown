@@ -122,6 +122,10 @@ struct KownApp: App {
                     viewModel.newConversation(mode: viewModel.activeMode)
                 }
                 .keyboardShortcut("n", modifiers: .command)
+                Button("命令面板…") {
+                    viewModel.showCommandPalette = true
+                }
+                .keyboardShortcut("k", modifiers: .command)
             }
             // 「Kown ▸ 检查更新…」(紧跟「关于 Kown」之后)
             CommandGroup(after: .appInfo) {

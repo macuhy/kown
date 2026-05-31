@@ -14,6 +14,8 @@ final class AppViewModel {
     /// 没选会话时新建会话使用的默认模式
     var activeMode: ConversationMode = .council
     var prompt: String = ""
+    /// ⌘K 命令面板是否打开(macOS 菜单命令与 RootView sheet 共用此开关)。
+    var showCommandPalette = false
     var systemPrompt: String {
         didSet { UserDefaults.standard.set(systemPrompt, forKey: Self.systemPromptKey) }
     }

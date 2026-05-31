@@ -45,6 +45,9 @@ struct RootView: View {
                 .frame(width: 960, height: 660)
                 #endif
         }
+        .sheet(isPresented: $viewModel.showCommandPalette) {
+            CommandPaletteView(viewModel: viewModel)
+        }
     }
 
     #if os(iOS)
@@ -55,6 +58,9 @@ struct RootView: View {
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
                         conversationsButton
+                    }
+                    ToolbarItem(placement: .topBarLeading) {
+                        commandPaletteButton
                     }
                     ToolbarItem(placement: .principal) {
                         iOSNavigationIdentity
@@ -99,6 +105,13 @@ struct RootView: View {
         .sheet(isPresented: $showSettings) {
             SettingsView(viewModel: viewModel)
                 .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .presentationCornerRadius(28)
+                .presentationBackground(.regularMaterial)
+        }
+        .sheet(isPresented: $viewModel.showCommandPalette) {
+            CommandPaletteView(viewModel: viewModel)
+                .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
                 .presentationCornerRadius(28)
                 .presentationBackground(.regularMaterial)
@@ -160,6 +173,27 @@ struct RootView: View {
         .buttonStyle(.plain)
         #endif
         .help("厂商配置")
+    }
+
+    private var commandPaletteButton: some View {
+        Button {
+            viewModel.showCommandPalette = true
+        } label: {
+            Image(systemName: "command")
+                #if os(iOS)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(.primary)
+                .frame(width: 34, height: 34)
+                .background(.thinMaterial, in: Circle())
+                .overlay {
+                    Circle().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+                }
+                #endif
+        }
+        #if os(iOS)
+        .buttonStyle(.plain)
+        #endif
+        .help("命令面板")
     }
 
     private var conversationsButton: some View {

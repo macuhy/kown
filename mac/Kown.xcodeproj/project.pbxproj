@@ -13,6 +13,7 @@
 		0A142CA6FC562680E1EC9661 /* ConversationPromptSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6E3D82CE18FAF01C9C7F884 /* ConversationPromptSheet.swift */; };
 		0FA0EAB65F062049B93171A0 /* LLMStreamChunk.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0687940C49D7DC9598C4D2AE /* LLMStreamChunk.swift */; };
 		11A00AC50A8D15B9C6DF0A23 /* PromptLibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C635BF4CA8D4A79975C77578 /* PromptLibraryStore.swift */; };
+		142F973AE60AB8BC7115274C /* CommandPaletteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7535A84A46BDAE9B8137DC4 /* CommandPaletteView.swift */; };
 		18A836F797793DBA55EDB7BA /* ResponseColumnView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 553F6E511AFFCE5F05104903 /* ResponseColumnView.swift */; };
 		1A22AB7EC16FE8D7ED5F7106 /* DebateTurnsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE5C4405041E203FC52EA1BA /* DebateTurnsView.swift */; };
 		1B6835FE4EE43F667875603B /* UpdateSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EB39177D9D2AFD88D8C099E /* UpdateSettingsView.swift */; };
@@ -141,6 +142,7 @@
 		DC18A3107707274492A4E4E3 /* Platform.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Platform.swift; sourceTree = "<group>"; };
 		DD0634339284A0A46BFDB9A1 /* ToolDefinition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolDefinition.swift; sourceTree = "<group>"; };
 		E35C0AAFF7D2C70C8E2A87CD /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		E7535A84A46BDAE9B8137DC4 /* CommandPaletteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteView.swift; sourceTree = "<group>"; };
 		E99E10045CA633CC12C339A4 /* ConversationRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationRowView.swift; sourceTree = "<group>"; };
 		E9C7AC3CC81D28CC3EC26758 /* Conversation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Conversation.swift; sourceTree = "<group>"; };
 		EA814C2E69E49C2CE4217231 /* SSELineStream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSELineStream.swift; sourceTree = "<group>"; };
@@ -187,6 +189,7 @@
 				347ED1793B406F4531957878 /* ActiveProviderBar.swift */,
 				0749B24CA1D69C9404037BCC /* BackupSettingsView.swift */,
 				4B2FF343C76EE2CFEBA65443 /* ChangelogView.swift */,
+				E7535A84A46BDAE9B8137DC4 /* CommandPaletteView.swift */,
 				C4FAB15E12FFD38053F8D124 /* ConversationImageView.swift */,
 				A6E3D82CE18FAF01C9C7F884 /* ConversationPromptSheet.swift */,
 				C55ADFE111F5EA812F1CBAFC /* EmptyStateCard.swift */,
@@ -420,6 +423,7 @@
 				1F666F780CD2FC25F78B2245 /* CLIPendingPrompt.swift in Sources */,
 				308FCC8017B037FE8825B9B3 /* ChangelogService.swift in Sources */,
 				7A2E1775C20817A909AAE3EB /* ChangelogView.swift in Sources */,
+				142F973AE60AB8BC7115274C /* CommandPaletteView.swift in Sources */,
 				AC07A20F016EA19138DCB1DF /* CompareTurnsView.swift in Sources */,
 				A3F8E6F819337B710DD7A652 /* Conversation.swift in Sources */,
 				C4DACA218B54231CA96E335C /* ConversationExporter.swift in Sources */,
