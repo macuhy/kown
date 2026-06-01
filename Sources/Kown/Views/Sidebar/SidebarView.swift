@@ -64,10 +64,12 @@ struct SidebarView: View {
         }
         .frame(minWidth: 240)
         .background(sidebarBackdrop)
-        // 索引构建:侧栏出现及会话数组变化时全量重建(只在内存)
-        .onAppear { searchIndex.rebuild(viewModel.conversations) }
-        .onChange(of: viewModel.conversations) { _, newValue in
-            searchIndex.rebuild(newValue)
+        // 懒重建:索引只在搜索时用到,所以仅在开始搜索(空→非空)那一刻建一次,
+        // 而不是每次会话数组变动都全量重扫 + 对整个大数组做相等性比较(都 O(全部文本))。
+        .onChange(of: searchText) { old, new in
+            if old.isEmpty && !new.isEmpty {
+                searchIndex.rebuild(viewModel.conversations)
+            }
         }
         .sheet(item: $promptEditTarget) { target in
             ConversationPromptSheet(viewModel: viewModel, conversationID: target.id)
