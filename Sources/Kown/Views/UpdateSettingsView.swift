@@ -7,6 +7,9 @@ import SwiftUI
 /// 实际下载 / 校验 / 安装 / 重启都由 Sparkle 标准 UI 接管。
 struct UpdateSettingsView: View {
     @ObservedObject private var updater = UpdaterService.shared
+    /// 触发更新前先关掉设置 sheet —— 否则 modal sheet 会挡住 Sparkle 的安装/重启(terminate 退不出去)。
+    /// 默认直接检查(用于无 sheet 上下文);SettingsView 传入会先 dismiss 再 checkForUpdates。
+    var onRequestUpdate: () -> Void = { UpdaterService.shared.checkForUpdates() }
 
     private let tint = Color(red: 0.57, green: 0.42, blue: 0.82)
     private let secondaryTint = Color(red: 0.95, green: 0.57, blue: 0.16)
@@ -50,7 +53,7 @@ struct UpdateSettingsView: View {
                 }
                 Spacer(minLength: 0)
                 Button {
-                    updater.checkForUpdates()
+                    onRequestUpdate()
                 } label: {
                     Label("检查更新", systemImage: "arrow.triangle.2.circlepath")
                 }

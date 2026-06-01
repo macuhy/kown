@@ -643,7 +643,11 @@ struct SettingsView: View {
                 PerformanceSettingsView()
             case .updates:
                 #if os(macOS)
-                UpdateSettingsView()
+                UpdateSettingsView(onRequestUpdate: {
+                    // 先关掉设置 sheet,再触发 Sparkle —— 否则 modal sheet 挡住安装/重启的 terminate。
+                    dismiss()
+                    UpdaterService.shared.checkForUpdates()
+                })
                 #else
                 EmptyView()
                 #endif
