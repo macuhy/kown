@@ -163,18 +163,34 @@ struct MainContentView: View {
                     Label(format.menuTitle, systemImage: format.symbol)
                 }
             }
+            Divider()
+            Button {
+                if let conv { Platform.copyText(ConversationExporter.markdown(for: conv)) }
+            } label: {
+                Label("复制为 Markdown", systemImage: "doc.on.doc")
+            }
+            Button {
+                let all = ConversationExporter.markdownForAll(viewModel.conversations)
+                saveText(all, fileName: "Kown-全部会话.md")
+            } label: {
+                Label("导出全部会话(Markdown)", systemImage: "tray.full")
+            }
+            .disabled(viewModel.conversations.isEmpty)
         } label: {
             Image(systemName: "square.and.arrow.up")
         }
         .disabled(conv == nil)
-        .help("导出当前会话")
+        .help("导出 / 复制")
     }
 
-    /// 把会话导出成指定格式:macOS 弹 NSSavePanel 存盘;iOS 走系统分享。
+    /// 把会话导出成指定格式:复用 saveText 的存盘 / 分享管线。
     private func export(_ conversation: Conversation, as format: ConversationExporter.Format) {
-        let text = ConversationExporter.text(for: conversation, format: format)
-        let fileName = ConversationExporter.suggestedFileName(for: conversation, format: format)
+        saveText(ConversationExporter.text(for: conversation, format: format),
+                 fileName: ConversationExporter.suggestedFileName(for: conversation, format: format))
+    }
 
+    /// 存文本到文件:macOS 弹 NSSavePanel,iOS 落临时文件后系统分享。整会话 / 全部 / 单轮报告共用。
+    private func saveText(_ text: String, fileName: String) {
         #if os(macOS)
         let panel = NSSavePanel()
         panel.nameFieldStringValue = fileName
@@ -185,7 +201,6 @@ struct MainContentView: View {
             try? text.data(using: .utf8)?.write(to: url, options: .atomic)
         }
         #else
-        // iOS:先落到临时文件再用系统分享(保留文件名 / 扩展名)。
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
         try? text.data(using: .utf8)?.write(to: url, options: .atomic)
         shareSheet = ShareSheetPayload(url: url)

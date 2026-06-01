@@ -85,6 +85,14 @@ enum ConversationExporter {
 
     // MARK: - Markdown 导出
 
+    /// 把全部会话拼成一份 Markdown(各会话之间用分隔线),用于「导出全部会话」。
+    static func markdownForAll(_ conversations: [Conversation]) -> String {
+        guard !conversations.isEmpty else { return "# Kown 全部会话\n\n_(暂无会话)_\n" }
+        var out = "# Kown 全部会话(\(conversations.count))\n\n"
+        out += conversations.map { markdown(for: $0) }.joined(separator: "\n\n---\n\n")
+        return out
+    }
+
     /// 把整会话渲染成 Markdown。
     static func markdown(for conversation: Conversation) -> String {
         var out = ""

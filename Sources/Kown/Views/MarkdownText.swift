@@ -131,6 +131,8 @@ enum MD {
         || text.range(of: #"^\|.+\|"#, options: [.regularExpression, .anchored]) != nil
         || text.range(of: #"\n\|.+\|"#, options: .regularExpression) != nil
         || text.range(of: #"(?m)^[ \t]*[-*] \[[ xX]\] "#, options: .regularExpression) != nil
+        // 标题:行首 `# ` ~ `###### `。AttributedString 的 inlineOnly 不放大标题,走 MarkdownUI 才有层级。
+        || text.range(of: #"(?m)^#{1,6} "#, options: .regularExpression) != nil
     }
 
     /// `Theme` 不是 Sendable;计算属性每次实例化,SwiftUI 缓存渲染结果。
