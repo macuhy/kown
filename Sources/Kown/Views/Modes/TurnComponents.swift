@@ -124,6 +124,7 @@ struct HistoricalResponseCard: View {
 
     @State private var copied = false
     @State private var expanded = false
+    @ObservedObject private var speech = SpeechService.shared
     /// 超过此长度的回答默认折叠(底部渐隐 + 展开全部),防超长回答撑爆布局。
     private static let collapseThreshold = 4000
 
@@ -308,6 +309,20 @@ struct HistoricalResponseCard: View {
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
                 .fixedSize()
+            }
+            if !text.isEmpty {
+                let reading = speech.speakingText == text
+                Button {
+                    speech.toggle(text)
+                } label: {
+                    Label(reading ? "停止" : "朗读", systemImage: reading ? "stop.fill" : "speaker.wave.2")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(reading ? Color.accentColor : .secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background((reading ? Color.accentColor : Color.secondary).opacity(0.10), in: Capsule())
+                }
+                .buttonStyle(.borderless)
             }
             Button {
                 Platform.copyText(text)
