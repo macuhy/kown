@@ -39,3 +39,31 @@ jobs:
       use_xcodegen: false
       # Kown 带 iCloud entitlement → 需 Developer ID provisioning profile
       provisioning_profile_specifier: "Kown Developer ID"
+
+  # 发版结束后发邮件通知(成功/失败都发)。
+  # 需在仓库 Settings ▸ Secrets and variables ▸ Actions 配置:
+  #   MAIL_SERVER (如 smtp.gmail.com)、MAIL_PORT (465)、MAIL_USERNAME、MAIL_PASSWORD(Gmail 用应用专用密码)、MAIL_TO
+  # 未配置 MAIL_SERVER 时该步骤自动跳过,不会让 workflow 变红。
+  notify:
+    needs: release
+    if: always()
+    runs-on: ubuntu-latest
+    env:
+      MAIL_SERVER: ${{ secrets.MAIL_SERVER }}
+    steps:
+      - name: 发送发版结果邮件
+        if: ${{ env.MAIL_SERVER != '' }}
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.MAIL_SERVER }}
+          server_port: ${{ secrets.MAIL_PORT }}
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          from: Kown CI <${{ secrets.MAIL_USERNAME }}>
+          to: ${{ secrets.MAIL_TO }}
+          subject: "Kown macOS 发版 ${{ needs.release.result }} — ${{ github.ref_name }}"
+          body: |
+            Kown macOS 发版结果:${{ needs.release.result }}
+            Tag / 版本:${{ github.ref_name }}
+            提交:${{ github.sha }}
+            运行日志:${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
