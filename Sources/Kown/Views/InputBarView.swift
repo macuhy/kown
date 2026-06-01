@@ -17,6 +17,7 @@ struct InputBarView: View {
 
     @State private var pickerError: String?
     @State private var showEnhancer = false
+    @State private var showPromptLibrary = false
     #if os(macOS)
     @State private var showFileImporter = false
     @State private var showImageImporter = false
@@ -66,6 +67,16 @@ struct InputBarView: View {
         }
         .overlay(alignment: .top) {
             Rectangle().fill(Color.primary.opacity(0.08)).frame(height: 1)
+        }
+        .sheet(isPresented: $showPromptLibrary) {
+            PromptInsertSheet { rendered in
+                if viewModel.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    viewModel.prompt = rendered
+                } else {
+                    viewModel.prompt += "\n\n" + rendered
+                }
+                inputFocused = true
+            }
         }
         .sheet(isPresented: $showEnhancer, onDismiss: { viewModel.dismissEnhancer() }) {
             PromptEnhancerSheet(viewModel: viewModel, isPresented: $showEnhancer)
@@ -243,6 +254,9 @@ struct InputBarView: View {
             webSearchToggle
             if viewModel.currentMode == .debate {
                 debateRoundsPicker
+            }
+            iconButton("text.badge.plus", help: "从提示词库插入(可填充 {{变量}})") {
+                showPromptLibrary = true
             }
             iconButton("wand.and.stars", help: viewModel.prompt.isEmpty ? "先输入问题再增强" : "用 AI 改写问题") {
                 viewModel.enhancePrompt()
