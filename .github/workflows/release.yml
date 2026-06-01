@@ -23,9 +23,11 @@ jobs:
     secrets:
       DEVELOPER_ID_CERTIFICATE_P12:      ${{ secrets.DEVELOPER_ID_CERTIFICATE_P12 }}
       DEVELOPER_ID_CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
-      APPLE_ID:                          ${{ secrets.APPLE_ID }}
-      APPLE_ID_PASSWORD:                 ${{ secrets.APPLE_ID_PASSWORD }}
       APPLE_TEAM_ID:                     ${{ secrets.APPLE_TEAM_ID }}
+      # kit 的 reusable workflow 已改用 App Store Connect API key 做公证(替代 Apple ID + 专用密码)。
+      ASC_KEY_ID:                        ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID:                     ${{ secrets.ASC_ISSUER_ID }}
+      ASC_API_KEY_P8:                    ${{ secrets.ASC_API_KEY_P8 }}
       SPARKLE_PRIVATE_KEY:               ${{ secrets.SPARKLE_PRIVATE_KEY }}
       RELEASE_REPO_PAT:                  ${{ secrets.RELEASE_REPO_PAT }}
       PROVISIONING_PROFILE_BASE64:       ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
