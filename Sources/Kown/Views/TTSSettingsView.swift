@@ -8,6 +8,8 @@ struct TTSSettingsView: View {
     @State private var azureRegion: String = TTSConfig.azureRegion
     @State private var azureKey: String = ""
     @State private var keySaved: Bool = false
+    @State private var sfKey: String = ""
+    @State private var sfKeySaved: Bool = false
 
     @ObservedObject private var speech = SpeechService.shared
 
@@ -17,6 +19,9 @@ struct TTSSettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 enginePicker
+                if engine == .siliconflow {
+                    siliconflowSection
+                }
                 if engine != .system {
                     voicePicker
                     rateSlider
@@ -30,7 +35,10 @@ struct TTSSettingsView: View {
             .padding(20)
             .frame(maxWidth: 720, alignment: .leading)
         }
-        .onAppear { keySaved = TTSConfig.azureKey?.isEmpty == false }
+        .onAppear {
+            keySaved = TTSConfig.azureKey?.isEmpty == false
+            sfKeySaved = TTSConfig.siliconflowKey?.isEmpty == false
+        }
     }
 
     private var enginePicker: some View {
@@ -40,6 +48,7 @@ struct TTSSettingsView: View {
                 Button {
                     engine = kind
                     TTSConfig.engine = kind
+                    voice = TTSConfig.voice(for: kind)
                 } label: {
                     HStack(alignment: .top, spacing: 12) {
                         Image(systemName: engine == kind ? "largecircle.fill.circle" : "circle")
@@ -76,14 +85,49 @@ struct TTSSettingsView: View {
         VStack(alignment: .leading, spacing: 8) {
             sectionTitle("音色", icon: "person.wave.2")
             Picker("音色", selection: $voice) {
-                ForEach(TTSConfig.voices) { v in
+                ForEach(TTSConfig.voices(for: engine)) { v in
                     Text(v.label).tag(v.id)
                 }
             }
             .labelsHidden()
             .pickerStyle(.menu)
-            .onChange(of: voice) { _, new in TTSConfig.voice = new }
+            .onChange(of: voice) { _, new in TTSConfig.setVoice(new, for: engine) }
         }
+    }
+
+    private var siliconflowSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("硅基流动凭证", icon: "key.fill")
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("API Key")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if sfKeySaved && sfKey.isEmpty {
+                        Label("已保存", systemImage: "checkmark.seal.fill")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.green)
+                    }
+                }
+                SecureField(sfKeySaved ? "已保存(留空不变)" : "粘贴 SiliconFlow Key(sk-…)", text: $sfKey)
+                    .textFieldStyle(.roundedBorder)
+                Button {
+                    saveSiliconflowKey()
+                } label: {
+                    Label("保存 Key", systemImage: "key.fill")
+                        .font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.bordered)
+                .disabled(sfKey.isEmpty)
+                Text("在 siliconflow.cn 注册即可拿 key(新用户送额度);国内直连,无需 VPN。")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     private var rateSlider: some View {
@@ -195,6 +239,16 @@ struct TTSSettingsView: View {
             keySaved = true
         } catch {
             keySaved = false
+        }
+    }
+
+    private func saveSiliconflowKey() {
+        do {
+            try KeychainStore.save(id: TTSConfig.siliconflowKeyID, apiKey: sfKey)
+            sfKey = ""
+            sfKeySaved = true
+        } catch {
+            sfKeySaved = false
         }
     }
 }

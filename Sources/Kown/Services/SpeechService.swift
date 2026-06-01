@@ -45,7 +45,7 @@ final class SpeechService: NSObject, ObservableObject, AVSpeechSynthesizerDelega
         speakingText = text
         preparing = true
         lastNote = nil
-        let voice = TTSConfig.voice
+        let voice = TTSConfig.voice(for: engine)
         let rate = TTSConfig.ratePercent
         synthTask = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -78,6 +78,13 @@ final class SpeechService: NSObject, ObservableObject, AVSpeechSynthesizerDelega
 
     private static func synthesize(engine: TTSEngineKind, text: String, voice: String, rate: Int) async throws -> Data {
         switch engine {
+        case .siliconflow:
+            guard let key = TTSConfig.siliconflowKey, !key.isEmpty else {
+                throw TTSError.notConfigured("未配置硅基流动 Key(设置 ▸ 朗读)")
+            }
+            return try await SiliconFlowTTSEngine(
+                baseURL: TTSConfig.siliconflowBaseURL, key: key, model: TTSConfig.siliconflowModel
+            ).synthesize(text: text, voiceName: voice, ratePercent: rate)
         case .edge:
             return try await EdgeTTSEngine().synthesize(text: text, voice: voice, ratePercent: rate)
         case .azure:
