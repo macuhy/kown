@@ -16,6 +16,8 @@ final class AppViewModel {
     var prompt: String = ""
     /// ⌘K 命令面板是否打开(macOS 菜单命令与 RootView sheet 共用此开关)。
     var showCommandPalette = false
+    /// 会话内查找条是否显示(⌘F)。
+    var showFind = false
     /// 自动容错:某 panel provider 失败时自动换另一家 enabled provider 重试一次。默认关。
     var autoFailoverEnabled: Bool {
         didSet { UserDefaults.standard.set(autoFailoverEnabled, forKey: Self.autoFailoverKey) }

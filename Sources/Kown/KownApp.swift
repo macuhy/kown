@@ -147,6 +147,9 @@ struct KownApp: App {
 
                 Divider()
 
+                Button("会话内查找…") { viewModel.showFind = true }
+                    .keyboardShortcut("f", modifiers: .command)
+
                 // ⌘. 停止正在生成的回复(等价于输入栏的「停止」)。
                 Button("停止生成") {
                     viewModel.cancel()

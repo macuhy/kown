@@ -12,6 +12,10 @@ struct MainContentView: View {
     @Binding var showSettings: Bool
     /// 正在编辑/重发的历史轮(nil = 未打开)。
     @State private var editRequest: EditTurnRequest?
+    /// 会话内查找状态。
+    @State private var findQuery: String = ""
+    @State private var findIndex: Int = 0
+    @State private var scrollTarget: UUID?
     #if os(iOS)
     /// iOS 导出时待分享的文件(包成 Identifiable 以驱动 .sheet(item:))。
     @State private var shareSheet: ShareSheetPayload?
@@ -25,6 +29,7 @@ struct MainContentView: View {
                 mobileModeBar
                 #endif
                 workspacePathBar
+                if viewModel.showFind { findBar }
                 content
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 #if os(iOS)
@@ -60,6 +65,54 @@ struct MainContentView: View {
             inputFocused = true
             #endif
         }
+    }
+
+    // MARK: - 会话内查找
+
+    /// 当前会话里命中 query 的 turn id 列表(在 prompt / 各回答 / chair / summary 里找)。
+    private var findMatches: [UUID] {
+        let q = findQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard q.count >= 1, let turns = viewModel.selectedConversation?.turns else { return [] }
+        return turns.filter { turn in
+            if turn.prompt.lowercased().contains(q) { return true }
+            if turn.responses.values.contains(where: { $0.lowercased().contains(q) }) { return true }
+            if (turn.chairSummary ?? "").lowercased().contains(q) { return true }
+            if (turn.summaryText ?? "").lowercased().contains(q) { return true }
+            return false
+        }.map(\.id)
+    }
+
+    private var findBar: some View {
+        let matches = findMatches
+        return HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+            TextField("在本会话内查找", text: $findQuery)
+                .textFieldStyle(.plain)
+                .onChange(of: findQuery) { _, _ in
+                    findIndex = 0
+                    if let first = findMatches.first { scrollTarget = first }
+                }
+                .onSubmit { jumpFind(+1, matches) }
+            Text(matches.isEmpty ? (findQuery.isEmpty ? "" : "无匹配") : "\(min(findIndex + 1, matches.count))/\(matches.count)")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+            Button { jumpFind(-1, matches) } label: { Image(systemName: "chevron.up") }
+                .buttonStyle(.borderless).disabled(matches.isEmpty)
+            Button { jumpFind(+1, matches) } label: { Image(systemName: "chevron.down") }
+                .buttonStyle(.borderless).disabled(matches.isEmpty)
+            Button { viewModel.showFind = false; findQuery = "" } label: { Image(systemName: "xmark.circle.fill") }
+                .buttonStyle(.borderless).foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.regularMaterial)
+        .overlay(alignment: .bottom) { Divider() }
+    }
+
+    private func jumpFind(_ delta: Int, _ matches: [UUID]) {
+        guard !matches.isEmpty else { return }
+        findIndex = (findIndex + delta + matches.count) % matches.count
+        scrollTarget = matches[findIndex]
     }
 
     /// 打开「编辑并重发」sheet,初值用该轮原始 prompt。
@@ -236,6 +289,10 @@ struct MainContentView: View {
                 }
                 .onChange(of: viewModel.liveTurnPrompt) { _, _ in
                     withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
+                }
+                .onChange(of: scrollTarget) { _, target in
+                    guard let target else { return }
+                    withAnimation { proxy.scrollTo(target, anchor: .top) }
                 }
                 #if os(iOS)
                 .scrollDismissesKeyboard(.interactively)
