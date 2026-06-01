@@ -13,6 +13,8 @@ struct PerformanceSettingsView: View {
     @AppStorage("kown.councilVoting.v1") private var councilVoting: Bool = false
     /// 与 AppViewModel.autoRouteEnabled 同一 key。
     @AppStorage("kown.autoRoute.v1") private var autoRoute: Bool = false
+    /// 与 AnthropicClient.claudeThinkingEnabled 同一 key。
+    @AppStorage("kown.claudeThinking.v1") private var claudeThinking: Bool = false
 
     private let tint = Color(red: 0.88, green: 0.35, blue: 0.22)
     private let secondaryTint = Color(red: 0.91, green: 0.55, blue: 0.20)
@@ -37,6 +39,7 @@ struct PerformanceSettingsView: View {
                 autoFailoverCard
                 councilVotingCard
                 autoRouteCard
+                claudeThinkingCard
                 guideCard
             }
             .padding(.horizontal, 14)
@@ -53,6 +56,7 @@ struct PerformanceSettingsView: View {
                 autoFailoverCard
                 councilVotingCard
                 autoRouteCard
+                claudeThinkingCard
                 guideCard
             }
             .padding(24)
@@ -133,6 +137,31 @@ struct PerformanceSettingsView: View {
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .strokeBorder(secondaryTint.opacity(0.16), lineWidth: 1)
+        }
+    }
+
+    // MARK: - Claude 扩展思考
+
+    private var claudeThinkingCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Toggle(isOn: $claudeThinking) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Claude 扩展思考")
+                        .font(.body.weight(.semibold))
+                    Text("给 Anthropic 请求开启 extended thinking,回答上方会显示 Claude 的思考过程。仅支持思考的 Claude 模型(如 Opus/Sonnet 4.x)有效;开启时该轮按官方约束自动用 temperature=1,且联网搜索的那一轮不开。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .tint(tint)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(tint.opacity(0.16), lineWidth: 1)
         }
     }
 

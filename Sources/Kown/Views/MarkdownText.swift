@@ -73,7 +73,7 @@ enum MD {
             Markdown(src)
                 .textSelectable(selectable)
                 .markdownTheme(kownTheme)
-        } else if let attr = try? AttributedString(markdown: src, options: .init(
+        } else if let attr = try? AttributedString(markdown: linkify(src), options: .init(
             allowsExtendedAttributes: true,
             interpretedSyntax: .inlineOnlyPreservingWhitespace,
             failurePolicy: .returnPartiallyParsedIfPossible
@@ -88,6 +88,28 @@ enum MD {
                 .textSelectable(selectable)
                 .markdownTheme(kownTheme)
         }
+    }
+
+    // 裸 URL → markdown 链接。lookbehind 跳过已是 `](url)` / `<url>` / `"url"` 的情况。
+    private static let bareURLRe = try? NSRegularExpression(
+        pattern: #"(?<![\(<\]"])https?://[^\s<>)\]"，。、;；】)]+"#
+    )
+    /// 把正文里的裸链接(如来源 URL)转成可点击的 markdown 链接 `[url](url)`。
+    /// 仅用于无代码块的 AttributedString 渲染路径(那条路径不会有 ``` 代码,不怕误伤)。
+    static func linkify(_ s: String) -> String {
+        guard s.contains("http"), let re = bareURLRe else { return s }
+        let ns = s as NSString
+        var result = ""
+        var last = 0
+        re.enumerateMatches(in: s, range: NSRange(location: 0, length: ns.length)) { m, _, _ in
+            guard let m else { return }
+            result += ns.substring(with: NSRange(location: last, length: m.range.location - last))
+            let url = ns.substring(with: m.range)
+            result += "[\(url)](\(url))"
+            last = m.range.location + m.range.length
+        }
+        result += ns.substring(from: last)
+        return result
     }
 
     /// 流式中途若有未闭合的 ``` 代码围栏,临时补一个收尾,避免半个围栏把后文都吞成代码。
@@ -154,6 +176,30 @@ enum MD {
     }
 
     static var inlineCodeBackground: Color { Color.primary.opacity(0.08) }
+
+    /// 导出图片专用主题:与聊天一致的块级渲染,但代码块**自动换行**(不横滚、不 fixedSize),
+    /// 避免 ImageRenderer 下长行把图片撑得过宽。
+    static var exportTheme: Theme {
+        Theme.gitHub
+            .text { FontSize(.em(1.0)) }
+            .code {
+                FontFamilyVariant(.monospaced)
+                FontSize(.em(0.9))
+                BackgroundColor(inlineCodeBackground)
+            }
+            .link { ForegroundColor(.accentColor) }
+            .codeBlock { configuration in
+                configuration.label
+                    .markdownTextStyle {
+                        FontFamilyVariant(.monospaced)
+                        FontSize(.em(0.82))
+                    }
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+                    .markdownMargin(top: .em(0.5), bottom: .em(0.5))
+            }
+    }
 }
 
 /// 代码块渲染:等宽字体 + 横向滚动(长行不换行)+ 右上角「复制」按钮。

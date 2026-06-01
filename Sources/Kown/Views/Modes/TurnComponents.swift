@@ -470,35 +470,48 @@ struct AppliedWritesStrip: View {
     /// 撤销某条改动的回调(历史 turn 才传;nil = 不显示撤销按钮)。
     var onUndo: ((AppliedWrite) -> Void)? = nil
     @State private var expandedIDs: Set<UUID> = []
+    /// 整组默认收起,点标题展开。
+    @State private var expanded = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: "tray.and.arrow.down.fill")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.teal)
-                Text("Workspace 写入(\(writes.count))")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.teal)
-                Spacer()
-                Text("Applied")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.teal)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.teal.opacity(0.11), in: Capsule())
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) { expanded.toggle() }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "tray.and.arrow.down.fill")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.teal)
+                    Text("Workspace 写入(\(writes.count))")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.teal)
+                    Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.teal)
+                    Spacer()
+                    Text("Applied")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.teal)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.teal.opacity(0.11), in: Capsule())
+                }
+                .contentShape(Rectangle())
             }
-            ForEach(writes) { w in
-                AppliedWriteCard(write: w,
-                                 expanded: expandedIDs.contains(w.id),
-                                 onToggleExpand: {
-                                     if expandedIDs.contains(w.id) {
-                                         expandedIDs.remove(w.id)
-                                     } else {
-                                         expandedIDs.insert(w.id)
-                                     }
-                                 },
-                                 onUndo: onUndo.map { cb in { cb(w) } })
+            .buttonStyle(.plain)
+            if expanded {
+                ForEach(writes) { w in
+                    AppliedWriteCard(write: w,
+                                     expanded: expandedIDs.contains(w.id),
+                                     onToggleExpand: {
+                                         if expandedIDs.contains(w.id) {
+                                             expandedIDs.remove(w.id)
+                                         } else {
+                                             expandedIDs.insert(w.id)
+                                         }
+                                     },
+                                     onUndo: onUndo.map { cb in { cb(w) } })
+                }
             }
         }
         .padding(14)
@@ -532,9 +545,9 @@ struct TurnSourcesStrip: View {
     let turn: Turn
 
     var body: some View {
-        if let sources = turn.sources, !sources.isEmpty {
-            SourcesStrip(sources: sources)
-        }
+        // 来源改为只在回答正文内联展示(模型已把来源写进内容,裸 URL 现在会渲染成可点击链接),
+        // 不再在回答下方单独成块,避免重复占屏。
+        EmptyView()
     }
 }
 

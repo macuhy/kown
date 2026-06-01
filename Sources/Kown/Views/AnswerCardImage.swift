@@ -1,22 +1,17 @@
 import SwiftUI
+import MarkdownUI
 #if os(macOS)
 import AppKit
 #else
 import UIKit
 #endif
 
-/// 用于导出成图片的回答卡片(ImageRenderer 渲染目标)。固定宽度、浅色底,内联 markdown。
+/// 用于导出成图片的回答卡片(ImageRenderer 渲染目标)。固定宽度、浅色底。
+/// 用 MarkdownUI 渲染完整 markdown(标题/代码块/表格/列表),代码块自动换行不撑宽。
 struct AnswerCardImage: View {
     let providerName: String
     let model: String
     let text: String
-
-    private var attributed: AttributedString {
-        (try? AttributedString(markdown: text, options: .init(
-            interpretedSyntax: .inlineOnlyPreservingWhitespace,
-            failurePolicy: .returnPartiallyParsedIfPossible
-        ))) ?? AttributedString(text)
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -28,9 +23,8 @@ struct AnswerCardImage: View {
                 Spacer()
             }
             Rectangle().fill(Color.black.opacity(0.08)).frame(height: 1)
-            Text(attributed)
-                .font(.body)
-                .foregroundStyle(.black)
+            Markdown(MD.stylizeMath(text))
+                .markdownTheme(MD.exportTheme)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Rectangle().fill(Color.black.opacity(0.08)).frame(height: 1)
             Text("via Kown").font(.caption2).foregroundStyle(.secondary)

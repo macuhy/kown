@@ -4,6 +4,12 @@ struct AnthropicClient: LLMClient {
     private static let maxToolRounds = 6
     /// 默认 output token 预算 — 32k 在多轮工具循环里太奢侈。
     private static let defaultMaxTokens = 8192
+    /// 扩展思考的 token 预算。
+    private static let thinkingBudget = 2048
+    /// 「Claude 扩展思考」开关(设置 ▸ 性能)。与 PerformanceSettingsView 的 @AppStorage 同 key。
+    static var claudeThinkingEnabled: Bool {
+        UserDefaults.standard.bool(forKey: "kown.claudeThinking.v1")
+    }
 
     /// 构造当前轮 user 消息。带图片时用 content blocks(图片在前、文本在后,Anthropic 推荐顺序)。
     /// `media_type` 需为 image/jpeg|png|gif|webp(HEIC 在附件加载时已转 JPEG)。
@@ -44,6 +50,8 @@ struct AnthropicClient: LLMClient {
 
                     var cumulativeInput = 0
                     var cumulativeOutput = 0
+                    // 扩展思考:仅在本轮不带工具时开(避免 thinking 块跨工具轮 echo 的复杂度)。
+                    let thinkingOn = Self.claudeThinkingEnabled && options.tools.isEmpty
 
                     for round in 0..<Self.maxToolRounds {
                         let isLast = round == Self.maxToolRounds - 1
@@ -67,6 +75,7 @@ struct AnthropicClient: LLMClient {
                             tools: toolsForThisRound,
                             temperature: options.temperature,
                             maxTokens: options.maxTokens ?? Self.defaultMaxTokens,
+                            thinkingEnabled: thinkingOn,
                             yieldText: { continuation.yield(.text($0)) },
                             yieldReasoning: { continuation.yield(.reasoning($0)) }
                         )
@@ -162,6 +171,7 @@ struct AnthropicClient: LLMClient {
         tools: [LLMTool],
         temperature: Double?,
         maxTokens: Int,
+        thinkingEnabled: Bool = false,
         yieldText: (String) -> Void,
         yieldReasoning: (String) -> Void = { _ in }
     ) async throws -> RoundResult {
@@ -181,7 +191,13 @@ struct AnthropicClient: LLMClient {
         if let sys = systemPrompt, !sys.isEmpty {
             body["system"] = sys
         }
-        if let temperature { body["temperature"] = temperature }
+        if thinkingEnabled {
+            // 扩展思考:max_tokens 必须 > budget;temperature 必须为 1(故不传 temperature)。
+            body["thinking"] = ["type": "enabled", "budget_tokens": thinkingBudget]
+            body["max_tokens"] = max(maxTokens, thinkingBudget + 1024)
+        } else if let temperature {
+            body["temperature"] = temperature
+        }
         if !tools.isEmpty {
             body["tools"] = tools.map(serializeTool)
         }

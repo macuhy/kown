@@ -5,29 +5,42 @@ import SwiftUI
 /// 视觉风格对齐 `AppliedWritesStrip`(regularMaterial + 圆角 + tinted 渐变 + 描边)。
 struct SourcesStrip: View {
     let sources: [SourceRef]
+    /// 默认收起,点标题展开。
+    @State private var expanded = false
 
     /// 与 AppliedWrites 的 teal 区分开,来源用蓝色。
     private var tint: Color { Color(red: 0.26, green: 0.52, blue: 0.96) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: "link")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(tint)
-                Text("引用来源(\(sources.count))")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(tint)
-                Spacer()
-                Text("Web Search")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(tint)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(tint.opacity(0.11), in: Capsule())
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) { expanded.toggle() }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "link")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(tint)
+                    Text("引用来源(\(sources.count))")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(tint)
+                    Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(tint)
+                    Spacer()
+                    Text("Web Search")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(tint)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(tint.opacity(0.11), in: Capsule())
+                }
+                .contentShape(Rectangle())
             }
-            ForEach(sources) { source in
-                SourceCard(source: source, tint: tint)
+            .buttonStyle(.plain)
+            if expanded {
+                ForEach(sources) { source in
+                    SourceCard(source: source, tint: tint)
+                }
             }
         }
         .padding(14)
