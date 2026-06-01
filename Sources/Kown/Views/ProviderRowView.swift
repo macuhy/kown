@@ -15,6 +15,9 @@ struct ProviderRowView: View {
     @State private var showAdvanced: Bool = false
     @State private var testing: Bool = false
     @State private var confirmingDelete: Bool = false
+    /// Ollama 拉取到的本地模型名(供 model 选择)。
+    @State private var ollamaModels: [String] = []
+    @State private var fetchingOllama: Bool = false
     @State private var isHovered: Bool = false
     private let cardCorner: CGFloat = 22
 
@@ -213,6 +216,7 @@ struct ProviderRowView: View {
                     .font(.callout)
                     .onSubmit { onSave() }
                 modelPickerMenu
+                if config.vendor == "ollama" { ollamaModelButton }
             }
         }
         GridRow {
@@ -300,6 +304,43 @@ struct ProviderRowView: View {
                 .controlSize(.small)
                 .disabled(testing)
             }
+        }
+    }
+
+    /// Ollama:拉取本地已安装模型,拉到后用 Menu 选。未运行 / 拉空时给提示。
+    @ViewBuilder
+    private var ollamaModelButton: some View {
+        if ollamaModels.isEmpty {
+            Button {
+                fetchingOllama = true
+                Task {
+                    let models = await AppViewModel.fetchOllamaModels(baseURL: config.baseURL)
+                    await MainActor.run {
+                        ollamaModels = models
+                        fetchingOllama = false
+                        if models.isEmpty { lastError = "未拉到本地模型(Ollama 是否在运行?)" }
+                    }
+                }
+            } label: {
+                if fetchingOllama {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Label("本地模型", systemImage: "arrow.down.circle")
+                }
+            }
+            .controlSize(.small)
+            .disabled(fetchingOllama)
+        } else {
+            Menu {
+                ForEach(ollamaModels, id: \.self) { m in
+                    Button(m) { config.model = m; onSave() }
+                }
+                Divider()
+                Button("重新拉取") { ollamaModels = [] }
+            } label: {
+                Label("本地模型", systemImage: "cube.box")
+            }
+            .controlSize(.small)
         }
     }
 

@@ -2185,6 +2185,23 @@ final class AppViewModel {
 
     // MARK: - 单家测试（Settings 的「测试」按钮调用）
 
+    /// 拉取本地 Ollama 已安装的模型名(打 `/api/tags`)。失败/未运行返回空数组。
+    /// baseURL 形如 `http://localhost:11434/v1` → tags 端点是同主机的 `/api/tags`。
+    static func fetchOllamaModels(baseURL: String) async -> [String] {
+        var base = baseURL.trimmingCharacters(in: .whitespaces)
+        if base.hasSuffix("/v1") { base = String(base.dropLast(3)) }
+        while base.hasSuffix("/") { base = String(base.dropLast()) }
+        guard let url = URL(string: base + "/api/tags") else { return [] }
+        do {
+            var req = URLRequest(url: url)
+            req.timeoutInterval = 5
+            let (data, _) = try await URLSession.shared.data(for: req)
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let models = json["models"] as? [[String: Any]] else { return [] }
+            return models.compactMap { $0["name"] as? String }
+        } catch { return [] }
+    }
+
     static func testProvider(config: ProviderConfig, apiKey: String) async throws -> String {
         let client = ProviderRegistry.client(for: config.kind)
         let options = ChatOptions(systemPrompt: nil, temperature: nil, maxTokens: 32)

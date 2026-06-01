@@ -156,6 +156,7 @@ enum ProviderPreset: String, CaseIterable, Identifiable, Sendable {
     case kimi
     case kimiK2
     case qwenPlus
+    case ollama
 
     var id: String { rawValue }
 
@@ -168,6 +169,7 @@ enum ProviderPreset: String, CaseIterable, Identifiable, Sendable {
         case .kimi:            return "Moonshot Kimi K2.6 · 最新"
         case .kimiK2:          return "Moonshot Kimi K2.5"
         case .qwenPlus:        return "阿里通义 Qwen3.7 Max · 旗舰"
+        case .ollama:          return "Ollama · 本地模型(localhost)"
         }
     }
 
@@ -215,6 +217,13 @@ enum ProviderPreset: String, CaseIterable, Identifiable, Sendable {
                                   baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
                                   model: "qwen3.7-max",
                                   vendor: "qwen")
+        case .ollama:
+            // Ollama 暴露 OpenAI 兼容端点(/v1),无需 key。model 由用户在编辑页选(可自动拉本地列表)。
+            return ProviderConfig(displayName: "Ollama",
+                                  kind: .openAICompatible,
+                                  baseURL: "http://localhost:11434/v1",
+                                  model: "llama3.2",
+                                  vendor: "ollama")
         }
     }
 }
