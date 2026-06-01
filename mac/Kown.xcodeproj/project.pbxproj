@@ -11,6 +11,7 @@
 		080814F345FDF974C13E291F /* ProviderModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8368D4FE0B95B2D8424C6F03 /* ProviderModelCatalog.swift */; };
 		08FDF6089841E01C0785AC60 /* ConversationSummarizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7DAAA51347C72D66295BA63 /* ConversationSummarizer.swift */; };
 		0A142CA6FC562680E1EC9661 /* ConversationPromptSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6E3D82CE18FAF01C9C7F884 /* ConversationPromptSheet.swift */; };
+		0C232B91657AE51EBF9473DD /* PromptBuilders.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3217D675229F2C856721ACD3 /* PromptBuilders.swift */; };
 		0FA0EAB65F062049B93171A0 /* LLMStreamChunk.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0687940C49D7DC9598C4D2AE /* LLMStreamChunk.swift */; };
 		11A00AC50A8D15B9C6DF0A23 /* PromptLibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C635BF4CA8D4A79975C77578 /* PromptLibraryStore.swift */; };
 		142F973AE60AB8BC7115274C /* CommandPaletteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7535A84A46BDAE9B8137DC4 /* CommandPaletteView.swift */; };
@@ -101,6 +102,7 @@
 		26CAD432F91BE031EB0B7CBD /* ResponseState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResponseState.swift; sourceTree = "<group>"; };
 		2B0DA510C06622816A4DCB83 /* CompareTurnsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompareTurnsView.swift; sourceTree = "<group>"; };
 		2BA28F122FF3BA73CED7836F /* EditTurnSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditTurnSheet.swift; sourceTree = "<group>"; };
+		3217D675229F2C856721ACD3 /* PromptBuilders.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptBuilders.swift; sourceTree = "<group>"; };
 		347ED1793B406F4531957878 /* ActiveProviderBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveProviderBar.swift; sourceTree = "<group>"; };
 		34C72CDAE2197001F9B3E4B0 /* GeminiClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiClient.swift; sourceTree = "<group>"; };
 		388EA7D29142973723D271A4 /* CHANGELOG.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = CHANGELOG.md; sourceTree = "<group>"; };
@@ -298,6 +300,7 @@
 				750A73703E624AF5DF0F7396 /* KeychainStore.swift */,
 				F66270B7AD94FD820AABAF62 /* LLMClient.swift */,
 				6652CB52E9921B5880BDFCFB /* OpenAICompatibleClient.swift */,
+				3217D675229F2C856721ACD3 /* PromptBuilders.swift */,
 				525A51A1B37FA00A2DCF4B6F /* PromptHistoryStore.swift */,
 				C635BF4CA8D4A79975C77578 /* PromptLibraryStore.swift */,
 				1B7F9872024209C57342066E /* ProviderRegistry.swift */,
@@ -471,6 +474,7 @@
 				8C122A039F0ABC0D0CEC5D5D /* OpenAICompatibleClient.swift in Sources */,
 				F727C3615DE3849FDB843581 /* PerformanceSettingsView.swift in Sources */,
 				1D401FF4AC8DB5FE24672944 /* Platform.swift in Sources */,
+				0C232B91657AE51EBF9473DD /* PromptBuilders.swift in Sources */,
 				EB6A0B7FE348DA2E94CAE8E3 /* PromptHistoryStore.swift in Sources */,
 				C78996E9CA30ECC970C788A5 /* PromptInsertSheet.swift in Sources */,
 				11A00AC50A8D15B9C6DF0A23 /* PromptLibraryStore.swift in Sources */,
