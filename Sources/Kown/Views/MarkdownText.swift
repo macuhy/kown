@@ -2,9 +2,8 @@ import SwiftUI
 import MarkdownUI
 
 /// 模型输出渲染:
-/// - **streaming=true**: **只用 SwiftUI 原生 Text**,完全不解析 markdown
-///   — 流式期间每个 chunk 都重 parse 整段是 O(N²),responses 长一些就会让 app 卡死。
-///   用户看到的中间态是 raw markdown 字符(`**bold**` 显示成两个 `*`),流完瞬间切回 markdown。
+/// - **streaming=true**: 渲染**节流快照**的 markdown(每 ~150ms 取一次 text),把"每 chunk 重 parse
+///   整段"(O(N²))降为按时间节流;未闭合代码围栏临时补全;不开 textSelection 更轻;超长(>6000 字)退回 raw。
 /// - **finished**: 双路径:
 ///   - 默认走 `Text(AttributedString(markdown:))` — **整个回答作为单个 Text view**,
 ///     支持跨段/跨标题/跨列表的全文拖选。内联格式(粗体/斜体/inline code/链接)保留。
@@ -16,35 +15,69 @@ struct MarkdownText: View {
     let text: String
     var streaming: Bool = false
 
+    /// 流式期间渲染 markdown 的字符上限 —— 超过就退回 raw,避免重 parse 卡顿(完成后照常完整渲染)。
+    private static let maxLiveMarkdownChars = 6000
+    /// 流式快照:每 ~150ms 取一次 text,把"每个 chunk 重 parse 整段"(O(N²))降到按时间节流。
+    @State private var snapshot: String = ""
+    private let tick = Timer.publish(every: 0.15, on: .main, in: .common).autoconnect()
+
     var body: some View {
+        content
+            .onAppear { snapshot = text }
+            .onReceive(tick) { _ in if streaming, snapshot != text { snapshot = text } }
+            .onChange(of: streaming) { _, s in if !s { snapshot = text } }
+    }
+
+    @ViewBuilder
+    private var content: some View {
         if streaming {
-            // 流式期间故意不开 textSelection — 它走 TextKit2 的 NSTextLayoutManager,
-            // 比普通 Text 重很多;且没人会去选还在生成的文本。结束后切回选模式。
-            Text(text)
-                .font(.body)
-                .lineSpacing(5)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        } else if Self.hasBlockLevelExtras(text) {
-            // 包含代码块 / 表格时,MarkdownUI 视觉更重要,走老路径
-            Markdown(text)
-                .textSelection(.enabled)
+            let src = snapshot.isEmpty ? text : snapshot
+            if src.count > Self.maxLiveMarkdownChars {
+                rawText(src)
+            } else {
+                // 流式期间也渲 markdown(节流快照 + 补全未闭合代码围栏),但不开 textSelection(更轻)。
+                rendered(for: Self.balancedFences(src), selectable: false)
+            }
+        } else {
+            rendered(for: text, selectable: true)
+        }
+    }
+
+    private func rawText(_ s: String) -> some View {
+        Text(s)
+            .font(.body)
+            .lineSpacing(5)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func rendered(for src: String, selectable: Bool) -> some View {
+        if Self.hasBlockLevelExtras(src) {
+            // 含代码块 / 表格 / 任务列表:MarkdownUI 视觉更重要
+            Markdown(src)
+                .textSelectable(selectable)
                 .markdownTheme(Self.kownTheme)
-        } else if let attr = try? AttributedString(markdown: text, options: .init(
+        } else if let attr = try? AttributedString(markdown: src, options: .init(
             allowsExtendedAttributes: true,
             interpretedSyntax: .inlineOnlyPreservingWhitespace,
             failurePolicy: .returnPartiallyParsedIfPossible
         )) {
             Text(attr)
-                .textSelection(.enabled)
+                .textSelectable(selectable)
                 .font(.body)
                 .lineSpacing(5)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else {
-            // 极端 parse 失败时兜底
-            Markdown(text)
-                .textSelection(.enabled)
+            Markdown(src)
+                .textSelectable(selectable)
                 .markdownTheme(Self.kownTheme)
         }
+    }
+
+    /// 流式中途若有未闭合的 ``` 代码围栏,临时补一个收尾,避免半个围栏把后文都吞成代码。
+    private static func balancedFences(_ s: String) -> String {
+        let fences = s.components(separatedBy: "```").count - 1
+        return fences % 2 == 1 ? s + "\n```" : s
     }
 
     /// 含代码块 / 表格 / 表头分隔 / 任务列表 — 这些 block 用 AttributedString 渲染体验差,继续走 MarkdownUI
@@ -141,5 +174,12 @@ private struct CodeBlockView: View {
 
     private static var blockBackground: Color {
         Color.primary.opacity(0.05)
+    }
+}
+
+private extension View {
+    /// 按需开启文本选择(流式期间关掉更轻)。两个 TextSelectability 具体类型不同,不能用三元值,故用此包装。
+    @ViewBuilder func textSelectable(_ on: Bool) -> some View {
+        if on { self.textSelection(.enabled) } else { self }
     }
 }
