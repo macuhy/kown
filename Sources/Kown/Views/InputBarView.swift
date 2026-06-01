@@ -213,6 +213,8 @@ struct InputBarView: View {
             .shadow(color: inputFocused ? Color.accentColor.opacity(0.12) : Color.clear, radius: 16, x: 0, y: 8)
             .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .focused($inputFocused)
+            // 拖拽文件/图片到输入框 → 分流成附件(图片走缩略图、其它走文本/PDF)。
+            .onDrop(of: [.fileURL], isTargeted: nil) { providers in handleDrop(providers) }
             .submitLabel(.send)
             .onSubmit { sendIfCan() }
             // 用户改动文本就退出历史浏览态(下次 ↑ 从最新一条重新数起)。
@@ -698,6 +700,45 @@ struct InputBarView: View {
         }
     }
 
+    // MARK: - 附件分流(粘贴 / 拖拽共用,跨平台)
+
+    /// 把若干文件 URL 按扩展名分流成附件:图片 → attachImageNormalized(HEIC 转 JPEG、缩略图);
+    /// 其它 → attachFile(文本 / PDF)。粘贴 file-url 与拖拽共用。
+    func attachFileURLs(_ urls: [URL]) {
+        var attached = false
+        for url in urls {
+            do {
+                if Self.pasteImageExtensions.contains(url.pathExtension.lowercased()) {
+                    let data = try Data(contentsOf: url)
+                    try viewModel.attachImageNormalized(data, name: url.lastPathComponent)
+                } else {
+                    try viewModel.attachFile(at: url)
+                }
+                attached = true
+            } catch {
+                pickerError = error.localizedDescription
+            }
+        }
+        if attached { pickerError = nil }
+    }
+
+    /// 拖拽/粘贴文件时按扩展名识别图片(走缩略图路径)。
+    static let pasteImageExtensions: Set<String> =
+        ["png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "bmp", "tiff", "tif"]
+
+    /// `.onDrop` 处理:从 NSItemProvider 取 file URL,分流到 attachFileURLs。
+    func handleDrop(_ providers: [NSItemProvider]) -> Bool {
+        var handled = false
+        for p in providers where p.canLoadObject(ofClass: URL.self) {
+            handled = true
+            _ = p.loadObject(ofClass: URL.self) { url, _ in
+                guard let url, url.isFileURL else { return }
+                Task { @MainActor in attachFileURLs([url]) }
+            }
+        }
+        return handled
+    }
+
     // MARK: - 文件/图片选择 (macOS only — iOS 移除附件入口)
 
     #if os(macOS)
@@ -732,30 +773,6 @@ struct InputBarView: View {
         // 真没图片/文件就给个兜底提示(普通文本粘贴不会进到这里)。
         pickerError = "剪贴板里没有可识别的图片或文件"
     }
-
-    /// 把若干文件 URL 按扩展名分流成附件:图片 → attachImageNormalized(HEIC 转 JPEG、缩略图);
-    /// 其它 → attachFile(文本 / PDF)。粘贴 file-url 与拖拽共用。
-    func attachFileURLs(_ urls: [URL]) {
-        var attached = false
-        for url in urls {
-            do {
-                if Self.pasteImageExtensions.contains(url.pathExtension.lowercased()) {
-                    let data = try Data(contentsOf: url)
-                    try viewModel.attachImageNormalized(data, name: url.lastPathComponent)
-                } else {
-                    try viewModel.attachFile(at: url)
-                }
-                attached = true
-            } catch {
-                pickerError = error.localizedDescription
-            }
-        }
-        if attached { pickerError = nil }
-    }
-
-    /// 粘贴/拖拽文件时按扩展名识别图片(走缩略图路径)。
-    static let pasteImageExtensions: Set<String> =
-        ["png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "bmp", "tiff", "tif"]
 
     /// 装/卸 ⌘V 本地监听:聚焦输入框时,⌘V 且剪贴板含图片字节或 file-url → 自己处理并吞掉事件
     /// (返回 nil),抢在字段编辑器把 file-url 当文本贴进来之前。普通文本 → 放行,正常粘贴。
