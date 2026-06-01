@@ -8,6 +8,8 @@ final class AppViewModel {
     var providers: [ProviderConfig]
     var conversations: [Conversation]
     var webSearchConfig: WebSearchConfig
+    /// 知识库资料夹(本地 RAG)。
+    var knowledgeFolders: [KnowledgeFolder] = []
 
     // MARK: - UI 选择 / 输入
     var selectedConversationID: UUID?
@@ -18,9 +20,19 @@ final class AppViewModel {
     var showCommandPalette = false
     /// 会话内查找条是否显示(⌘F)。
     var showFind = false
+    /// 全局热键 / 菜单栏唤起后请求聚焦输入框 —— 每次自增,InputBarView 监听变化即聚焦。
+    var focusInputRequest = 0
     /// 自动容错:某 panel provider 失败时自动换另一家 enabled provider 重试一次。默认关。
     var autoFailoverEnabled: Bool {
         didSet { UserDefaults.standard.set(autoFailoverEnabled, forKey: Self.autoFailoverKey) }
+    }
+    /// Council 模式:chair 之后额外跑一次「投票打分」(多一次 LLM 调用)。默认关。
+    var councilVotingEnabled: Bool {
+        didSet { UserDefaults.standard.set(councilVotingEnabled, forKey: Self.councilVotingKey) }
+    }
+    /// Direct 模式:按问题难度在当前 provider 的 vendor 内自动选模型(便宜↔旗舰)。默认关。
+    var autoRouteEnabled: Bool {
+        didSet { UserDefaults.standard.set(autoRouteEnabled, forKey: Self.autoRouteKey) }
     }
     var systemPrompt: String {
         didSet { UserDefaults.standard.set(systemPrompt, forKey: Self.systemPromptKey) }
@@ -98,6 +110,8 @@ final class AppViewModel {
     private static let alwaysEnableWebSearchKey = "kown.webSearch.alwaysOn.v1"
     private static let debateRoundsKey = "kown.debate.rounds.v1"
     private static let autoFailoverKey = "kown.autoFailover.v1"
+    private static let councilVotingKey = "kown.councilVoting.v1"
+    private static let autoRouteKey = "kown.autoRoute.v1"
     // 发送编排已移到 AppViewModel+Send.swift,以下原 private 状态降为 internal 供其访问。
     var runningTask: Task<Void, Never>?
     var summarizingTasks: [UUID: Task<Void, Never>] = [:]
@@ -112,6 +126,7 @@ final class AppViewModel {
         self.providers = ProviderConfigStore.load()
         self.conversations = ConversationStore.loadAll()
         self.webSearchConfig = WebSearchConfigStore.load()
+        self.knowledgeFolders = KnowledgeStore.loadAll()
         self.systemPrompt = UserDefaults.standard.string(forKey: Self.systemPromptKey) ?? ""
         let storedAlwaysOn = UserDefaults.standard.bool(forKey: Self.alwaysEnableWebSearchKey)
         self.alwaysEnableWebSearch = storedAlwaysOn
@@ -121,6 +136,8 @@ final class AppViewModel {
         let storedRounds = UserDefaults.standard.integer(forKey: Self.debateRoundsKey)
         self.debateRoundsForNextSend = storedRounds == 0 ? 2 : max(1, min(4, storedRounds))
         self.autoFailoverEnabled = UserDefaults.standard.bool(forKey: Self.autoFailoverKey)
+        self.councilVotingEnabled = UserDefaults.standard.bool(forKey: Self.councilVotingKey)
+        self.autoRouteEnabled = UserDefaults.standard.bool(forKey: Self.autoRouteKey)
 
         // iCloud 容器探测是异步后台进行的(ICloudSync.init 里 Task.detached)。
         // 冷启动时 init() 跑 loadAll 那一刻容器可能还没就绪,iPhone 端尤甚。

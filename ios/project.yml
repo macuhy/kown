@@ -29,6 +29,9 @@ targets:
         # 加密导出合规 — false 表示仅使用 HTTPS / 系统标准加密(免提交合规文档)。
         # TestFlight / App Store 上架不再每次询问 "is your app using non-exempt encryption"。
         ITSAppUsesNonExemptEncryption: false
+        # 语音听写(STT)— 麦克风 + 语音识别授权
+        NSMicrophoneUsageDescription: "Kown 用麦克风把你的语音转成文字,填进输入框。"
+        NSSpeechRecognitionUsageDescription: "Kown 用语音识别把你说的话转写成文字。"
         UIBackgroundModes:
           - audio   # 流式期间播放无声音频,保持后台网络连接
         UILaunchScreen:
@@ -63,6 +66,9 @@ targets:
           - CloudDocuments
         com.apple.developer.ubiquity-container-identifiers:
           - iCloud.com.xiaobo.kown
+        # 与分享扩展共享 pending 文本
+        com.apple.security.application-groups:
+          - group.com.xiaobo.kown
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.xiaobo.kown
@@ -81,6 +87,47 @@ targets:
     dependencies:
       - package: MarkdownUI
         product: MarkdownUI
+      - target: KownShare
+        embed: true
+
+  KownShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ../Sources/KownShare
+        type: group
+        name: KownShare
+    info:
+      path: ShareInfo.plist
+      properties:
+        CFBundleDisplayName: Kown
+        # 版本必须与主 app 一致(CI 用命令行 MARKETING_VERSION/CURRENT_PROJECT_VERSION 覆盖全 target)。
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: KownShare.ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsText: true
+              NSExtensionActivationSupportsWebURLWithMaxCount: 1
+    entitlements:
+      path: KownShare.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.xiaobo.kown
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.xiaobo.kown.Share
+        MARKETING_VERSION: "0.6.3"
+        CURRENT_PROJECT_VERSION: "1"
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: 4257SFGRFK
+        SWIFT_VERSION: "6.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+        GENERATE_INFOPLIST_FILE: NO
+        SWIFT_UPCOMING_FEATURE_STRICT_CONCURRENCY: YES
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
 
 schemes:
   Kown:

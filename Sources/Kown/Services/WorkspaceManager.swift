@@ -322,6 +322,53 @@ enum WorkspaceManager {
         }
     }
 
+    // MARK: - 撤销
+
+    /// 撤销一次已应用的写入:
+    /// - `.create` → 删除新建的文件;
+    /// - `.update` → 把 `oldContent` 写回(注:>200KB 的旧文件 oldContent 是截断的,还原会丢尾部,UI 已提示);
+    /// - `.skipped` / 失败的写入 → 无可撤销。
+    /// 返回 (是否成功, 错误信息)。
+    static func revert(_ write: AppliedWrite, workspaceURL: URL) -> (success: Bool, error: String?) {
+        guard write.success, write.action != .skipped else {
+            return (false, "该改动未落盘,无需撤销")
+        }
+        let scoped = workspaceURL.startAccessingSecurityScopedResource()
+        defer { if scoped { workspaceURL.stopAccessingSecurityScopedResource() } }
+
+        let cleanRel = write.relativePath.trimmingCharacters(in: CharacterSet(charactersIn: "/ \t\n"))
+        guard !cleanRel.isEmpty, !cleanRel.contains("..") else {
+            return (false, "路径非法,拒绝撤销")
+        }
+        let target = workspaceURL.appendingPathComponent(cleanRel)
+        let root = workspaceURL.standardizedFileURL.resolvingSymlinksInPath()
+        let resolved = target.standardizedFileURL.resolvingSymlinksInPath()
+        guard resolved.path.hasPrefix(root.path + "/") || resolved.path == root.path else {
+            return (false, "路径越出 workspace 根,拒绝撤销")
+        }
+
+        let fm = FileManager.default
+        do {
+            switch write.action {
+            case .create:
+                if fm.fileExists(atPath: resolved.path) {
+                    try fm.removeItem(at: resolved)
+                }
+                return (true, nil)
+            case .update:
+                guard let old = write.oldContent, let data = old.data(using: .utf8) else {
+                    return (false, "没有可还原的旧内容")
+                }
+                try data.write(to: resolved, options: .atomic)
+                return (true, nil)
+            case .skipped:
+                return (false, "跳过的改动无需撤销")
+            }
+        } catch {
+            return (false, error.localizedDescription)
+        }
+    }
+
     // MARK: - 内部
 
     private static func isTextExtensionAllowed(_ url: URL) -> Bool {

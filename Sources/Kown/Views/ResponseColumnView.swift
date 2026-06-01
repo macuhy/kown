@@ -246,6 +246,9 @@ struct ResponseColumnView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
                     toolEventsBlock
+                    if !state.reasoning.isEmpty {
+                        ReasoningDisclosure(reasoning: state.reasoning, streaming: isStreamingPhase, tint: accentColor)
+                    }
                     bodyContent
                     Color.clear.frame(height: 1).id("bottom")
                 }
@@ -440,6 +443,12 @@ struct ResponseColumnView: View {
             }
             if !state.text.isEmpty, case .finished = state.phase {
                 footerPill("\(state.text.count) 字", icon: "text.alignleft")
+            }
+            if state.inputTokens > 0 || state.outputTokens > 0 {
+                TokenCostPill(
+                    usage: TurnTokenUsage(input: state.inputTokens, output: state.outputTokens),
+                    model: config.model, providerKind: config.kind
+                )
             }
             Spacer()
 

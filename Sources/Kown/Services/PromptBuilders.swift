@@ -272,6 +272,96 @@ enum PromptBuilders {
         return lines.joined(separator: "\n")
     }
 
+    // MARK: - Council 投票打分
+
+    /// Council 投票 prompt — 让 chair 对每家答案按 4 个维度(0-10)打分,输出 JSON。
+    /// 用「#序号」标识各家(UUID 当 key 模型容易写错),解析时按序号映射回 providerID。
+    static func buildCouncilVotingPrompt(
+        originalPrompt: String,
+        panel: [ProviderConfig],
+        responses: [String: String],
+        errors: [String: String]
+    ) -> String {
+        var lines: [String] = []
+        lines.append("你是评审。下面多个 AI 针对同一问题各给了答案,请逐一打分(不是综合,而是逐份评分)。")
+        lines.append("")
+        lines.append("【问题】")
+        lines.append(originalPrompt)
+        lines.append("")
+        lines.append("【各份回答】")
+        for (i, cfg) in panel.enumerated() {
+            let key = cfg.id.uuidString
+            lines.append("=== #\(i + 1) \(providerLabel(cfg)) ===")
+            if let err = errors[key], !err.isEmpty {
+                lines.append("(调用失败:\(err))")
+            } else {
+                lines.append(shorten(responses[key] ?? "(空响应)", max: 1200))
+            }
+            lines.append("")
+        }
+        lines.append("请对每份回答在以下维度打 0-10 分(整数):")
+        lines.append("- accuracy 准确性 / completeness 完整性 / actionability 可执行性 / clarity 清晰度")
+        lines.append("")
+        lines.append("**只输出一个 JSON 对象**,不要任何额外文字 / 解释 / Markdown 代码围栏,格式严格如下:")
+        lines.append("{\"scores\":{\"1\":{\"accuracy\":8,\"completeness\":7,\"actionability\":6,\"clarity\":9}," +
+                     "\"2\":{\"accuracy\":5,\"completeness\":6,\"actionability\":7,\"clarity\":6}},\"rationale\":\"一句话总评\"}")
+        lines.append("键 \"1\" \"2\" … 对应上面的 #1 #2 …。rationale 用中文,不超过 80 字。")
+        return lines.joined(separator: "\n")
+    }
+
+    /// 从模型返回文本里解析投票 JSON,映射回 providerID。失败返回 nil(UI 降级不展示)。
+    static func parseCouncilVote(from text: String, panel: [ProviderConfig]) -> CouncilVote? {
+        guard let jsonString = extractJSONObject(from: text),
+              let data = jsonString.data(using: .utf8) else { return nil }
+
+        struct DTO: Decodable {
+            struct S: Decodable { let accuracy: Int?; let completeness: Int?; let actionability: Int?; let clarity: Int? }
+            let scores: [String: S]?
+            let rationale: String?
+        }
+        guard let dto = try? JSONDecoder().decode(DTO.self, from: data), let rawScores = dto.scores else { return nil }
+
+        func clamp(_ v: Int?) -> Int { max(0, min(10, v ?? 0)) }
+        var scores: [String: CouncilVote.Score] = [:]
+        for (idxStr, s) in rawScores {
+            guard let idx = Int(idxStr), idx >= 1, idx <= panel.count else { continue }
+            let providerID = panel[idx - 1].id.uuidString
+            scores[providerID] = CouncilVote.Score(
+                accuracy: clamp(s.accuracy), completeness: clamp(s.completeness),
+                actionability: clamp(s.actionability), clarity: clamp(s.clarity)
+            )
+        }
+        guard !scores.isEmpty else { return nil }
+        return CouncilVote(scores: scores, rationale: (dto.rationale ?? "").trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    /// 从一段文本里抠出第一个完整的 JSON 对象({ … }),容忍前后多余文字 / 代码围栏。
+    static func extractJSONObject(from text: String) -> String? {
+        guard let start = text.firstIndex(of: "{") else { return nil }
+        var depth = 0
+        var inString = false
+        var escaped = false
+        var idx = start
+        while idx < text.endIndex {
+            let ch = text[idx]
+            if escaped {
+                escaped = false
+            } else if ch == "\\" {
+                escaped = true
+            } else if ch == "\"" {
+                inString.toggle()
+            } else if !inString {
+                if ch == "{" { depth += 1 }
+                else if ch == "}" {
+                    depth -= 1
+                    if depth == 0 { return String(text[start...idx]) }
+                }
+            }
+            idx = text.index(after: idx)
+        }
+        return nil
+    }
+
     /// Compare 模式的"裁判" prompt — 让模型挑出胜者并说理由,不要综合两家。
     static func buildJudgePrompt(
         originalPrompt: String,

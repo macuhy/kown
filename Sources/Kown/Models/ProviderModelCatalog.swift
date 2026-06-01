@@ -161,4 +161,11 @@ extension ProviderModelCatalog {
         }
         return nil
     }
+
+    /// 估算一次调用的成本(美元)。查不到单价返回 nil(UI 侧只显示 token 数)。
+    static func estimatedCost(model: String, providerKind: ProviderKind? = nil, input: Int, output: Int) -> Double? {
+        guard let price = price(forModel: model, providerKind: providerKind) else { return nil }
+        return Double(input) / 1_000_000 * price.inputPerMTok
+            + Double(output) / 1_000_000 * price.outputPerMTok
+    }
 }

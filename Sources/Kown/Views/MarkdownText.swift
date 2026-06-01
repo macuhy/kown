@@ -167,13 +167,12 @@ private struct CodeBlockView: View {
         ZStack(alignment: .topTrailing) {
             // 横向滚动:代码长行保持不换行,溢出可左右滑
             ScrollView(.horizontal, showsIndicators: true) {
-                configuration.label
-                    .markdownTextStyle {
-                        FontFamilyVariant(.monospaced)
-                        FontSize(.em(0.88))
-                    }
+                // 自绘语法高亮(按围栏语言着色),替代 MarkdownUI 的纯色 label。
+                Text(SyntaxHighlighter.highlight(configuration.content, language: configuration.language))
+                    .font(.system(size: 12.5, design: .monospaced))
                     .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
+                    .padding(.top, languageTag == nil ? 10 : 24)
+                    .padding(.bottom, 10)
                     // 让短代码块也能撑满宽度,文字左对齐
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .fixedSize(horizontal: true, vertical: false)
@@ -185,10 +184,26 @@ private struct CodeBlockView: View {
                     .strokeBorder(Color.primary.opacity(0.10), lineWidth: 1)
             )
 
+            if let lang = languageTag {
+                Text(lang)
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 7).padding(.vertical, 3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.leading, 4)
+                    .padding(.top, 4)
+            }
+
             copyButton
                 .padding(8)
         }
         .markdownMargin(top: .em(0.6), bottom: .em(0.6))
+    }
+
+    /// 围栏语言标签(非空才显示)。
+    private var languageTag: String? {
+        guard let l = configuration.language?.trimmingCharacters(in: .whitespaces), !l.isEmpty else { return nil }
+        return l.lowercased()
     }
 
     private var copyButton: some View {

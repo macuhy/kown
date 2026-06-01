@@ -9,6 +9,10 @@ struct PerformanceSettingsView: View {
     @AppStorage(ResponseState.flushIntervalKey) private var intervalRaw: Int = ResponseState.defaultFlushIntervalMs
     /// 与 AppViewModel.autoFailoverEnabled 同一 UserDefaults key,直接 AppStorage 绑定保持同步。
     @AppStorage("kown.autoFailover.v1") private var autoFailover: Bool = false
+    /// 与 AppViewModel.councilVotingEnabled 同一 key。
+    @AppStorage("kown.councilVoting.v1") private var councilVoting: Bool = false
+    /// 与 AppViewModel.autoRouteEnabled 同一 key。
+    @AppStorage("kown.autoRoute.v1") private var autoRoute: Bool = false
 
     private let tint = Color(red: 0.88, green: 0.35, blue: 0.22)
     private let secondaryTint = Color(red: 0.91, green: 0.55, blue: 0.20)
@@ -31,6 +35,8 @@ struct PerformanceSettingsView: View {
                 heroCard
                 settingCard
                 autoFailoverCard
+                councilVotingCard
+                autoRouteCard
                 guideCard
             }
             .padding(.horizontal, 14)
@@ -45,6 +51,8 @@ struct PerformanceSettingsView: View {
                 heroCard
                 settingCard
                 autoFailoverCard
+                councilVotingCard
+                autoRouteCard
                 guideCard
             }
             .padding(24)
@@ -75,6 +83,56 @@ struct PerformanceSettingsView: View {
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .strokeBorder(tint.opacity(0.16), lineWidth: 1)
+        }
+    }
+
+    // MARK: - Council 投票
+
+    private var councilVotingCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Toggle(isOn: $councilVoting) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Council 投票打分")
+                        .font(.body.weight(.semibold))
+                    Text("Council 模式里,主席综合后再额外跑一次评审,对各家答案按准确/完整/可执行/清晰四维打分并排名。会多一次模型调用。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .tint(secondaryTint)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(secondaryTint.opacity(0.16), lineWidth: 1)
+        }
+    }
+
+    // MARK: - 自动路由
+
+    private var autoRouteCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Toggle(isOn: $autoRoute) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("按难度自动选模型(Direct,实验)")
+                        .font(.body.weight(.semibold))
+                    Text("Direct 模式下,按问题难度在当前模型所属厂商里自动切换档位:简单问题走便宜模型,复杂问题走旗舰。卡片会显示实际用的型号。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .tint(secondaryTint)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(secondaryTint.opacity(0.16), lineWidth: 1)
         }
     }
 

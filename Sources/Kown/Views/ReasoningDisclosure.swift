@@ -1,0 +1,113 @@
+import SwiftUI
+
+/// 可折叠的「💭 思考过程」区块。供 live 回答卡(ResponseColumnView)、历史卡
+/// (HistoricalResponseCard)、Chair/Summary 卡复用。
+/// - streaming 期间默认展开(便于看推理实时流出),生成结束自动收起。
+/// - 思考文本一般是较长的纯文本,这里用轻量的滚动 Text 渲染(不走 cmark),避免拖慢。
+struct ReasoningDisclosure: View {
+    let reasoning: String
+    var streaming: Bool = false
+    var tint: Color = .purple
+
+    @State private var expanded = false
+
+    var body: some View {
+        if !reasoning.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) { expanded.toggle() }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "brain")
+                            .font(.caption.weight(.bold))
+                        Text("思考过程")
+                            .font(.caption.weight(.bold))
+                        if streaming {
+                            ProgressView().controlSize(.mini)
+                        } else {
+                            Text("\(reasoning.count) 字")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 4)
+                        Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                            .font(.caption2.weight(.bold))
+                    }
+                    .foregroundStyle(tint)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .strokeBorder(tint.opacity(0.20), lineWidth: 1)
+                    }
+                }
+                .buttonStyle(.plain)
+
+                if expanded {
+                    ScrollView {
+                        Text(reasoning)
+                            .font(.system(.caption, design: .default))
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(10)
+                    }
+                    .frame(maxHeight: 260)
+                    .background(tint.opacity(0.05), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .onAppear { expanded = streaming }
+            .onChange(of: streaming) { _, nowStreaming in
+                if !nowStreaming { withAnimation(.easeInOut(duration: 0.18)) { expanded = false } }
+            }
+        }
+    }
+}
+
+/// 单轮成本 / token 角标。查得到单价显示「$0.0012 · 1.2k tok」,查不到只显示 token 数。
+struct TokenCostPill: View {
+    let usage: TurnTokenUsage
+    let model: String
+    let providerKind: ProviderKind
+
+    var body: some View {
+        let total = usage.input + usage.output
+        let cost = ProviderModelCatalog.estimatedCost(
+            model: model, providerKind: providerKind,
+            input: usage.input, output: usage.output
+        )
+        Label(label(total: total, cost: cost), systemImage: "dollarsign.circle")
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .monospacedDigit()
+            .lineLimit(1)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.secondary.opacity(0.08), in: Capsule())
+            .help("输入 \(usage.input) · 输出 \(usage.output) token\(cost != nil ? "(估算成本,实际以账单为准)" : "(该模型无内置单价)")")
+    }
+
+    private func label(total: Int, cost: Double?) -> String {
+        let tok = Self.formatTokens(total)
+        guard let cost else { return tok }
+        return "\(Self.formatCost(cost)) · \(tok)"
+    }
+
+    static func formatTokens(_ n: Int) -> String {
+        if n >= 1000 {
+            return String(format: "%.1fk tok", Double(n) / 1000)
+        }
+        return "\(n) tok"
+    }
+
+    static func formatCost(_ usd: Double) -> String {
+        if usd >= 0.01 {
+            return String(format: "$%.2f", usd)
+        } else if usd > 0 {
+            return String(format: "$%.4f", usd)
+        }
+        return "$0"
+    }
+}

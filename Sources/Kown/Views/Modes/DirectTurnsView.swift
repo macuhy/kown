@@ -12,6 +12,8 @@ struct DirectTurnsView: View {
     var onEditTurn: ((UUID) -> Void)? = nil
     var onFollowUpTurn: ((UUID) -> Void)? = nil
     var onExportTurn: ((UUID) -> Void)? = nil
+    /// 撤销某轮的 workspace 写入(turnID, write)。
+    var onUndoWrite: ((UUID, AppliedWrite) -> Void)? = nil
 
     @Environment(\.horizontalSizeClass) private var hSizeClass
 
@@ -42,11 +44,13 @@ struct DirectTurnsView: View {
                     config: cfg,
                     text: turn.responses[key] ?? "",
                     error: turn.errors[key],
-                    streaming: false
+                    streaming: false,
+                    reasoning: turn.reasoningByProvider?[key],
+                    tokenUsage: turn.tokenUsage?[key]
                 )
             }
             if let writes = turn.appliedWrites, !writes.isEmpty {
-                AppliedWritesStrip(writes: writes)
+                AppliedWritesStrip(writes: writes, onUndo: onUndoWrite.map { cb in { cb(turn.id, $0) } })
             }
             TurnSourcesStrip(turn: turn)
         }
@@ -60,7 +64,10 @@ struct DirectTurnsView: View {
                     config: cfg,
                     text: state.text,
                     error: errorMessage(state.phase),
-                    streaming: isStreaming(state.phase)
+                    streaming: isStreaming(state.phase),
+                    reasoning: state.reasoning,
+                    tokenUsage: (state.inputTokens > 0 || state.outputTokens > 0)
+                        ? TurnTokenUsage(input: state.inputTokens, output: state.outputTokens) : nil
                 )
             }
         }
@@ -173,7 +180,8 @@ struct DirectTurnsView: View {
         }
     }
 
-    private func assistantBubble(config: ProviderConfig, text: String, error: String?, streaming: Bool) -> some View {
+    private func assistantBubble(config: ProviderConfig, text: String, error: String?, streaming: Bool,
+                                 reasoning: String? = nil, tokenUsage: TurnTokenUsage? = nil) -> some View {
         HStack(alignment: .top, spacing: assistantSpacing) {
             ZStack {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -204,6 +212,9 @@ struct DirectTurnsView: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                     Spacer(minLength: 8)
+                    if let tokenUsage, tokenUsage.input > 0 || tokenUsage.output > 0 {
+                        TokenCostPill(usage: tokenUsage, model: config.model, providerKind: config.kind)
+                    }
                     if streaming {
                         HStack(spacing: 5) {
                             ProgressView().controlSize(.small)
@@ -215,6 +226,9 @@ struct DirectTurnsView: View {
                         .padding(.vertical, 3)
                         .background(accentColor(config).opacity(0.10), in: Capsule())
                     }
+                }
+                if let reasoning, !reasoning.isEmpty {
+                    ReasoningDisclosure(reasoning: reasoning, streaming: streaming, tint: accentColor(config))
                 }
                 if let error {
                     Label(error, systemImage: "exclamationmark.triangle.fill")

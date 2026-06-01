@@ -67,7 +67,9 @@ struct DebateTurnsView: View {
                             onRetry: turn.errors[key] != nil ? {
                                 viewModel.retryProvider(turnID: turn.id, configID: cfg.id)
                             } : nil,
-                            isRetrying: viewModel.isRetrying(turnID: turn.id, configID: cfg.id)
+                            isRetrying: viewModel.isRetrying(turnID: turn.id, configID: cfg.id),
+                            reasoning: turn.reasoningByProvider?[key],
+                            tokenUsage: turn.tokenUsage?[key]
                         )
                         .frame(maxWidth: .infinity, alignment: .topLeading)
                     }
@@ -89,11 +91,13 @@ struct DebateTurnsView: View {
                     onRetry: turn.chairError != nil ? {
                         viewModel.retryChair(turnID: turn.id, target: .chair)
                     } : nil,
-                    isRetrying: viewModel.isRetryingChair(turnID: turn.id, target: .chair)
+                    isRetrying: viewModel.isRetryingChair(turnID: turn.id, target: .chair),
+                    reasoning: turn.reasoningByProvider?[moderator.id.uuidString],
+                    tokenUsage: turn.tokenUsage?[moderator.id.uuidString]
                 )
             }
             if let writes = turn.appliedWrites, !writes.isEmpty {
-                AppliedWritesStrip(writes: writes)
+                AppliedWritesStrip(writes: writes, onUndo: { viewModel.undoWrite(turnID: turn.id, write: $0) })
             }
             TurnSourcesStrip(turn: turn)
         }
@@ -171,7 +175,8 @@ struct DebateTurnsView: View {
                     error: chairErrorMessage(chairState),
                     liveText: chairState.text,
                     isStreaming: isChairStreaming(chairState),
-                    role: .moderator
+                    role: .moderator,
+                    reasoning: chairState.reasoning
                 )
             }
         }

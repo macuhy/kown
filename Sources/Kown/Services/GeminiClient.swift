@@ -66,7 +66,8 @@ struct GeminiClient: LLMClient {
                             tools: toolsForThisRound,
                             temperature: options.temperature,
                             maxTokens: options.maxTokens,
-                            yieldText: { continuation.yield(.text($0)) }
+                            yieldText: { continuation.yield(.text($0)) },
+                            yieldReasoning: { continuation.yield(.reasoning($0)) }
                         )
 
                         cumulativeInput += result.inputTokens
@@ -170,7 +171,8 @@ struct GeminiClient: LLMClient {
         tools: [LLMTool],
         temperature: Double?,
         maxTokens: Int?,
-        yieldText: (String) -> Void
+        yieldText: (String) -> Void,
+        yieldReasoning: (String) -> Void = { _ in }
     ) async throws -> RoundResult {
         // 走 SSE 流式 `streamGenerateContent?alt=sse`,字一段段实时显。
         // CRLF 解析问题已经在 SSELineStream 修了(0.6.6),thoughtSignature 也带回去了(0.6.7)。
@@ -226,9 +228,16 @@ struct GeminiClient: LLMClient {
 
             for part in parts {
                 let signature = part["thoughtSignature"] as? String
+                let isThought = (part["thought"] as? Bool) ?? false
                 if let text = part["text"] as? String, !text.isEmpty {
-                    result.text += text
-                    yieldText(text)
+                    if isThought {
+                        // thought summary(需 generationConfig.thinkingConfig.includeThoughts 才会收到):
+                        // 走思考流,不计入正文。
+                        yieldReasoning(text)
+                    } else {
+                        result.text += text
+                        yieldText(text)
+                    }
                 }
                 if let call = part["functionCall"] as? [String: Any],
                    let name = call["name"] as? String {

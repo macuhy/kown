@@ -252,6 +252,22 @@ enum ConversationExporter {
             out += "### 📝 Summary\n\n\(text)\n\n"
         }
 
+        // 投票打分(若有)
+        if let votes = turn.councilVotes, !votes.scores.isEmpty {
+            out += "### ✅ 投票打分\n\n"
+            out += "| 排名 | 模型 | 准确 | 完整 | 可执行 | 清晰 | 总分 |\n"
+            out += "|---|---|---|---|---|---|---|\n"
+            let ranked = votes.scores.sorted { $0.value.total > $1.value.total }
+            for (i, item) in ranked.enumerated() {
+                let s = item.value
+                out += "| \(i + 1) | \(name(item.key, in: turn)) | \(s.accuracy) | \(s.completeness) | \(s.actionability) | \(s.clarity) | \(s.total) |\n"
+            }
+            if !votes.rationale.isEmpty {
+                out += "\n> \(votes.rationale)\n"
+            }
+            out += "\n"
+        }
+
         return out
     }
 

@@ -266,7 +266,8 @@ struct MainContentView: View {
                                 onForkTurn: { viewModel.forkConversation(fromTurnID: $0) },
                                 onEditTurn: { requestEdit($0) },
                                 onFollowUpTurn: { requestFollowUp($0) },
-                                onExportTurn: { exportTurnReport($0) }
+                                onExportTurn: { exportTurnReport($0) },
+                                onUndoWrite: { viewModel.undoWrite(turnID: $0, write: $1) }
                             )
                         case .compare:
                             CompareTurnsView(

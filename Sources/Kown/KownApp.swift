@@ -63,6 +63,8 @@ struct KownApp: App {
             }
             .task {
                 #if os(macOS)
+                // 注册全局热键 ⌃⌥K(唤起主窗口 + 聚焦输入框)。
+                MacQuickAsk.registerHotKey(viewModel: viewModel)
                 // 启动即拉起 Sparkle 更新器(按 SUScheduledCheckInterval 定时检查)。
                 _ = UpdaterService.shared
                 // 再额外强制一次后台静默检查 —— Sparkle 定时器要等满间隔才查,
@@ -103,6 +105,17 @@ struct KownApp: App {
                 ConversationStore.flushAll()
             }
             guard newPhase == .active else { return }
+            #if os(iOS)
+            // 分享扩展 / 快捷指令送来的文字:取出预填到输入框并聚焦。
+            if let shared = SharedInbox.takePending() {
+                if viewModel.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    viewModel.prompt = shared
+                } else {
+                    viewModel.prompt += "\n\n" + shared
+                }
+                viewModel.focusInputRequest &+= 1
+            }
+            #endif
             // 启动第一次 .active 不 refresh — AppViewModel.init 里的延迟 2s task 已经会兜底。
             // 否则两条 refresh 路径同时跑,卡住 MainActor,UI 启动几秒不响应。
             if !hasSeenInitialActive {
@@ -170,6 +183,14 @@ struct KownApp: App {
                 .disabled(viewModel.selectedConversationID == nil)
             }
         }
+        #endif
+
+        #if os(macOS)
+        // 菜单栏快速提问(点图标弹面板;全局热键 ⌃⌥K 唤起主窗口)。
+        MenuBarExtra("Kown", systemImage: "bubble.left.and.bubble.right.fill") {
+            QuickAskView(viewModel: viewModel)
+        }
+        .menuBarExtraStyle(.window)
         #endif
     }
 }

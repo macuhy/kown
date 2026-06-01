@@ -121,6 +121,10 @@ struct HistoricalResponseCard: View {
     var regenerateProviders: [ProviderConfig] = []
     /// 选了某个 provider 换答的回调(传入新 provider id)。
     var onRegenerate: ((UUID) -> Void)? = nil
+    /// 本轮该 provider 的思考过程(可选)。
+    var reasoning: String? = nil
+    /// 本轮该 provider 的 token 用量(可选,用于成本角标)。
+    var tokenUsage: TurnTokenUsage? = nil
 
     @State private var copied = false
     @State private var expanded = false
@@ -138,9 +142,14 @@ struct HistoricalResponseCard: View {
                 .padding(.top, 13)
                 .padding(.bottom, 11)
             softDivider
-            body_
-                .padding(16)
-                .background(bodyBackground)
+            VStack(alignment: .leading, spacing: 10) {
+                if let reasoning, !reasoning.isEmpty {
+                    ReasoningDisclosure(reasoning: reasoning, streaming: false, tint: accentColor)
+                }
+                body_
+            }
+            .padding(16)
+            .background(bodyBackground)
             softDivider
             footer
                 .padding(.horizontal, 16)
@@ -292,6 +301,9 @@ struct HistoricalResponseCard: View {
             if !text.isEmpty {
                 metricPill("\(text.count) 字", icon: "text.alignleft")
             }
+            if let tokenUsage, tokenUsage.input > 0 || tokenUsage.output > 0 {
+                TokenCostPill(usage: tokenUsage, model: config.model, providerKind: config.kind)
+            }
             Spacer()
             if let onRegenerate, !regenerateProviders.isEmpty {
                 Menu {
@@ -440,6 +452,8 @@ struct HistoricalResponseCard: View {
 /// 在 Turn 下方展示一组小卡片表明已应用,带文件路径 + create/update 标签 + 成功/失败 icon。
 struct AppliedWritesStrip: View {
     let writes: [AppliedWrite]
+    /// 撤销某条改动的回调(历史 turn 才传;nil = 不显示撤销按钮)。
+    var onUndo: ((AppliedWrite) -> Void)? = nil
     @State private var expandedIDs: Set<UUID> = []
 
     var body: some View {
@@ -468,7 +482,8 @@ struct AppliedWritesStrip: View {
                                      } else {
                                          expandedIDs.insert(w.id)
                                      }
-                                 })
+                                 },
+                                 onUndo: onUndo.map { cb in { cb(w) } })
             }
         }
         .padding(14)
@@ -513,7 +528,14 @@ struct AppliedWriteCard: View {
     let write: AppliedWrite
     let expanded: Bool
     let onToggleExpand: () -> Void
+    /// 撤销回调(nil = 不显示撤销按钮,例如非历史 turn 或无 workspace)。
+    var onUndo: (() -> Void)? = nil
     @State private var copied = false
+    @State private var showDiff = false
+
+    private var isReverted: Bool { write.reverted == true }
+    private var canDiff: Bool { write.action == .update && (write.oldContent != nil) }
+    private var canUndo: Bool { onUndo != nil && write.success && write.action != .skipped && !isReverted }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -526,6 +548,13 @@ struct AppliedWriteCard: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                 actionBadge
+                if isReverted {
+                    Text("已撤销")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(Color.secondary.opacity(0.16), in: Capsule())
+                }
                 Spacer()
                 Button {
                     onToggleExpand()
@@ -544,11 +573,31 @@ struct AppliedWriteCard: View {
             }
             if expanded {
                 VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        Text("新内容(\(write.newContent.count) 字)")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.secondary)
+                    HStack(spacing: 8) {
+                        if canDiff {
+                            Picker("", selection: $showDiff) {
+                                Text("新内容").tag(false)
+                                Text("Diff").tag(true)
+                            }
+                            .pickerStyle(.segmented)
+                            .labelsHidden()
+                            .fixedSize()
+                        } else {
+                            Text("新内容(\(write.newContent.count) 字)")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                        }
                         Spacer()
+                        if canUndo, let onUndo {
+                            Button(role: .destructive) {
+                                onUndo()
+                            } label: {
+                                Label("撤销", systemImage: "arrow.uturn.backward")
+                                    .font(.caption2.weight(.semibold))
+                            }
+                            .buttonStyle(.borderless)
+                            .help(write.action == .update ? "把文件还原到本轮修改前的内容" : "删除本轮新建的文件")
+                        }
                         Button {
                             Platform.copyText(write.newContent)
                             withAnimation { copied = true }
@@ -563,16 +612,20 @@ struct AppliedWriteCard: View {
                         }
                         .buttonStyle(.borderless)
                     }
-                    ScrollView {
-                        Text(write.newContent)
-                            .font(.system(.caption, design: .monospaced))
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(8)
+                    if showDiff && canDiff {
+                        diffView
+                    } else {
+                        ScrollView {
+                            Text(write.newContent)
+                                .font(.system(.caption, design: .monospaced))
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(8)
+                        }
+                        .frame(maxHeight: 200)
+                        .background(Color.platformTextBackground.opacity(0.5),
+                                    in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
-                    .frame(maxHeight: 200)
-                    .background(Color.platformTextBackground.opacity(0.5),
-                                in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
             }
         }
@@ -584,6 +637,58 @@ struct AppliedWriteCard: View {
         .overlay {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .strokeBorder(statusColor.opacity(write.success ? 0.16 : 0.34), lineWidth: 1)
+        }
+    }
+
+    @ViewBuilder
+    private var diffView: some View {
+        let lines = TextDiff.diff(old: write.oldContent ?? "", new: write.newContent)
+        let stats = TextDiff.stats(lines)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Text("+\(stats.added)").foregroundStyle(.green)
+                Text("−\(stats.removed)").foregroundStyle(.red)
+            }
+            .font(.caption2.weight(.bold).monospacedDigit())
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(lines) { line in
+                        Text((prefix(line.kind)) + line.text)
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundStyle(color(line.kind))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 8).padding(.vertical, 1)
+                            .background(bg(line.kind))
+                            .textSelection(.enabled)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+            .frame(maxHeight: 240)
+            .background(Color.platformTextBackground.opacity(0.5),
+                        in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+    }
+
+    private func prefix(_ k: TextDiff.Kind) -> String {
+        switch k {
+        case .equal:  return "  "
+        case .insert: return "+ "
+        case .delete: return "- "
+        }
+    }
+    private func color(_ k: TextDiff.Kind) -> Color {
+        switch k {
+        case .equal:  return .secondary
+        case .insert: return .green
+        case .delete: return .red
+        }
+    }
+    private func bg(_ k: TextDiff.Kind) -> Color {
+        switch k {
+        case .equal:  return .clear
+        case .insert: return Color.green.opacity(0.10)
+        case .delete: return Color.red.opacity(0.10)
         }
     }
 
@@ -634,6 +739,10 @@ struct ChairSummaryCard: View {
     var onRetry: (() -> Void)? = nil
     /// 正在重试 — UI 显示加载态。
     var isRetrying: Bool = false
+    /// 思考过程(live 传 liveState.reasoning,历史传 turn.reasoningByProvider[id])。
+    var reasoning: String? = nil
+    /// token 用量(可选,用于成本角标)。
+    var tokenUsage: TurnTokenUsage? = nil
 
     enum Role {
         case chair, judge, summary, moderator
@@ -717,6 +826,9 @@ struct ChairSummaryCard: View {
                         .lineLimit(1)
                 }
                 Spacer()
+                if let tokenUsage, tokenUsage.input > 0 || tokenUsage.output > 0 {
+                    TokenCostPill(usage: tokenUsage, model: config.model, providerKind: config.kind)
+                }
                 if isStreaming {
                     HStack(spacing: 6) {
                         ProgressView().controlSize(.small)
@@ -736,6 +848,10 @@ struct ChairSummaryCard: View {
             Rectangle()
                 .fill(Color.primary.opacity(0.07))
                 .frame(height: 1)
+
+            if let reasoning, !reasoning.isEmpty {
+                ReasoningDisclosure(reasoning: reasoning, streaming: isStreaming, tint: role.tint)
+            }
 
             content
                 .frame(maxWidth: .infinity, alignment: .leading)

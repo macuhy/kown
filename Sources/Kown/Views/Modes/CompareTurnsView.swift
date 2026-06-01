@@ -64,7 +64,9 @@ struct CompareTurnsView: View {
                         } : nil,
                         isRetrying: viewModel.isRetrying(turnID: turn.id, configID: cfg.id),
                         regenerateProviders: viewModel.regenerateCandidates,
-                        onRegenerate: { viewModel.regenerateWithModel(turnID: turn.id, newProviderID: $0) }
+                        onRegenerate: { viewModel.regenerateWithModel(turnID: turn.id, newProviderID: $0) },
+                        reasoning: turn.reasoningByProvider?[key],
+                        tokenUsage: turn.tokenUsage?[key]
                     )
                     .frame(maxWidth: .infinity)
                 }
@@ -80,11 +82,13 @@ struct CompareTurnsView: View {
                     onRetry: turn.chairError != nil ? {
                         viewModel.retryChair(turnID: turn.id, target: .chair)
                     } : nil,
-                    isRetrying: viewModel.isRetryingChair(turnID: turn.id, target: .chair)
+                    isRetrying: viewModel.isRetryingChair(turnID: turn.id, target: .chair),
+                    reasoning: turn.reasoningByProvider?[judge.id.uuidString],
+                    tokenUsage: turn.tokenUsage?[judge.id.uuidString]
                 )
             }
             if let writes = turn.appliedWrites, !writes.isEmpty {
-                AppliedWritesStrip(writes: writes)
+                AppliedWritesStrip(writes: writes, onUndo: { viewModel.undoWrite(turnID: turn.id, write: $0) })
             }
             TurnSourcesStrip(turn: turn)
         }
@@ -114,7 +118,8 @@ struct CompareTurnsView: View {
                     error: judgeErrorMessage(judgeState),
                     liveText: judgeState.text,
                     isStreaming: isJudgeStreaming(judgeState),
-                    role: .judge
+                    role: .judge,
+                    reasoning: judgeState.reasoning
                 )
             }
         }

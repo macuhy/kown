@@ -6,8 +6,14 @@ extension AppViewModel {
     func send() {
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        let (panel, chair) = providersForCurrentSend()
+        var (panel, chair) = providersForCurrentSend()
         guard !panel.isEmpty else { return }
+
+        // Direct 模式 + 自动路由:按问题难度在当前 provider 的 vendor 内换 model(便宜↔旗舰)。
+        if autoRouteEnabled, currentMode == .direct, let first = panel.first {
+            let routed = QuestionRouter.route(first, prompt: trimmed)
+            if routed.changed { panel[0] = routed.config }
+        }
 
         // 没有当前会话就新建
         if selectedConversationID == nil {
@@ -45,13 +51,21 @@ extension AppViewModel {
         let workspaceContext: String? = workspaceURLForSend.flatMap {
             WorkspaceManager.buildContext(workspaceURL: $0)
         }
+        // 知识库(本地 RAG):按本轮问题检索 top-K 片段,作 [相关资料] 块前置进 system。
+        let knowledgeContext: String? = {
+            guard let folder = currentKnowledgeFolder else { return nil }
+            let hits = LocalRAG.retrieve(query: trimmed, folder: folder, topK: 4)
+            guard !hits.isEmpty else { return nil }
+            return "[相关资料 — 来自知识库「\(folder.name)」,回答时优先参考以下片段]\n\n"
+                + hits.joined(separator: "\n\n---\n\n")
+        }()
         let sysSnapshot: String = {
             // 会话级系统提示优先;非 nil 且非空才覆盖全局,否则回退全局 systemPrompt。
             let convPrompt = conversations[convIdx].systemPrompt?.trimmingCharacters(in: .whitespacesAndNewlines)
             let base = (convPrompt?.isEmpty == false) ? convPrompt! : systemPrompt
-            guard let ws = workspaceContext else { return base }
-            if base.isEmpty { return ws }
-            return ws + "\n\n" + base
+            // 顺序:workspace 上下文 → 知识库片段 → 用户 system prompt。
+            let parts = [workspaceContext, knowledgeContext, base.isEmpty ? nil : base].compactMap { $0 }
+            return parts.joined(separator: "\n\n")
         }()
         let imageSnapshot = imagePayloads
         // 把本轮图片字节落盘到同步目录,拿到轻量引用 → 历史里能看到 + 随 iCloud 同步。
@@ -176,6 +190,10 @@ extension AppViewModel {
 
             var responses: [String: String] = [:]
             var errors: [String: String] = [:]
+            // 思考过程 + token 用量,key = providerID(uuidString),panel/chair/summary 共用。
+            var reasoningByProvider: [String: String] = [:]
+            var tokenUsage: [String: TurnTokenUsage] = [:]
+            var councilVotes: CouncilVote? = nil
             var snapshot: [String: ProviderConfig] = [:]
             for cfg in panel {
                 snapshot[cfg.id.uuidString] = cfg
@@ -280,6 +298,17 @@ extension AppViewModel {
                 errors = panelResult.errors
             }
 
+            // 采集 panel 各家的思考过程 + token(在 chair 清空 liveStates 之前)。
+            // Debate 模式 liveStates 持有最后一轮的状态,与 top-level responses 语义一致。
+            for cfg in panel {
+                if let s = self.liveStates[cfg.id] {
+                    if !s.reasoning.isEmpty { reasoningByProvider[cfg.id.uuidString] = s.reasoning }
+                    if s.inputTokens > 0 || s.outputTokens > 0 {
+                        tokenUsage[cfg.id.uuidString] = TurnTokenUsage(input: s.inputTokens, output: s.outputTokens)
+                    }
+                }
+            }
+
             // 2) 如果有 Chair,跑综合 / 裁判 / 主持总结
             var chairSummary: String? = nil
             var chairError: String? = nil
@@ -324,6 +353,12 @@ extension AppViewModel {
                     )
                     chairSummary = result.1
                     chairError = result.2
+                    if let s = self.liveChairState {
+                        if !s.reasoning.isEmpty { reasoningByProvider[chair.id.uuidString] = s.reasoning }
+                        if s.inputTokens > 0 || s.outputTokens > 0 {
+                            tokenUsage[chair.id.uuidString] = TurnTokenUsage(input: s.inputTokens, output: s.outputTokens)
+                        }
+                    }
                 }
             }
 
@@ -354,6 +389,46 @@ extension AppViewModel {
                     )
                     summaryText = result.1
                     summaryError = result.2
+                    if let s = self.liveSummaryState {
+                        if !s.reasoning.isEmpty { reasoningByProvider[summary.id.uuidString] = s.reasoning }
+                        if s.inputTokens > 0 || s.outputTokens > 0 {
+                            tokenUsage[summary.id.uuidString] = TurnTokenUsage(input: s.inputTokens, output: s.outputTokens)
+                        }
+                    }
+                }
+            }
+
+            // 2.6) Council 投票打分(可选,开关在性能设置):chair 之后再跑一次,让评审给各家打分。
+            if modeAtSend == .council, self.councilVotingEnabled, panel.count >= 2 {
+                let nonEmpty = responses.filter { !$0.value.isEmpty }
+                if nonEmpty.count >= 2 {
+                    let voter = chair ?? summarySnapshot
+                        ?? self.providers.first(where: { $0.enabled && !$0.kind.isCLI })
+                    if let voter {
+                        let votePrompt = PromptBuilders.buildCouncilVotingPrompt(
+                            originalPrompt: promptSnapshot, panel: panel,
+                            responses: responses, errors: errors
+                        )
+                        var collected = ""
+                        do {
+                            let apiKey = voter.kind.isCLI ? "" : ((try? KeychainStore.load(id: voter.id)) ?? "")
+                            let client = ProviderRegistry.client(for: voter.kind)
+                            var opts = self.optionsFor(config: voter, systemPromptOverride: "")
+                            opts.temperature = 0.2
+                            for try await chunk in client.stream(prompt: votePrompt, options: opts, config: voter, apiKey: apiKey) {
+                                if Task.isCancelled { break }
+                                switch chunk {
+                                case .text(let t): collected += t
+                                case .usage(let i, let o):
+                                    UsageStore.shared.record(providerKind: voter.kind, model: voter.model, inputTokens: i, outputTokens: o)
+                                default: break
+                                }
+                            }
+                            councilVotes = PromptBuilders.parseCouncilVote(from: collected, panel: panel)
+                        } catch {
+                            // 投票失败不影响主回答,静默降级
+                        }
+                    }
                 }
             }
 
@@ -415,7 +490,10 @@ extension AppViewModel {
                     debateRounds: debateRounds,
                     appliedWrites: appliedWrites,
                     images: turnImages.isEmpty ? nil : turnImages,
-                    sources: self.liveSources.isEmpty ? nil : self.liveSources
+                    sources: self.liveSources.isEmpty ? nil : self.liveSources,
+                    reasoningByProvider: reasoningByProvider.isEmpty ? nil : reasoningByProvider,
+                    tokenUsage: tokenUsage.isEmpty ? nil : tokenUsage,
+                    councilVotes: councilVotes
                 )
                 self.conversations[idx].turns.append(turn)
                 self.conversations[idx].updatedAt = Date()
@@ -477,6 +555,29 @@ extension AppViewModel {
     /// 「换模型重答」候选:已启用、非 CLI 的 provider(供回答卡菜单)。
     var regenerateCandidates: [ProviderConfig] {
         providers.filter { $0.enabled && !$0.kind.isCLI }
+    }
+
+    /// 撤销某轮的一次 workspace 写入:还原文件(create→删,update→写回旧内容),并标记 reverted。
+    @discardableResult
+    func undoWrite(turnID: UUID, write: AppliedWrite) -> String? {
+        guard let convID = selectedConversationID,
+              let convIdx = conversations.firstIndex(where: { $0.id == convID }),
+              let turnIdx = conversations[convIdx].turns.firstIndex(where: { $0.id == turnID }) else {
+            return "找不到对应会话"
+        }
+        guard let url = currentWorkspaceURL else {
+            return "本会话未设置 workspace,无法撤销"
+        }
+        let result = WorkspaceManager.revert(write, workspaceURL: url)
+        guard result.success else { return result.error ?? "撤销失败" }
+        if var writes = conversations[convIdx].turns[turnIdx].appliedWrites,
+           let wIdx = writes.firstIndex(where: { $0.id == write.id }) {
+            writes[wIdx].reverted = true
+            conversations[convIdx].turns[turnIdx].appliedWrites = writes
+            conversations[convIdx].updatedAt = Date()
+            ConversationStore.save(conversations[convIdx])
+        }
+        return nil
     }
 
     /// 编辑历史某轮的用户消息并从该轮重新生成:丢弃该轮(含)之后的所有轮,
@@ -693,6 +794,8 @@ extension AppViewModel {
             defer { self.retryingTickets.remove(ticket) }
 
             var collected = ""
+            var collectedReasoning = ""
+            var usage: TurnTokenUsage? = nil
             var failure: String? = nil
             do {
                 let apiKey = cfg.kind.isCLI ? "" : (try KeychainStore.load(id: cfg.id))
@@ -705,9 +808,11 @@ extension AppViewModel {
                 for try await chunk in client.stream(prompt: prompt, options: options, config: cfg, apiKey: apiKey) {
                     switch chunk {
                     case .text(let t): collected += t
+                    case .reasoning(let r): collectedReasoning += r
                     case .toolEvent: break
                     case .sources: break
                     case .usage(let input, let output):
+                        usage = TurnTokenUsage(input: input, output: output)
                         UsageStore.shared.record(
                             providerKind: cfg.kind,
                             model: cfg.model,
@@ -774,8 +879,26 @@ extension AppViewModel {
                 }
             }
 
+            // 同步思考过程 / token 用量(顶层,按 providerID)
+            self.patchTurnReasoningAndUsage(convIdx: liveConvIdx, turnIdx: liveTurnIdx, key: key,
+                                            reasoning: collectedReasoning, usage: usage)
             self.conversations[liveConvIdx].updatedAt = Date()
             ConversationStore.save(self.conversations[liveConvIdx])
+        }
+    }
+
+    /// 把单次重跑得到的思考过程 / token 用量回填进 turn(顶层 dict,按 providerID)。
+    private func patchTurnReasoningAndUsage(convIdx: Int, turnIdx: Int, key: String,
+                                            reasoning: String, usage: TurnTokenUsage?) {
+        if !reasoning.isEmpty {
+            var dict = conversations[convIdx].turns[turnIdx].reasoningByProvider ?? [:]
+            dict[key] = reasoning
+            conversations[convIdx].turns[turnIdx].reasoningByProvider = dict
+        }
+        if let usage {
+            var dict = conversations[convIdx].turns[turnIdx].tokenUsage ?? [:]
+            dict[key] = usage
+            conversations[convIdx].turns[turnIdx].tokenUsage = dict
         }
     }
 
@@ -874,6 +997,8 @@ extension AppViewModel {
             defer { self.retryingTickets.remove(ticket) }
 
             var collected = ""
+            var collectedReasoning = ""
+            var usage: TurnTokenUsage? = nil
             var failure: String? = nil
             do {
                 let apiKey = cfg.kind.isCLI ? "" : (try KeychainStore.load(id: cfg.id))
@@ -884,9 +1009,11 @@ extension AppViewModel {
                 for try await chunk in client.stream(prompt: prompt, options: options, config: cfg, apiKey: apiKey) {
                     switch chunk {
                     case .text(let t): collected += t
+                    case .reasoning(let r): collectedReasoning += r
                     case .toolEvent: break
                     case .sources: break
                     case .usage(let input, let output):
+                        usage = TurnTokenUsage(input: input, output: output)
                         UsageStore.shared.record(
                             providerKind: cfg.kind,
                             model: cfg.model,
@@ -919,6 +1046,9 @@ extension AppViewModel {
 
             guard let liveConvIdx = self.conversations.firstIndex(where: { $0.id == convID }),
                   let liveTurnIdx = self.conversations[liveConvIdx].turns.firstIndex(where: { $0.id == turnID }) else { return }
+
+            self.patchTurnReasoningAndUsage(convIdx: liveConvIdx, turnIdx: liveTurnIdx, key: cfg.id.uuidString,
+                                            reasoning: collectedReasoning, usage: usage)
 
             switch target {
             case .chair:
@@ -1046,6 +1176,7 @@ extension AppViewModel {
                 if Task.isCancelled { break }
                 switch chunk {
                 case .text(let t):       state.append(t)
+                case .reasoning(let r):  state.appendReasoning(r)
                 case .toolEvent(let e):  state.logEvent(e)
                 case .sources(let refs):
                     // web_search 命中的来源:累积到本轮 liveSources(按 url 去重),落盘进 Turn.sources。
@@ -1053,7 +1184,9 @@ extension AppViewModel {
                     let known = Set(self.liveSources.map(\.url))
                     self.liveSources.append(contentsOf: refs.filter { !known.contains($0.url) })
                 case .usage(let input, let output):
-                    // 记一笔到 UsageStore(按天分桶,本地持久化)
+                    // 存进 state(回填进 Turn.tokenUsage 算成本)+ 记一笔到 UsageStore(按天分桶)
+                    state.inputTokens = input
+                    state.outputTokens = output
                     UsageStore.shared.record(
                         providerKind: config.kind,
                         model: config.model,
@@ -1090,7 +1223,10 @@ extension AppViewModel {
                 for try await chunk in altClient.stream(prompt: prompt, options: opts, config: alt, apiKey: altKey) {
                     if Task.isCancelled { break }
                     if case .text(let t) = chunk { state.append(t) }
+                    else if case .reasoning(let r) = chunk { state.appendReasoning(r) }
                     else if case .usage(let i, let o) = chunk {
+                        state.inputTokens = i
+                        state.outputTokens = o
                         UsageStore.shared.record(providerKind: alt.kind, model: alt.model, inputTokens: i, outputTokens: o)
                     }
                 }

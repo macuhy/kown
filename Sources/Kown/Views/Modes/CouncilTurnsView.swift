@@ -68,7 +68,9 @@ struct CouncilTurnsView: View {
                         } : nil,
                         isRetrying: viewModel.isRetrying(turnID: turn.id, configID: cfg.id),
                         regenerateProviders: viewModel.regenerateCandidates,
-                        onRegenerate: { viewModel.regenerateWithModel(turnID: turn.id, newProviderID: $0) }
+                        onRegenerate: { viewModel.regenerateWithModel(turnID: turn.id, newProviderID: $0) },
+                        reasoning: turn.reasoningByProvider?[key],
+                        tokenUsage: turn.tokenUsage?[key]
                     )
                     .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
@@ -83,7 +85,9 @@ struct CouncilTurnsView: View {
                     onRetry: turn.chairError != nil ? {
                         viewModel.retryChair(turnID: turn.id, target: .chair)
                     } : nil,
-                    isRetrying: viewModel.isRetryingChair(turnID: turn.id, target: .chair)
+                    isRetrying: viewModel.isRetryingChair(turnID: turn.id, target: .chair),
+                    reasoning: turn.reasoningByProvider?[chair.id.uuidString],
+                    tokenUsage: turn.tokenUsage?[chair.id.uuidString]
                 )
             }
             if let summary = turn.summaryConfig {
@@ -97,11 +101,16 @@ struct CouncilTurnsView: View {
                     onRetry: turn.summaryError != nil ? {
                         viewModel.retryChair(turnID: turn.id, target: .summary)
                     } : nil,
-                    isRetrying: viewModel.isRetryingChair(turnID: turn.id, target: .summary)
+                    isRetrying: viewModel.isRetryingChair(turnID: turn.id, target: .summary),
+                    reasoning: turn.reasoningByProvider?[summary.id.uuidString],
+                    tokenUsage: turn.tokenUsage?[summary.id.uuidString]
                 )
             }
+            if let votes = turn.councilVotes, !votes.scores.isEmpty {
+                VoteResultsCard(vote: votes, names: voteNames(turn))
+            }
             if let writes = turn.appliedWrites, !writes.isEmpty {
-                AppliedWritesStrip(writes: writes)
+                AppliedWritesStrip(writes: writes, onUndo: { viewModel.undoWrite(turnID: turn.id, write: $0) })
             }
             TurnSourcesStrip(turn: turn)
         }
@@ -130,7 +139,8 @@ struct CouncilTurnsView: View {
                     text: nil,
                     error: chairErrorMessage(chairState),
                     liveText: chairState.text,
-                    isStreaming: isChairStreaming(chairState)
+                    isStreaming: isChairStreaming(chairState),
+                    reasoning: chairState.reasoning
                 )
             }
             if let summary = liveSummary, let summaryState = liveSummaryState {
@@ -140,7 +150,8 @@ struct CouncilTurnsView: View {
                     error: chairErrorMessage(summaryState),
                     liveText: summaryState.text,
                     isStreaming: isChairStreaming(summaryState),
-                    role: .summary
+                    role: .summary,
+                    reasoning: summaryState.reasoning
                 )
             }
         }
@@ -158,6 +169,13 @@ struct CouncilTurnsView: View {
 
     private var councilTint: Color {
         Color(red: 0.06, green: 0.55, blue: 0.95)
+    }
+
+    /// providerID → 展示名(供投票卡显示)。
+    private func voteNames(_ turn: Turn) -> [String: String] {
+        var map: [String: String] = [:]
+        for (id, cfg) in turn.providerSnapshot { map[id] = cfg.displayName }
+        return map
     }
 
     private func isChairStreaming(_ state: ResponseState) -> Bool {

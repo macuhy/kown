@@ -50,7 +50,7 @@ struct OpenAICompatibleClient: LLMClient {
                             temperature: options.temperature,
                             maxTokens: options.maxTokens,
                             yieldText: { continuation.yield(.text($0)) },
-                            yieldThinkingStarted: { continuation.yield(.toolEvent("💭 思考中…")) }
+                            yieldReasoning: { continuation.yield(.reasoning($0)) }
                         )
 
                         // 累计 token 用量(tool use loop 里每轮都是独立计费的 API call)
@@ -159,7 +159,7 @@ struct OpenAICompatibleClient: LLMClient {
         temperature: Double?,
         maxTokens: Int?,
         yieldText: (String) -> Void,
-        yieldThinkingStarted: () -> Void = {}
+        yieldReasoning: (String) -> Void = { _ in }
     ) async throws -> RoundResult {
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -215,8 +215,8 @@ struct OpenAICompatibleClient: LLMClient {
                     yieldText(content)
                 }
                 if let rc = delta["reasoning_content"] as? String, !rc.isEmpty {
-                    if result.reasoningContent.isEmpty { yieldThinkingStarted() }
                     result.reasoningContent += rc
+                    yieldReasoning(rc)
                 }
                 if let toolCalls = delta["tool_calls"] as? [[String: Any]] {
                     for tc in toolCalls {

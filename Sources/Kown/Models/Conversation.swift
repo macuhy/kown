@@ -90,6 +90,27 @@ struct TurnImage: Identifiable, Codable, Hashable, Sendable {
     }
 }
 
+/// 一轮里某个 provider 的 token 用量(用于成本角标)。key 为 providerID(uuidString)。
+struct TurnTokenUsage: Codable, Hashable, Sendable {
+    var input: Int
+    var output: Int
+}
+
+/// Council 投票结果:由 chair 对各家答案按维度打分(0-10),外加一句总评。
+struct CouncilVote: Codable, Hashable, Sendable {
+    struct Score: Codable, Hashable, Sendable {
+        var accuracy: Int       // 准确性
+        var completeness: Int   // 完整性
+        var actionability: Int  // 可执行性
+        var clarity: Int        // 清晰度
+        var total: Int { accuracy + completeness + actionability + clarity }
+    }
+    /// providerID(uuidString) → 分数
+    var scores: [String: Score]
+    /// 一句话总评 / 评审理由
+    var rationale: String
+}
+
 /// 一轮问答：用户的 prompt + 各模型最终文本 + 可选的 Chair 综合
 struct Turn: Identifiable, Codable, Hashable, Sendable {
     let id: UUID
@@ -125,6 +146,14 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
     var images: [TurnImage]?
     /// 本轮 web_search 命中的引用来源(结构化留痕)。旧会话没有该字段,保持 optional 兼容旧 JSON。
     var sources: [SourceRef]?
+    /// 各 provider(panel + chair + summary)本轮的「思考过程」文本,key = providerID(uuidString)。
+    /// 旧会话没有,保持 optional 兼容旧 JSON。
+    var reasoningByProvider: [String: String]?
+    /// 各 provider(panel + chair + summary)本轮的 token 用量,key = providerID(uuidString)。
+    /// 旧会话没有,保持 optional 兼容旧 JSON。
+    var tokenUsage: [String: TurnTokenUsage]?
+    /// Council 投票结果(仅 Council 模式且开启投票时有)。旧会话没有,保持 optional。
+    var councilVotes: CouncilVote?
 
     init(id: UUID = UUID(),
          timestamp: Date = Date(),
@@ -143,7 +172,10 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
          debateRounds: [DebateRound]? = nil,
          appliedWrites: [AppliedWrite]? = nil,
          images: [TurnImage]? = nil,
-         sources: [SourceRef]? = nil) {
+         sources: [SourceRef]? = nil,
+         reasoningByProvider: [String: String]? = nil,
+         tokenUsage: [String: TurnTokenUsage]? = nil,
+         councilVotes: CouncilVote? = nil) {
         self.id = id
         self.timestamp = timestamp
         self.prompt = prompt
@@ -162,6 +194,9 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
         self.appliedWrites = appliedWrites
         self.images = images
         self.sources = sources
+        self.reasoningByProvider = reasoningByProvider
+        self.tokenUsage = tokenUsage
+        self.councilVotes = councilVotes
     }
 
     // 兼容旧 JSON(缺新字段时 sources 等以 decodeIfPresent 解码,默认 nil),不破坏现有存档/同步。
@@ -170,6 +205,7 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
         case chairProviderID, chairSummary, chairError
         case summaryProviderID, summaryText, summaryError
         case providerSnapshot, panelOrder, debateRounds, appliedWrites, images, sources
+        case reasoningByProvider, tokenUsage, councilVotes
     }
 
     init(from decoder: Decoder) throws {
@@ -192,6 +228,9 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
         self.appliedWrites = try c.decodeIfPresent([AppliedWrite].self, forKey: .appliedWrites)
         self.images = try c.decodeIfPresent([TurnImage].self, forKey: .images)
         self.sources = try c.decodeIfPresent([SourceRef].self, forKey: .sources)
+        self.reasoningByProvider = try c.decodeIfPresent([String: String].self, forKey: .reasoningByProvider)
+        self.tokenUsage = try c.decodeIfPresent([String: TurnTokenUsage].self, forKey: .tokenUsage)
+        self.councilVotes = try c.decodeIfPresent(CouncilVote.self, forKey: .councilVotes)
     }
 
     /// 取顺序化的 panel 配置（按发送顺序，Chair 不在内）
@@ -259,6 +298,8 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
     var pinned: Bool
     /// 标签 — 侧栏可按标签过滤分组。
     var tags: [String]
+    /// 绑定的知识库资料夹 ID — 发送时按问题本地检索片段注入上下文。nil = 未绑定。
+    var knowledgeFolderID: UUID?
 
     init(id: UUID = UUID(),
          title: String = "New Conversation",
@@ -274,7 +315,8 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
          workspaceDisplayPath: String? = nil,
          systemPrompt: String? = nil,
          pinned: Bool = false,
-         tags: [String] = []) {
+         tags: [String] = [],
+         knowledgeFolderID: UUID? = nil) {
         self.id = id
         self.title = title
         self.mode = mode
@@ -290,6 +332,7 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
         self.systemPrompt = systemPrompt
         self.pinned = pinned
         self.tags = tags
+        self.knowledgeFolderID = knowledgeFolderID
     }
 
     // 兼容旧 JSON(缺新字段)
@@ -310,6 +353,7 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
         self.systemPrompt = try c.decodeIfPresent(String.self, forKey: .systemPrompt)
         self.pinned = try c.decodeIfPresent(Bool.self, forKey: .pinned) ?? false
         self.tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []
+        self.knowledgeFolderID = try c.decodeIfPresent(UUID.self, forKey: .knowledgeFolderID)
     }
 
     var lastPromptPreview: String {
@@ -334,6 +378,8 @@ struct AppliedWrite: Identifiable, Codable, Hashable, Sendable {
     var oldContent: String?
     /// 新内容(写入磁盘的全文)— UI 用它展示
     var newContent: String
+    /// 是否已被用户撤销(撤销后还原 oldContent / 删除新建文件)。旧存档无该字段 → optional。
+    var reverted: Bool?
 
     enum Action: String, Codable, Sendable {
         case create     // 文件原本不存在
@@ -347,7 +393,8 @@ struct AppliedWrite: Identifiable, Codable, Hashable, Sendable {
          success: Bool,
          error: String? = nil,
          oldContent: String? = nil,
-         newContent: String) {
+         newContent: String,
+         reverted: Bool? = nil) {
         self.id = id
         self.relativePath = relativePath
         self.action = action
@@ -355,5 +402,6 @@ struct AppliedWrite: Identifiable, Codable, Hashable, Sendable {
         self.error = error
         self.oldContent = oldContent
         self.newContent = newContent
+        self.reverted = reverted
     }
 }

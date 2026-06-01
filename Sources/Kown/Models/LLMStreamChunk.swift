@@ -4,6 +4,11 @@ import Foundation
 /// 文本与工具事件走同一条流,UI 各自路由到 `ResponseState.text` / `ResponseState.events`。
 enum LLMStreamChunk: Sendable {
     case text(String)
+    /// 模型的「思考过程」增量(reasoning / thinking / thought)。
+    /// OpenAI 兼容的 `reasoning_content`、Anthropic 的 `thinking_delta`、Gemini 的 thought part
+    /// 都归一到这条流,UI 路由到 `ResponseState.reasoning`(可折叠的「💭 思考过程」区块),
+    /// 与正文 `text` 分开渲染。
+    case reasoning(String)
     case toolEvent(String)
     /// 一次工具调用(web_search)命中的结构化引用来源。client 在 ToolRouter.execute 后解析并发出,
     /// AppViewModel 累积到 `liveSources`、落盘进 `Turn.sources`(回答下方以 SourcesStrip 展示)。

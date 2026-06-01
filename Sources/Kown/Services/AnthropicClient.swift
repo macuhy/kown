@@ -67,7 +67,8 @@ struct AnthropicClient: LLMClient {
                             tools: toolsForThisRound,
                             temperature: options.temperature,
                             maxTokens: options.maxTokens ?? Self.defaultMaxTokens,
-                            yieldText: { continuation.yield(.text($0)) }
+                            yieldText: { continuation.yield(.text($0)) },
+                            yieldReasoning: { continuation.yield(.reasoning($0)) }
                         )
 
                         cumulativeInput += result.inputTokens
@@ -161,7 +162,8 @@ struct AnthropicClient: LLMClient {
         tools: [LLMTool],
         temperature: Double?,
         maxTokens: Int,
-        yieldText: (String) -> Void
+        yieldText: (String) -> Void,
+        yieldReasoning: (String) -> Void = { _ in }
     ) async throws -> RoundResult {
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -237,6 +239,9 @@ struct AnthropicClient: LLMClient {
                 if type == "text_delta", let text = delta["text"] as? String, !text.isEmpty {
                     result.text += text
                     yieldText(text)
+                } else if type == "thinking_delta", let thinking = delta["thinking"] as? String, !thinking.isEmpty {
+                    // extended thinking 的思考增量(需在请求侧显式开启 thinking 才会收到)。
+                    yieldReasoning(thinking)
                 } else if type == "input_json_delta", let partial = delta["partial_json"] as? String {
                     blockToolArgs[index, default: ""] += partial
                 }

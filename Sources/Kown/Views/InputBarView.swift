@@ -18,6 +18,7 @@ struct InputBarView: View {
     @State private var pickerError: String?
     @State private var showEnhancer = false
     @State private var showPromptLibrary = false
+    @State private var showKnowledge = false
     @State private var showURLScrape = false
     @State private var urlDraft = ""
     @State private var scraping = false
@@ -31,6 +32,10 @@ struct InputBarView: View {
     @State private var showPhotoPicker = false
     @State private var photoItem: PhotosPickerItem?
     #endif
+
+    /// 语音听写(STT)。录音中把识别文本接在 dictationBase 后面写入 prompt。
+    @ObservedObject private var dictation = SpeechRecognizer.shared
+    @State private var dictationBase = ""
 
     var body: some View {
         VStack(spacing: shellSpacing) {
@@ -71,6 +76,9 @@ struct InputBarView: View {
         .overlay(alignment: .top) {
             Rectangle().fill(Color.primary.opacity(0.08)).frame(height: 1)
         }
+        .onChange(of: viewModel.focusInputRequest) { _, _ in
+            inputFocused = true
+        }
         .alert("抓取网页", isPresented: $showURLScrape) {
             TextField("https://…", text: $urlDraft)
                 #if os(iOS)
@@ -102,6 +110,9 @@ struct InputBarView: View {
         .sheet(isPresented: $showEnhancer, onDismiss: { viewModel.dismissEnhancer() }) {
             PromptEnhancerSheet(viewModel: viewModel, isPresented: $showEnhancer)
                 .frame(minWidth: 640, minHeight: 420)
+        }
+        .sheet(isPresented: $showKnowledge) {
+            KnowledgeView(viewModel: viewModel)
         }
         #if os(macOS)
         .fileImporter(
@@ -281,6 +292,7 @@ struct InputBarView: View {
             iconButton("text.badge.plus", help: "从提示词库插入(可填充 {{变量}})") {
                 showPromptLibrary = true
             }
+            knowledgeButton
             if viewModel.canEnableWebSearch {
                 iconButton(scraping ? "hourglass" : "link.badge.plus", help: "抓取网页正文入上下文") {
                     urlDraft = ""
@@ -293,6 +305,7 @@ struct InputBarView: View {
                 showEnhancer = true
             }
             .disabled(viewModel.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            micButton
             #if os(macOS)
             workspaceButton
             #endif
@@ -529,6 +542,58 @@ struct InputBarView: View {
         .help(canEnable
               ? (isOn ? "下一条消息会带 web_search 工具(再按关闭)" : "本次发送启用 Firecrawl web_search")
               : "请先到 设置 → Web Search 启用并填好 API Key")
+    }
+
+    /// 知识库按钮。绑定了资料夹时高亮显示。点开管理 / 绑定 sheet。
+    @ViewBuilder
+    private var knowledgeButton: some View {
+        let bound = viewModel.currentKnowledgeFolder != nil
+        Button {
+            showKnowledge = true
+        } label: {
+            Image(systemName: bound ? "books.vertical.fill" : "books.vertical")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(bound ? Color.accentColor : .secondary)
+                .frame(width: 30, height: 30)
+                .background {
+                    Circle().fill((bound ? Color.accentColor : Color.primary).opacity(bound ? 0.12 : 0.055))
+                }
+                .overlay {
+                    Circle().strokeBorder((bound ? Color.accentColor : Color.primary).opacity(bound ? 0.26 : 0.07), lineWidth: 1)
+                }
+        }
+        .buttonStyle(.plain)
+        .help(bound ? "知识库:已绑定「\(viewModel.currentKnowledgeFolder?.name ?? "")」" : "知识库 / 资料夹")
+    }
+
+    /// 语音听写按钮。点一下开始录音(首次弹权限),边说边把文字写进输入框;再点停止。
+    @ViewBuilder
+    private var micButton: some View {
+        let recording = dictation.isRecording
+        Button {
+            if recording {
+                dictation.stop()
+            } else {
+                dictationBase = viewModel.prompt
+                dictation.toggle { text in
+                    let base = dictationBase.trimmingCharacters(in: .whitespacesAndNewlines)
+                    viewModel.prompt = base.isEmpty ? text : base + " " + text
+                }
+            }
+        } label: {
+            Image(systemName: recording ? "stop.fill" : "mic.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(recording ? Color.white : .secondary)
+                .frame(width: 30, height: 30)
+                .background {
+                    Circle().fill(recording ? Color.red : Color.primary.opacity(0.055))
+                }
+                .overlay {
+                    Circle().strokeBorder(recording ? Color.red.opacity(0.5) : Color.primary.opacity(0.07), lineWidth: 1)
+                }
+        }
+        .buttonStyle(.plain)
+        .help(recording ? "停止听写" : "语音听写(中文)")
     }
 
     private func iconButton(_ symbol: String, help: String, action: @escaping () -> Void) -> some View {
