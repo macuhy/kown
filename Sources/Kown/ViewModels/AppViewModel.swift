@@ -1282,6 +1282,30 @@ final class AppViewModel {
         }
     }
 
+    /// 换一个模型重答某轮:把新 provider 加进该轮快照 + panelOrder(空答),再复用 retryProvider 填充。
+    /// 新回答作为该轮的额外一栏出现(便于与原答对照)。
+    func regenerateWithModel(turnID: UUID, newProviderID: UUID) {
+        guard !isRunning,
+              let convID = selectedConversationID,
+              let convIdx = conversations.firstIndex(where: { $0.id == convID }),
+              let turnIdx = conversations[convIdx].turns.firstIndex(where: { $0.id == turnID }),
+              let newCfg = providers.first(where: { $0.id == newProviderID }) else { return }
+        let key = newProviderID.uuidString
+        conversations[convIdx].turns[turnIdx].providerSnapshot[key] = newCfg
+        if !conversations[convIdx].turns[turnIdx].panelOrder.contains(key) {
+            conversations[convIdx].turns[turnIdx].panelOrder.append(key)
+        }
+        conversations[convIdx].turns[turnIdx].responses[key] = ""
+        conversations[convIdx].turns[turnIdx].errors[key] = nil
+        ConversationStore.save(conversations[convIdx])
+        retryProvider(turnID: turnID, configID: newProviderID)
+    }
+
+    /// 「换模型重答」候选:已启用、非 CLI 的 provider(供回答卡菜单)。
+    var regenerateCandidates: [ProviderConfig] {
+        providers.filter { $0.enabled && !$0.kind.isCLI }
+    }
+
     /// 编辑历史某轮的用户消息并从该轮重新生成:丢弃该轮(含)之后的所有轮,
     /// 用原轮的 panel/chair/summary 与系统提示、在截断后的历史上重跑(纯文本,不带图片重发,与 retry 一致)。
     /// 截断不可逆 —— UI 侧需二次确认后再调用。

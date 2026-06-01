@@ -117,6 +117,10 @@ struct HistoricalResponseCard: View {
     var onRetry: (() -> Void)? = nil
     /// 正在重试该卡片(从外部传入,UI 显示加载态)。
     var isRetrying: Bool = false
+    /// 「换模型重答」候选 provider。空 = 不显示该入口。
+    var regenerateProviders: [ProviderConfig] = []
+    /// 选了某个 provider 换答的回调(传入新 provider id)。
+    var onRegenerate: ((UUID) -> Void)? = nil
 
     @State private var copied = false
 
@@ -265,6 +269,23 @@ struct HistoricalResponseCard: View {
                 metricPill("\(text.count) 字", icon: "text.alignleft")
             }
             Spacer()
+            if let onRegenerate, !regenerateProviders.isEmpty {
+                Menu {
+                    ForEach(regenerateProviders) { p in
+                        Button("\(p.displayName) · \(p.model)") { onRegenerate(p.id) }
+                    }
+                } label: {
+                    Label("换模型", systemImage: "arrow.triangle.2.circlepath")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.secondary.opacity(0.10), in: Capsule())
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+            }
             Button {
                 Platform.copyText(text)
                 withAnimation { copied = true }

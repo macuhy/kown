@@ -66,7 +66,9 @@ struct CouncilTurnsView: View {
                         onRetry: turn.errors[key] != nil ? {
                             viewModel.retryProvider(turnID: turn.id, configID: cfg.id)
                         } : nil,
-                        isRetrying: viewModel.isRetrying(turnID: turn.id, configID: cfg.id)
+                        isRetrying: viewModel.isRetrying(turnID: turn.id, configID: cfg.id),
+                        regenerateProviders: viewModel.regenerateCandidates,
+                        onRegenerate: { viewModel.regenerateWithModel(turnID: turn.id, newProviderID: $0) }
                     )
                     .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
