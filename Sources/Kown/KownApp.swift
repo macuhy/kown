@@ -41,6 +41,7 @@ struct KownApp: App {
     @State private var hasSeenInitialActive = false
 
     init() {
+        CrashLogger.install()
         #if os(macOS)
         captureCLIPromptIfAny()
         #endif
