@@ -142,24 +142,32 @@ struct TTSSettingsView: View {
     }
 
     private var previewSection: some View {
-        HStack(spacing: 10) {
-            Button {
-                if speech.speakingText == sampleText {
-                    speech.stop()
-                } else {
-                    speech.speak(sampleText)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Button {
+                    if speech.speakingText == sampleText {
+                        speech.stop()
+                    } else {
+                        speech.speak(sampleText)
+                    }
+                } label: {
+                    let reading = speech.speakingText == sampleText
+                    Label(reading ? (speech.preparing ? "合成中…" : "停止试听") : "试听",
+                          systemImage: reading ? "stop.fill" : "play.fill")
+                        .font(.callout.weight(.semibold))
                 }
-            } label: {
-                let reading = speech.speakingText == sampleText
-                Label(reading ? (speech.preparing ? "合成中…" : "停止试听") : "试听",
-                      systemImage: reading ? "stop.fill" : "play.fill")
-                    .font(.callout.weight(.semibold))
+                .buttonStyle(.borderedProminent)
+                Text("用当前引擎与音色读一段示例。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
             }
-            .buttonStyle(.borderedProminent)
-            Text("用当前引擎与音色读一段示例。")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Spacer()
+            if let note = speech.lastNote {
+                Label(note, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(.top, 4)
     }

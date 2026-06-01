@@ -83,6 +83,7 @@ struct TokenCostPill: View {
             .foregroundStyle(.secondary)
             .monospacedDigit()
             .lineLimit(1)
+            .fixedSize()
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .background(Color.secondary.opacity(0.08), in: Capsule())

@@ -16,6 +16,8 @@ final class SpeechService: NSObject, ObservableObject, AVSpeechSynthesizerDelega
     @Published private(set) var speakingText: String?
     /// 网络引擎正在合成(下载 mp3)中 — UI 可显示 loading。
     @Published private(set) var preparing: Bool = false
+    /// 上次朗读的诊断信息:网络引擎失败回退系统语音时记下原因(设置页展示),成功则清空。
+    @Published private(set) var lastNote: String?
 
     private override init() {
         super.init()
@@ -42,6 +44,7 @@ final class SpeechService: NSObject, ObservableObject, AVSpeechSynthesizerDelega
         // 网络引擎:先把按钮切到「停止」,后台合成 mp3 再播放;失败回退系统语音。
         speakingText = text
         preparing = true
+        lastNote = nil
         let voice = TTSConfig.voice
         let rate = TTSConfig.ratePercent
         synthTask = Task { @MainActor [weak self] in
@@ -51,11 +54,13 @@ final class SpeechService: NSObject, ObservableObject, AVSpeechSynthesizerDelega
                 if Task.isCancelled || self.speakingText != text { return }
                 self.preparing = false
                 try self.playData(data, original: text)
+                self.lastNote = nil   // 成功:神经语音生效
             } catch {
                 self.preparing = false
                 // 被用户切走 / 取消就别再回退
                 if Task.isCancelled || self.speakingText != text { return }
-                // 网络引擎失败 → 系统语音兜底
+                // 网络引擎失败 → 系统语音兜底(系统语音不认神经音色名,所以切音色听起来「没变化」)
+                self.lastNote = "「\(engine.displayName)」朗读失败,已回退系统语音(系统语音不支持切换音色):\(error.localizedDescription)"
                 self.systemSpeak(trimmed, original: text)
             }
         }

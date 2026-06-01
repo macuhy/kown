@@ -129,6 +129,15 @@ struct HistoricalResponseCard: View {
     @State private var copied = false
     @State private var expanded = false
     @ObservedObject private var speech = SpeechService.shared
+    @Environment(\.horizontalSizeClass) private var hSizeClass
+    /// iOS 紧凑宽度:footer 动作按钮只显示图标,避免窄卡片里文字被逐字竖排。
+    private var compactFooter: Bool {
+        #if os(iOS)
+        return hSizeClass == .compact
+        #else
+        return false
+        #endif
+    }
     /// 超过此长度的回答默认折叠(底部渐隐 + 展开全部),防超长回答撑爆布局。
     private static let collapseThreshold = 4000
 
@@ -297,26 +306,21 @@ struct HistoricalResponseCard: View {
     }
 
     private var footer: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             if !text.isEmpty {
                 metricPill("\(text.count) 字", icon: "text.alignleft")
             }
             if let tokenUsage, tokenUsage.input > 0 || tokenUsage.output > 0 {
                 TokenCostPill(usage: tokenUsage, model: config.model, providerKind: config.kind)
             }
-            Spacer()
+            Spacer(minLength: 6)
             if let onRegenerate, !regenerateProviders.isEmpty {
                 Menu {
                     ForEach(regenerateProviders) { p in
                         Button("\(p.displayName) · \(p.model)") { onRegenerate(p.id) }
                     }
                 } label: {
-                    Label("换模型", systemImage: "arrow.triangle.2.circlepath")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.secondary.opacity(0.10), in: Capsule())
+                    chipLabel("换模型", systemImage: "arrow.triangle.2.circlepath", tint: .secondary)
                 }
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
@@ -327,12 +331,7 @@ struct HistoricalResponseCard: View {
                     AnswerImageExporter.exportPNG(providerName: config.displayName, model: config.model,
                                                   text: text, suggestedName: "Kown-\(config.displayName)")
                 } label: {
-                    Label("图片", systemImage: "photo")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.secondary.opacity(0.10), in: Capsule())
+                    chipLabel("图片", systemImage: "photo", tint: .secondary)
                 }
                 .buttonStyle(.borderless)
             }
@@ -341,12 +340,9 @@ struct HistoricalResponseCard: View {
                 Button {
                     speech.toggle(text)
                 } label: {
-                    Label(reading ? "停止" : "朗读", systemImage: reading ? "stop.fill" : "speaker.wave.2")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(reading ? Color.accentColor : .secondary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background((reading ? Color.accentColor : Color.secondary).opacity(0.10), in: Capsule())
+                    chipLabel(reading ? "停止" : "朗读",
+                              systemImage: reading ? "stop.fill" : "speaker.wave.2",
+                              tint: reading ? Color.accentColor : .secondary)
                 }
                 .buttonStyle(.borderless)
             }
@@ -358,16 +354,33 @@ struct HistoricalResponseCard: View {
                     withAnimation { copied = false }
                 }
             } label: {
-                Label(copied ? "已复制" : "复制", systemImage: copied ? "checkmark" : "doc.on.doc")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(copied ? .green : .secondary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background((copied ? Color.green : Color.secondary).opacity(0.10), in: Capsule())
+                chipLabel(copied ? "已复制" : "复制",
+                          systemImage: copied ? "checkmark" : "doc.on.doc",
+                          tint: copied ? .green : .secondary)
             }
             .buttonStyle(.borderless)
             .disabled(text.isEmpty)
         }
+    }
+
+    /// footer 动作按钮的统一外观:单行不换行 + 固定尺寸;iOS 紧凑宽度只显示图标。
+    @ViewBuilder
+    private func chipLabel(_ title: String, systemImage: String, tint: Color) -> some View {
+        let base = Label(title, systemImage: systemImage)
+            .font(.caption2.weight(.semibold))
+            .lineLimit(1)
+            .foregroundStyle(tint)
+        Group {
+            if compactFooter {
+                base.labelStyle(.iconOnly)
+            } else {
+                base.labelStyle(.titleAndIcon)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(tint.opacity(0.10), in: Capsule())
+        .fixedSize()
     }
 
     private var accentColor: Color {
@@ -432,9 +445,11 @@ struct HistoricalResponseCard: View {
             .font(.caption2.weight(.semibold))
             .foregroundStyle(.tertiary)
             .monospacedDigit()
+            .lineLimit(1)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .background(Color.secondary.opacity(0.08), in: Capsule())
+            .fixedSize()
     }
 
     private var providerSymbol: String {
