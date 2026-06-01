@@ -16,6 +16,10 @@ final class AppViewModel {
     var prompt: String = ""
     /// ⌘K 命令面板是否打开(macOS 菜单命令与 RootView sheet 共用此开关)。
     var showCommandPalette = false
+    /// 自动容错:某 panel provider 失败时自动换另一家 enabled provider 重试一次。默认关。
+    var autoFailoverEnabled: Bool {
+        didSet { UserDefaults.standard.set(autoFailoverEnabled, forKey: Self.autoFailoverKey) }
+    }
     var systemPrompt: String {
         didSet { UserDefaults.standard.set(systemPrompt, forKey: Self.systemPromptKey) }
     }
@@ -88,6 +92,7 @@ final class AppViewModel {
     private static let webSearchToggleKey = "kown.webSearch.toggle.v1"
     private static let alwaysEnableWebSearchKey = "kown.webSearch.alwaysOn.v1"
     private static let debateRoundsKey = "kown.debate.rounds.v1"
+    private static let autoFailoverKey = "kown.autoFailover.v1"
     private var runningTask: Task<Void, Never>?
     private var summarizingTasks: [UUID: Task<Void, Never>] = [:]
     /// 正在自动起标题的会话(防重复触发)。
@@ -109,6 +114,7 @@ final class AppViewModel {
         self.webSearchEnabledForNextSend = storedAlwaysOn ? true : storedToggle
         let storedRounds = UserDefaults.standard.integer(forKey: Self.debateRoundsKey)
         self.debateRoundsForNextSend = storedRounds == 0 ? 2 : max(1, min(4, storedRounds))
+        self.autoFailoverEnabled = UserDefaults.standard.bool(forKey: Self.autoFailoverKey)
 
         // iCloud 容器探测是异步后台进行的(ICloudSync.init 里 Task.detached)。
         // 冷启动时 init() 跑 loadAll 那一刻容器可能还没就绪,iPhone 端尤甚。
@@ -1875,6 +1881,30 @@ final class AppViewModel {
         } catch {
             state.fail(error.localizedDescription)
             failure = error.localizedDescription
+        }
+
+        // 自动容错:panel provider 真失败(非取消)且开关开 → 换另一家 enabled provider 重试一次(纯文本)。
+        if target == .panel, let f = failure, f != "已取消", autoFailoverEnabled,
+           let alt = providers.first(where: { $0.enabled && !$0.kind.isCLI && $0.id != config.id && KeychainStore.hasKey(id: $0.id) }) {
+            do {
+                let altKey = try KeychainStore.load(id: alt.id)
+                let altClient = ProviderRegistry.client(for: alt.kind)
+                var opts = optionsFor(config: alt, systemPromptOverride: systemPrompt)
+                opts.contextSummary = contextSummary
+                opts.priorTurns = priorTurns
+                state.reset()
+                state.append("(原「\(config.displayName)」失败,已自动切换到「\(alt.displayName)」)\n\n")
+                for try await chunk in altClient.stream(prompt: prompt, options: opts, config: alt, apiKey: altKey) {
+                    if Task.isCancelled { break }
+                    if case .text(let t) = chunk { state.append(t) }
+                    else if case .usage(let i, let o) = chunk {
+                        UsageStore.shared.record(providerKind: alt.kind, model: alt.model, inputTokens: i, outputTokens: o)
+                    }
+                }
+                if !Task.isCancelled { state.finish(); failure = nil }
+            } catch {
+                state.fail(f)  // 容错也失败 → 恢复展示原错误
+            }
         }
 
         let entry = ResponseLogger.Entry(

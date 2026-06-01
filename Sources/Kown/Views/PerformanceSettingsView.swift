@@ -7,6 +7,8 @@ import SwiftUI
 /// 字会一段一段跳出来但 CPU 占用进一步下降。
 struct PerformanceSettingsView: View {
     @AppStorage(ResponseState.flushIntervalKey) private var intervalRaw: Int = ResponseState.defaultFlushIntervalMs
+    /// 与 AppViewModel.autoFailoverEnabled 同一 UserDefaults key,直接 AppStorage 绑定保持同步。
+    @AppStorage("kown.autoFailover.v1") private var autoFailover: Bool = false
 
     private let tint = Color(red: 0.88, green: 0.35, blue: 0.22)
     private let secondaryTint = Color(red: 0.91, green: 0.55, blue: 0.20)
@@ -28,6 +30,7 @@ struct PerformanceSettingsView: View {
             LazyVStack(alignment: .leading, spacing: 12) {
                 heroCard
                 settingCard
+                autoFailoverCard
                 guideCard
             }
             .padding(.horizontal, 14)
@@ -41,12 +44,38 @@ struct PerformanceSettingsView: View {
             VStack(alignment: .leading, spacing: 18) {
                 heroCard
                 settingCard
+                autoFailoverCard
                 guideCard
             }
             .padding(24)
             .frame(maxWidth: 860, alignment: .topLeading)
         }
         #endif
+    }
+
+    // MARK: - 自动容错
+
+    private var autoFailoverCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Toggle(isOn: $autoFailover) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("自动容错切换")
+                        .font(.body.weight(.semibold))
+                    Text("某个模型回答失败时,自动换另一家已启用的模型重试一次(纯文本)。回答会标注已切换到哪家。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .tint(tint)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(tint.opacity(0.16), lineWidth: 1)
+        }
     }
 
     // MARK: - Hero
