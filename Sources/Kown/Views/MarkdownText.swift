@@ -17,6 +17,9 @@ struct MarkdownText: View {
 
     /// 流式期间渲染 markdown 的字符上限 —— 超过就退回 raw,避免重 parse 卡顿(完成后照常完整渲染)。
     private static let maxLiveMarkdownChars = 6000
+    /// 防失控:超长回答即使已完成也只渲 raw,绝不进 MarkdownUI/AttributedString 的 anchor/布局重路径
+    /// (历史上超大回答把这条路径喂进无限布局循环 + 14GB)。raw Text 没有 anchor,稳。
+    private static let maxFinishedMarkdownChars = 40000
     /// 流式快照:每 ~150ms 取一次 text,把"每个 chunk 重 parse 整段"(O(N²))降到按时间节流。
     @State private var snapshot: String = ""
     private let tick = Timer.publish(every: 0.15, on: .main, in: .common).autoconnect()
@@ -38,6 +41,8 @@ struct MarkdownText: View {
                 // 流式期间也渲 markdown(节流快照 + 补全未闭合代码围栏),但不开 textSelection(更轻)。
                 rendered(for: Self.balancedFences(src), selectable: false)
             }
+        } else if text.count > Self.maxFinishedMarkdownChars {
+            rawText(text)  // 防失控:超长走 raw,避开 anchor/布局重路径
         } else {
             rendered(for: text, selectable: true)
         }

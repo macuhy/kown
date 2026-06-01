@@ -123,6 +123,9 @@ struct HistoricalResponseCard: View {
     var onRegenerate: ((UUID) -> Void)? = nil
 
     @State private var copied = false
+    @State private var expanded = false
+    /// 超过此长度的回答默认折叠(底部渐隐 + 展开全部),防超长回答撑爆布局。
+    private static let collapseThreshold = 4000
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -258,8 +261,28 @@ struct HistoricalResponseCard: View {
                 .padding(.vertical, 12)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else {
-            MarkdownText(text: text)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            let isLong = text.count > Self.collapseThreshold
+            VStack(alignment: .leading, spacing: 8) {
+                MarkdownText(text: text)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxHeight: (isLong && !expanded) ? 360 : nil, alignment: .top)
+                    .clipped()
+                    .overlay(alignment: .bottom) {
+                        if isLong && !expanded {
+                            LinearGradient(colors: [.clear, Color.platformControlBackground],
+                                           startPoint: .top, endPoint: .bottom)
+                                .frame(height: 48)
+                                .allowsHitTesting(false)
+                        }
+                    }
+                if isLong {
+                    Button(expanded ? "收起" : "展开全部(\(text.count) 字)") {
+                        withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
+                    }
+                    .font(.caption.weight(.semibold))
+                    .buttonStyle(.borderless)
+                }
+            }
         }
     }
 
