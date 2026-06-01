@@ -636,7 +636,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.6.0;
+				MARKETING_VERSION = 0.6.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown;
 				SDKROOT = iphoneos;
 				SWIFT_UPCOMING_FEATURE_STRICT_CONCURRENCY = YES;
@@ -662,7 +662,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.6.0;
+				MARKETING_VERSION = 0.6.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown;
 				SDKROOT = iphoneos;
 				SWIFT_UPCOMING_FEATURE_STRICT_CONCURRENCY = YES;
