@@ -560,6 +560,35 @@ final class AppViewModel {
         attachments.append(.pdf(p))
     }
 
+    /// 抓取一个网页正文(Firecrawl /scrape)作为文件附件并入上下文。返回 nil 成功,否则错误文案。
+    /// 需已配置 Web Search(Firecrawl key + baseURL)。
+    func attachScrapedURL(_ urlString: String) async -> String? {
+        let trimmed = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "请输入链接" }
+        let normalized = trimmed.hasPrefix("http") ? trimmed : "https://" + trimmed
+        guard canEnableWebSearch, let key = try? WebSearchKey.load(), !key.isEmpty else {
+            return "需先在 设置 ▸ Web Search 配置 Firecrawl Key"
+        }
+        let client = FirecrawlClient(baseURL: webSearchConfig.baseURL, apiKey: key)
+        do {
+            let result = try await client.scrape(url: normalized)
+            var content = result.markdown
+            let maxChars = 120 * 1024
+            if content.count > maxChars { content = String(content.prefix(maxChars)) + "\n\n…(网页正文过长已截断)" }
+            let payload = Attachment.FilePayload(
+                id: UUID(),
+                name: result.title.isEmpty ? normalized : result.title,
+                content: "<source url=\"\(normalized)\">\n\(content)\n</source>",
+                byteCount: content.utf8.count,
+                url: URL(string: normalized) ?? URL(fileURLWithPath: "/dev/null")
+            )
+            attachments.append(.file(payload))
+            return nil
+        } catch {
+            return "抓取失败:\(error.localizedDescription)"
+        }
+    }
+
     func attachImage(at url: URL) throws {
         let i = try AttachmentLoader.loadImage(at: url)
         attachments.append(.image(i))

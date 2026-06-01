@@ -18,6 +18,9 @@ struct InputBarView: View {
     @State private var pickerError: String?
     @State private var showEnhancer = false
     @State private var showPromptLibrary = false
+    @State private var showURLScrape = false
+    @State private var urlDraft = ""
+    @State private var scraping = false
     #if os(macOS)
     @State private var showFileImporter = false
     @State private var showImageImporter = false
@@ -67,6 +70,24 @@ struct InputBarView: View {
         }
         .overlay(alignment: .top) {
             Rectangle().fill(Color.primary.opacity(0.08)).frame(height: 1)
+        }
+        .alert("抓取网页", isPresented: $showURLScrape) {
+            TextField("https://…", text: $urlDraft)
+                #if os(iOS)
+                .textInputAutocapitalization(.never)
+                .keyboardType(.URL)
+                #endif
+            Button("抓取") {
+                let u = urlDraft
+                scraping = true
+                Task {
+                    let err = await viewModel.attachScrapedURL(u)
+                    await MainActor.run { scraping = false; pickerError = err }
+                }
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("用 Firecrawl 抓取该网页正文,作为附件并入上下文")
         }
         .sheet(isPresented: $showPromptLibrary) {
             PromptInsertSheet { rendered in
@@ -257,6 +278,13 @@ struct InputBarView: View {
             }
             iconButton("text.badge.plus", help: "从提示词库插入(可填充 {{变量}})") {
                 showPromptLibrary = true
+            }
+            if viewModel.canEnableWebSearch {
+                iconButton(scraping ? "hourglass" : "link.badge.plus", help: "抓取网页正文入上下文") {
+                    urlDraft = ""
+                    showURLScrape = true
+                }
+                .disabled(scraping)
             }
             iconButton("wand.and.stars", help: viewModel.prompt.isEmpty ? "先输入问题再增强" : "用 AI 改写问题") {
                 viewModel.enhancePrompt()
