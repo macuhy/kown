@@ -15,40 +15,52 @@ struct MarkdownText: View {
     let text: String
     var streaming: Bool = false
 
-    /// 流式期间渲染 markdown 的字符上限 —— 超过就退回 raw,避免重 parse 卡顿(完成后照常完整渲染)。
-    private static let maxLiveMarkdownChars = 6000
-    /// 防失控:超长回答即使已完成也只渲 raw,绝不进 MarkdownUI/AttributedString 的 anchor/布局重路径
-    /// (历史上超大回答把这条路径喂进无限布局循环 + 14GB)。raw Text 没有 anchor,稳。
-    private static let maxFinishedMarkdownChars = 40000
-    /// 流式快照:每 ~150ms 取一次 text,把"每个 chunk 重 parse 整段"(O(N²))降到按时间节流。
+    var body: some View {
+        if streaming {
+            // 只有正在生成的卡片才进流式分支(它独占一个节流定时器)。
+            StreamingMarkdownText(text: text)
+        } else if text.count > MD.maxFinishedChars {
+            MD.rawText(text)  // 防失控:超长走 raw,避开 anchor/布局重路径
+        } else {
+            MD.rendered(for: MD.stylizeMath(text), selectable: true)
+        }
+    }
+}
+
+/// 流式专用子视图:**只有正在生成的卡片才创建定时器**。
+/// 关键性能修复 —— 之前把 Timer.publish 挂在每个 MarkdownText 上,历史会话一屏几十上百个回答卡
+/// 就有几十上百个定时器每 150ms 全部触发,渲染和切换都卡。静态历史卡现在零定时器。
+private struct StreamingMarkdownText: View {
+    let text: String
+    /// 节流快照:每 ~150ms 取一次 text,把"每 chunk 重 parse 整段"(O(N²))降为按时间节流。
     @State private var snapshot: String = ""
     private let tick = Timer.publish(every: 0.15, on: .main, in: .common).autoconnect()
 
     var body: some View {
-        content
-            .onAppear { snapshot = text }
-            .onReceive(tick) { _ in if streaming, snapshot != text { snapshot = text } }
-            .onChange(of: streaming) { _, s in if !s { snapshot = text } }
+        let src = snapshot.isEmpty ? text : snapshot
+        Group {
+            if src.count > MD.maxLiveChars {
+                MD.rawText(src)
+            } else {
+                // 节流快照 + 数学样式 + 补全未闭合代码围栏;不开 textSelection 更轻。
+                MD.rendered(for: MD.balancedFences(MD.stylizeMath(src)), selectable: false)
+            }
+        }
+        .onAppear { snapshot = text }
+        .onReceive(tick) { _ in if snapshot != text { snapshot = text } }
     }
+}
+
+/// MarkdownText 的纯函数 + 渲染帮手(无状态,可被流式 / 静态两路共享)。正则编译一次缓存。
+@MainActor
+enum MD {
+    /// 流式期间渲染 markdown 的字符上限 —— 超过退回 raw,避免重 parse 卡顿。
+    static let maxLiveChars = 6000
+    /// 防失控:超长回答即使已完成也只渲 raw,绝不进 anchor/布局重路径(历史上撑出无限布局循环 + 14GB)。
+    static let maxFinishedChars = 40000
 
     @ViewBuilder
-    private var content: some View {
-        if streaming {
-            let src = snapshot.isEmpty ? text : snapshot
-            if src.count > Self.maxLiveMarkdownChars {
-                rawText(src)
-            } else {
-                // 流式期间也渲 markdown(节流快照 + 数学样式 + 补全未闭合代码围栏),不开 textSelection(更轻)。
-                rendered(for: Self.balancedFences(Self.stylizeMath(src)), selectable: false)
-            }
-        } else if text.count > Self.maxFinishedMarkdownChars {
-            rawText(text)  // 防失控:超长走 raw,避开 anchor/布局重路径
-        } else {
-            rendered(for: Self.stylizeMath(text), selectable: true)
-        }
-    }
-
-    private func rawText(_ s: String) -> some View {
+    static func rawText(_ s: String) -> some View {
         Text(s)
             .font(.body)
             .lineSpacing(5)
@@ -56,12 +68,11 @@ struct MarkdownText: View {
     }
 
     @ViewBuilder
-    private func rendered(for src: String, selectable: Bool) -> some View {
-        if Self.hasBlockLevelExtras(src) {
-            // 含代码块 / 表格 / 任务列表:MarkdownUI 视觉更重要
+    static func rendered(for src: String, selectable: Bool) -> some View {
+        if hasBlockLevelExtras(src) {
             Markdown(src)
                 .textSelectable(selectable)
-                .markdownTheme(Self.kownTheme)
+                .markdownTheme(kownTheme)
         } else if let attr = try? AttributedString(markdown: src, options: .init(
             allowsExtendedAttributes: true,
             interpretedSyntax: .inlineOnlyPreservingWhitespace,
@@ -75,29 +86,31 @@ struct MarkdownText: View {
         } else {
             Markdown(src)
                 .textSelectable(selectable)
-                .markdownTheme(Self.kownTheme)
+                .markdownTheme(kownTheme)
         }
     }
 
     /// 流式中途若有未闭合的 ``` 代码围栏,临时补一个收尾,避免半个围栏把后文都吞成代码。
-    private static func balancedFences(_ s: String) -> String {
+    static func balancedFences(_ s: String) -> String {
         let fences = s.components(separatedBy: "```").count - 1
         return fences % 2 == 1 ? s + "\n```" : s
     }
 
-    /// 数学公式(`$...$` / `$$...$$`)以等宽样式清晰呈现、可复制。
-    /// 块公式 → 代码块,行内公式 → 行内 code。行内仅当内含 LaTeX 字符(`\ ^ _ { }`)才转,避免把
-    /// 「$5」这类货币误判成公式。(完整 KaTeX 排版需离线打包字体,本版先保证清晰可读。)
-    private static func stylizeMath(_ s: String) -> String {
+    // 正则编译一次缓存(之前每次渲染都 new 一个 NSRegularExpression,切换会话时成百上千个卡一起编译很卡)。
+    private static let mathBlockRe = try? NSRegularExpression(pattern: #"\$\$([\s\S]+?)\$\$"#)
+    private static let mathInlineRe = try? NSRegularExpression(pattern: #"\$([^\$\n]*[\\^_{}][^\$\n]*)\$"#)
+
+    /// 数学公式(`$...$` / `$$...$$`)→ 等宽样式(块=代码块,行内=行内 code),可复制。
+    /// 行内仅当内含 LaTeX 字符(`\ ^ _ { }`)才转,避免把「$5」这类货币误判成公式。
+    static func stylizeMath(_ s: String) -> String {
         guard s.contains("$") else { return s }
-        var out = replaceCapture(s, pattern: #"\$\$([\s\S]+?)\$\$"#) { "\n```\n\($0)\n```\n" }
-        out = replaceCapture(out, pattern: #"\$([^\$\n]*[\\^_{}][^\$\n]*)\$"#) { "`\($0)`" }
+        var out = replaceCapture(s, mathBlockRe) { "\n```\n\($0)\n```\n" }
+        out = replaceCapture(out, mathInlineRe) { "`\($0)`" }
         return out
     }
 
-    /// 用 transform(第一个捕获组) 替换每处匹配。
-    private static func replaceCapture(_ s: String, pattern: String, _ transform: (String) -> String) -> String {
-        guard let re = try? NSRegularExpression(pattern: pattern) else { return s }
+    private static func replaceCapture(_ s: String, _ re: NSRegularExpression?, _ transform: (String) -> String) -> String {
+        guard let re else { return s }
         let ns = s as NSString
         var result = ""
         var last = 0
@@ -111,42 +124,34 @@ struct MarkdownText: View {
         return result
     }
 
-    /// 含代码块 / 表格 / 表头分隔 / 任务列表 — 这些 block 用 AttributedString 渲染体验差,继续走 MarkdownUI
-    private static func hasBlockLevelExtras(_ text: String) -> Bool {
+    /// 含代码块 / 表格 / 任务列表 — 这些 block 用 AttributedString 渲染体验差,继续走 MarkdownUI。
+    static func hasBlockLevelExtras(_ text: String) -> Bool {
         text.contains("```")
         || text.contains("~~~")
         || text.range(of: #"^\|.+\|"#, options: [.regularExpression, .anchored]) != nil
         || text.range(of: #"\n\|.+\|"#, options: .regularExpression) != nil
-        // 任务列表:行首(允许缩进)`- [ ]` / `* [x]`。AttributedString 的 inlineOnly 会原样显示
-        // 成 `- [ ]`,只有 MarkdownUI 会渲染成 checkbox。
         || text.range(of: #"(?m)^[ \t]*[-*] \[[ xX]\] "#, options: .regularExpression) != nil
     }
 
     /// `Theme` 不是 Sendable;计算属性每次实例化,SwiftUI 缓存渲染结果。
-    private static var kownTheme: Theme {
+    static var kownTheme: Theme {
         Theme.gitHub
             .text { FontSize(.em(1.0)) }
-            // 行内代码:等宽 + 略小字号 + 淡底色,和正文区分开
             .code {
                 FontFamilyVariant(.monospaced)
                 FontSize(.em(0.92))
-                BackgroundColor(Self.inlineCodeBackground)
+                BackgroundColor(inlineCodeBackground)
             }
-            // 链接:强调色 + 下划线;MarkdownUI 默认即可点击打开
             .link {
                 ForegroundColor(.accentColor)
                 UnderlineStyle(.single)
             }
-            // 代码块:等宽字体 + 横向滚动不换行 + 右上角复制按钮
             .codeBlock { configuration in
                 CodeBlockView(configuration: configuration)
             }
     }
 
-    /// 行内代码底色(深浅色自适应)。
-    fileprivate static var inlineCodeBackground: Color {
-        Color.primary.opacity(0.08)
-    }
+    static var inlineCodeBackground: Color { Color.primary.opacity(0.08) }
 }
 
 /// 代码块渲染:等宽字体 + 横向滚动(长行不换行)+ 右上角「复制」按钮。
