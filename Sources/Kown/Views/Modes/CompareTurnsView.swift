@@ -17,6 +17,7 @@ struct CompareTurnsView: View {
     var onFollowUpTurn: ((UUID) -> Void)? = nil
     var onExportTurn: ((UUID) -> Void)? = nil
 
+    @State private var collapsedTurns: Set<UUID> = []
     @Environment(\.horizontalSizeClass) private var hSizeClass
 
     private var pages: Bool {
@@ -41,11 +42,14 @@ struct CompareTurnsView: View {
     }
 
     private func historicalTurn(_ turn: Turn) -> some View {
-        ModeTurnCard(
+        let isCollapsed = collapsedTurns.contains(turn.id)
+        return ModeTurnCard(
             title: "Compare",
-            subtitle: "双模型并排对照，Judge 给出结论",
+            subtitle: isCollapsed ? TurnFold.preview(turn) : "双模型并排对照，Judge 给出结论",
             icon: "rectangle.split.2x1.fill",
-            tint: compareTint
+            tint: compareTint,
+            collapsed: isCollapsed,
+            onToggleCollapse: { TurnFold.toggle(turn.id, in: &collapsedTurns) }
         ) {
             PromptBubble(prompt: turn.prompt, timestamp: turn.timestamp, images: turn.images ?? [],
                          onFork: { viewModel.forkConversation(fromTurnID: turn.id) },
@@ -66,7 +70,8 @@ struct CompareTurnsView: View {
                         regenerateProviders: viewModel.regenerateCandidates,
                         onRegenerate: { viewModel.regenerateWithModel(turnID: turn.id, newProviderID: $0) },
                         reasoning: turn.reasoningByProvider?[key],
-                        tokenUsage: turn.tokenUsage?[key]
+                        tokenUsage: turn.tokenUsage?[key],
+                        sources: turn.sourcesByProvider?[key] ?? []
                     )
                     .frame(maxWidth: .infinity)
                 }
@@ -84,7 +89,8 @@ struct CompareTurnsView: View {
                     } : nil,
                     isRetrying: viewModel.isRetryingChair(turnID: turn.id, target: .chair),
                     reasoning: turn.reasoningByProvider?[judge.id.uuidString],
-                    tokenUsage: turn.tokenUsage?[judge.id.uuidString]
+                    tokenUsage: turn.tokenUsage?[judge.id.uuidString],
+                    sources: turn.sources ?? []
                 )
             }
             if let writes = turn.appliedWrites, !writes.isEmpty {

@@ -1,5 +1,67 @@
 import SwiftUI
 
+/// 回答操作栏:Sources 小药丸 + 朗读 / 图片(复制) / 复制。独立 View 自带 @State,
+/// 供没有自带 footer 的卡片(如 Direct 气泡)复用。
+struct AnswerFooterBar: View {
+    let text: String
+    let providerName: String
+    let model: String
+    var sources: [SourceRef] = []
+    var tint: Color = .secondary
+
+    @State private var copied = false
+    @State private var imageCopied = false
+    @ObservedObject private var speech = SpeechService.shared
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if !sources.isEmpty { SourcesChip(sources: sources) }
+            Spacer(minLength: 6)
+            let reading = speech.speakingText == text
+            Button { speech.toggle(text) } label: {
+                chip(reading ? "停止" : "朗读", systemImage: reading ? "stop.fill" : "speaker.wave.2",
+                     color: reading ? tint : .secondary)
+            }.buttonStyle(.borderless)
+            Button {
+                if AnswerImageExporter.copyToClipboard(providerName: providerName, model: model, text: text) {
+                    withAnimation { imageCopied = true }
+                    Task { @MainActor in try? await Task.sleep(for: .seconds(1.4)); withAnimation { imageCopied = false } }
+                }
+            } label: {
+                chip(imageCopied ? "已复制" : "图片", systemImage: imageCopied ? "checkmark" : "photo",
+                     color: imageCopied ? .green : .secondary)
+            }.buttonStyle(.borderless)
+            Button {
+                Platform.copyText(text)
+                withAnimation { copied = true }
+                Task { @MainActor in try? await Task.sleep(for: .seconds(1.4)); withAnimation { copied = false } }
+            } label: {
+                chip(copied ? "已复制" : "复制", systemImage: copied ? "checkmark" : "doc.on.doc",
+                     color: copied ? .green : .secondary)
+            }.buttonStyle(.borderless)
+        }
+    }
+
+    private func chip(_ title: String, systemImage: String, color: Color) -> some View {
+        Label(title, systemImage: systemImage)
+            .font(.caption2.weight(.semibold)).lineLimit(1).foregroundStyle(color)
+            .padding(.horizontal, 8).padding(.vertical, 4)
+            .background(color.opacity(0.10), in: Capsule()).fixedSize()
+    }
+}
+
+/// 整轮折叠的共享小工具(各模式视图共用 collapsedTurns: Set<UUID>)。
+enum TurnFold {
+    static func preview(_ turn: Turn) -> String {
+        let p = turn.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !p.isEmpty else { return "(已折叠)" }
+        return "“" + String(p.prefix(40)) + (p.count > 40 ? "…" : "") + "”"
+    }
+    static func toggle(_ id: UUID, in set: inout Set<UUID>) {
+        if set.contains(id) { set.remove(id) } else { set.insert(id) }
+    }
+}
+
 /// 用户提问气泡（每个 turn 顶部）
 struct PromptBubble: View {
     let prompt: String
@@ -125,9 +187,13 @@ struct HistoricalResponseCard: View {
     var reasoning: String? = nil
     /// 本轮该 provider 的 token 用量(可选,用于成本角标)。
     var tokenUsage: TurnTokenUsage? = nil
+    /// 本轮引用来源(footer 显示 Sources 小药丸)。
+    var sources: [SourceRef] = []
 
     @State private var copied = false
+    @State private var imageCopied = false
     @State private var expanded = false
+    @State private var bodyCollapsed = false
     @ObservedObject private var speech = SpeechService.shared
     @Environment(\.horizontalSizeClass) private var hSizeClass
     /// iOS 紧凑宽度:footer 动作按钮只显示图标,避免窄卡片里文字被逐字竖排。
@@ -150,19 +216,21 @@ struct HistoricalResponseCard: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 13)
                 .padding(.bottom, 11)
-            softDivider
-            VStack(alignment: .leading, spacing: 10) {
-                if let reasoning, !reasoning.isEmpty {
-                    ReasoningDisclosure(reasoning: reasoning, streaming: false, tint: accentColor)
+            if !bodyCollapsed {
+                softDivider
+                VStack(alignment: .leading, spacing: 10) {
+                    if let reasoning, !reasoning.isEmpty {
+                        ReasoningDisclosure(reasoning: reasoning, streaming: false, tint: accentColor)
+                    }
+                    body_
                 }
-                body_
+                .padding(16)
+                .background(bodyBackground)
+                softDivider
+                footer
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
             }
-            .padding(16)
-            .background(bodyBackground)
-            softDivider
-            footer
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
         }
         .background(
             ZStack {
@@ -225,6 +293,17 @@ struct HistoricalResponseCard: View {
             } else {
                 statusBadge("已完成", icon: "checkmark.seal.fill", color: .green)
             }
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) { bodyCollapsed.toggle() }
+            } label: {
+                Image(systemName: bodyCollapsed ? "chevron.down" : "chevron.up")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 22, height: 22)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(bodyCollapsed ? "展开这条回答" : "折叠这条回答")
         }
     }
 
@@ -314,6 +393,9 @@ struct HistoricalResponseCard: View {
                 TokenCostPill(usage: tokenUsage, model: config.model, providerKind: config.kind)
             }
             Spacer(minLength: 6)
+            if !sources.isEmpty {
+                SourcesChip(sources: sources)
+            }
             if let onRegenerate, !regenerateProviders.isEmpty {
                 Menu {
                     ForEach(regenerateProviders) { p in
@@ -328,10 +410,13 @@ struct HistoricalResponseCard: View {
             }
             if !text.isEmpty {
                 Button {
-                    AnswerImageExporter.exportPNG(providerName: config.displayName, model: config.model,
-                                                  text: text, suggestedName: "Kown-\(config.displayName)")
+                    if AnswerImageExporter.copyToClipboard(providerName: config.displayName, model: config.model, text: text) {
+                        withAnimation { imageCopied = true }
+                        Task { @MainActor in try? await Task.sleep(for: .seconds(1.4)); withAnimation { imageCopied = false } }
+                    }
                 } label: {
-                    chipLabel("图片", systemImage: "photo", tint: .secondary)
+                    chipLabel(imageCopied ? "已复制" : "图片", systemImage: imageCopied ? "checkmark" : "photo",
+                              tint: imageCopied ? .green : .secondary)
                 }
                 .buttonStyle(.borderless)
             }
@@ -771,6 +856,15 @@ struct ChairSummaryCard: View {
     var reasoning: String? = nil
     /// token 用量(可选,用于成本角标)。
     var tokenUsage: TurnTokenUsage? = nil
+    /// 本轮引用来源(footer Sources 小药丸)。
+    var sources: [SourceRef] = []
+
+    @State private var copied = false
+    @State private var imageCopied = false
+    @ObservedObject private var speech = SpeechService.shared
+
+    /// 最终可朗读 / 复制的文本(历史 text 或流式 liveText)。
+    private var shownText: String { (text ?? liveText) ?? "" }
 
     enum Role {
         case chair, judge, summary, moderator
@@ -883,6 +977,10 @@ struct ChairSummaryCard: View {
 
             content
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+            if !isStreaming, error == nil, !shownText.isEmpty {
+                chairFooter
+            }
         }
         .padding(16)
         .background(
@@ -904,6 +1002,49 @@ struct ChairSummaryCard: View {
                 .strokeBorder(role.tint.opacity(0.30), lineWidth: 1)
         }
         .shadow(color: role.tint.opacity(0.08), radius: 20, x: 0, y: 10)
+    }
+
+    /// 综合 / 总结 卡的操作栏:朗读 / 图片(复制) / 复制 + Sources。
+    private var chairFooter: some View {
+        HStack(spacing: 8) {
+            if !sources.isEmpty { SourcesChip(sources: sources) }
+            Spacer(minLength: 6)
+            let reading = speech.speakingText == shownText
+            Button { speech.toggle(shownText) } label: {
+                footerChip(reading ? "停止" : "朗读", systemImage: reading ? "stop.fill" : "speaker.wave.2",
+                           tint: reading ? role.tint : .secondary)
+            }
+            .buttonStyle(.borderless)
+            Button {
+                if AnswerImageExporter.copyToClipboard(providerName: "\(role.prefix) · \(config.displayName)", model: config.model, text: shownText) {
+                    withAnimation { imageCopied = true }
+                    Task { @MainActor in try? await Task.sleep(for: .seconds(1.4)); withAnimation { imageCopied = false } }
+                }
+            } label: {
+                footerChip(imageCopied ? "已复制" : "图片", systemImage: imageCopied ? "checkmark" : "photo",
+                           tint: imageCopied ? .green : .secondary)
+            }
+            .buttonStyle(.borderless)
+            Button {
+                Platform.copyText(shownText)
+                withAnimation { copied = true }
+                Task { @MainActor in try? await Task.sleep(for: .seconds(1.4)); withAnimation { copied = false } }
+            } label: {
+                footerChip(copied ? "已复制" : "复制", systemImage: copied ? "checkmark" : "doc.on.doc",
+                           tint: copied ? .green : .secondary)
+            }
+            .buttonStyle(.borderless)
+        }
+    }
+
+    private func footerChip(_ title: String, systemImage: String, tint: Color) -> some View {
+        Label(title, systemImage: systemImage)
+            .font(.caption2.weight(.semibold))
+            .lineLimit(1)
+            .foregroundStyle(tint)
+            .padding(.horizontal, 8).padding(.vertical, 4)
+            .background(tint.opacity(0.10), in: Capsule())
+            .fixedSize()
     }
 
     @ViewBuilder
@@ -965,6 +1106,9 @@ struct ModeTurnCard<Content: View>: View {
     let icon: String
     let tint: Color
     let isLive: Bool
+    /// 整轮折叠:nil = 不可折叠;非 nil 时头部显示折叠箭头,collapsed 时只留头部。
+    var collapsed: Bool = false
+    var onToggleCollapse: (() -> Void)? = nil
     private let content: Content
 
     init(
@@ -973,6 +1117,8 @@ struct ModeTurnCard<Content: View>: View {
         icon: String,
         tint: Color,
         isLive: Bool = false,
+        collapsed: Bool = false,
+        onToggleCollapse: (() -> Void)? = nil,
         @ViewBuilder content: () -> Content
     ) {
         self.title = title
@@ -980,12 +1126,24 @@ struct ModeTurnCard<Content: View>: View {
         self.icon = icon
         self.tint = tint
         self.isLive = isLive
+        self.collapsed = collapsed
+        self.onToggleCollapse = onToggleCollapse
         self.content = content()
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 11) {
+                if let onToggleCollapse {
+                    Button { onToggleCollapse() } label: {
+                        Image(systemName: collapsed ? "chevron.right" : "chevron.down")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(tint)
+                            .frame(width: 22, height: 22)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
                 ZStack {
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .fill(
@@ -1030,7 +1188,9 @@ struct ModeTurnCard<Content: View>: View {
                 }
             }
 
-            content
+            if !collapsed {
+                content
+            }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .topLeading)

@@ -15,6 +15,7 @@ struct DirectTurnsView: View {
     /// 撤销某轮的 workspace 写入(turnID, write)。
     var onUndoWrite: ((UUID, AppliedWrite) -> Void)? = nil
 
+    @State private var collapsedTurns: Set<UUID> = []
     @Environment(\.horizontalSizeClass) private var hSizeClass
 
     var body: some View {
@@ -32,7 +33,13 @@ struct DirectTurnsView: View {
     }
 
     private func historicalTurn(_ turn: Turn) -> some View {
-        directTurnShell(isLive: false) {
+        let isCollapsed = collapsedTurns.contains(turn.id)
+        return directTurnShell(
+            isLive: false,
+            collapsed: isCollapsed,
+            collapsedPreview: TurnFold.preview(turn),
+            onToggleCollapse: { TurnFold.toggle(turn.id, in: &collapsedTurns) }
+        ) {
             userBubble(prompt: turn.prompt, timestamp: turn.timestamp, images: turn.images ?? [],
                        onFork: onForkTurn.map { f in { f(turn.id) } },
                        onEdit: onEditTurn.map { f in { f(turn.id) } },
@@ -46,7 +53,9 @@ struct DirectTurnsView: View {
                     error: turn.errors[key],
                     streaming: false,
                     reasoning: turn.reasoningByProvider?[key],
-                    tokenUsage: turn.tokenUsage?[key]
+                    tokenUsage: turn.tokenUsage?[key],
+                    showActions: true,
+                    sources: turn.sourcesByProvider?[key] ?? (turn.sources ?? [])
                 )
             }
             if let writes = turn.appliedWrites, !writes.isEmpty {
@@ -75,10 +84,22 @@ struct DirectTurnsView: View {
 
     private func directTurnShell<Content: View>(
         isLive: Bool,
+        collapsed: Bool = false,
+        collapsedPreview: String = "",
+        onToggleCollapse: (() -> Void)? = nil,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
+                if let onToggleCollapse {
+                    Button { onToggleCollapse() } label: {
+                        Image(systemName: collapsed ? "chevron.right" : "chevron.down")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(directTint)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
                 Image(systemName: "bubble.left.and.text.bubble.right.fill")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(directTint)
@@ -93,9 +114,17 @@ struct DirectTurnsView: View {
                         .padding(.vertical, 3)
                         .background(directTint.opacity(0.11), in: Capsule())
                 }
+                if collapsed, !collapsedPreview.isEmpty {
+                    Text(collapsedPreview)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
                 Spacer()
             }
-            content()
+            if !collapsed {
+                content()
+            }
         }
         .padding(.horizontal, turnShellHorizontalPadding)
         .padding(.vertical, turnShellVerticalPadding)
@@ -181,7 +210,8 @@ struct DirectTurnsView: View {
     }
 
     private func assistantBubble(config: ProviderConfig, text: String, error: String?, streaming: Bool,
-                                 reasoning: String? = nil, tokenUsage: TurnTokenUsage? = nil) -> some View {
+                                 reasoning: String? = nil, tokenUsage: TurnTokenUsage? = nil,
+                                 showActions: Bool = false, sources: [SourceRef] = []) -> some View {
         HStack(alignment: .top, spacing: assistantSpacing) {
             ZStack {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -246,6 +276,11 @@ struct DirectTurnsView: View {
                 } else {
                     MarkdownText(text: text, streaming: streaming)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                if showActions, error == nil, !text.isEmpty {
+                    AnswerFooterBar(text: text, providerName: config.displayName, model: config.model,
+                                    sources: sources, tint: accentColor(config))
+                        .padding(.top, 2)
                 }
             }
             .padding(.horizontal, messageHorizontalPadding)

@@ -20,6 +20,8 @@ struct CouncilTurnsView: View {
     var onFollowUpTurn: ((UUID) -> Void)? = nil
     var onExportTurn: ((UUID) -> Void)? = nil
 
+    /// 已折叠的历史轮(整轮收起)。
+    @State private var collapsedTurns: Set<UUID> = []
     /// iPhone compact 宽度下 panel 改成垂直堆叠;iPad / Mac 仍并排
     @Environment(\.horizontalSizeClass) private var hSizeClass
 
@@ -45,11 +47,14 @@ struct CouncilTurnsView: View {
     }
 
     private func historicalTurn(_ turn: Turn) -> some View {
-        ModeTurnCard(
+        let isCollapsed = collapsedTurns.contains(turn.id)
+        return ModeTurnCard(
             title: "Council",
-            subtitle: "\(turn.orderedPanelConfigs.count) 位模型成员协作回答",
+            subtitle: isCollapsed ? TurnFold.preview(turn) : "\(turn.orderedPanelConfigs.count) 位模型成员协作回答",
             icon: "person.3.sequence.fill",
-            tint: councilTint
+            tint: councilTint,
+            collapsed: isCollapsed,
+            onToggleCollapse: { TurnFold.toggle(turn.id, in: &collapsedTurns) }
         ) {
             PromptBubble(prompt: turn.prompt, timestamp: turn.timestamp, images: turn.images ?? [],
                          onFork: { viewModel.forkConversation(fromTurnID: turn.id) },
@@ -70,7 +75,8 @@ struct CouncilTurnsView: View {
                         regenerateProviders: viewModel.regenerateCandidates,
                         onRegenerate: { viewModel.regenerateWithModel(turnID: turn.id, newProviderID: $0) },
                         reasoning: turn.reasoningByProvider?[key],
-                        tokenUsage: turn.tokenUsage?[key]
+                        tokenUsage: turn.tokenUsage?[key],
+                        sources: turn.sourcesByProvider?[key] ?? []
                     )
                     .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
@@ -87,7 +93,8 @@ struct CouncilTurnsView: View {
                     } : nil,
                     isRetrying: viewModel.isRetryingChair(turnID: turn.id, target: .chair),
                     reasoning: turn.reasoningByProvider?[chair.id.uuidString],
-                    tokenUsage: turn.tokenUsage?[chair.id.uuidString]
+                    tokenUsage: turn.tokenUsage?[chair.id.uuidString],
+                    sources: turn.sources ?? []
                 )
             }
             if let summary = turn.summaryConfig {
@@ -103,7 +110,8 @@ struct CouncilTurnsView: View {
                     } : nil,
                     isRetrying: viewModel.isRetryingChair(turnID: turn.id, target: .summary),
                     reasoning: turn.reasoningByProvider?[summary.id.uuidString],
-                    tokenUsage: turn.tokenUsage?[summary.id.uuidString]
+                    tokenUsage: turn.tokenUsage?[summary.id.uuidString],
+                    sources: turn.sources ?? []
                 )
             }
             if let votes = turn.councilVotes, !votes.scores.isEmpty {

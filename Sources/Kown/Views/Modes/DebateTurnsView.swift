@@ -18,6 +18,7 @@ struct DebateTurnsView: View {
     var onFollowUpTurn: ((UUID) -> Void)? = nil
     var onExportTurn: ((UUID) -> Void)? = nil
 
+    @State private var collapsedTurns: Set<UUID> = []
     @Environment(\.horizontalSizeClass) private var hSizeClass
 
     private var stacksVertically: Bool {
@@ -42,11 +43,14 @@ struct DebateTurnsView: View {
     }
 
     private func historicalTurn(_ turn: Turn) -> some View {
-        ModeTurnCard(
+        let isCollapsed = collapsedTurns.contains(turn.id)
+        return ModeTurnCard(
             title: "Debate",
-            subtitle: "\(max((turn.debateRounds ?? []).count, 1)) 轮立论 / 反驳 / 修正",
+            subtitle: isCollapsed ? TurnFold.preview(turn) : "\(max((turn.debateRounds ?? []).count, 1)) 轮立论 / 反驳 / 修正",
             icon: "quote.bubble.fill",
-            tint: debateTint
+            tint: debateTint,
+            collapsed: isCollapsed,
+            onToggleCollapse: { TurnFold.toggle(turn.id, in: &collapsedTurns) }
         ) {
             PromptBubble(prompt: turn.prompt, timestamp: turn.timestamp, images: turn.images ?? [],
                          onFork: { viewModel.forkConversation(fromTurnID: turn.id) },
@@ -69,7 +73,8 @@ struct DebateTurnsView: View {
                             } : nil,
                             isRetrying: viewModel.isRetrying(turnID: turn.id, configID: cfg.id),
                             reasoning: turn.reasoningByProvider?[key],
-                            tokenUsage: turn.tokenUsage?[key]
+                            tokenUsage: turn.tokenUsage?[key],
+                            sources: turn.sourcesByProvider?[key] ?? []
                         )
                         .frame(maxWidth: .infinity, alignment: .topLeading)
                     }
@@ -93,7 +98,8 @@ struct DebateTurnsView: View {
                     } : nil,
                     isRetrying: viewModel.isRetryingChair(turnID: turn.id, target: .chair),
                     reasoning: turn.reasoningByProvider?[moderator.id.uuidString],
-                    tokenUsage: turn.tokenUsage?[moderator.id.uuidString]
+                    tokenUsage: turn.tokenUsage?[moderator.id.uuidString],
+                    sources: turn.sources ?? []
                 )
             }
             if let writes = turn.appliedWrites, !writes.isEmpty {

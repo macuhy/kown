@@ -193,6 +193,7 @@ extension AppViewModel {
             // 思考过程 + token 用量,key = providerID(uuidString),panel/chair/summary 共用。
             var reasoningByProvider: [String: String] = [:]
             var tokenUsage: [String: TurnTokenUsage] = [:]
+            var sourcesByProvider: [String: [SourceRef]] = [:]
             var councilVotes: CouncilVote? = nil
             var snapshot: [String: ProviderConfig] = [:]
             for cfg in panel {
@@ -306,6 +307,7 @@ extension AppViewModel {
                     if s.inputTokens > 0 || s.outputTokens > 0 {
                         tokenUsage[cfg.id.uuidString] = TurnTokenUsage(input: s.inputTokens, output: s.outputTokens)
                     }
+                    if !s.sources.isEmpty { sourcesByProvider[cfg.id.uuidString] = s.sources }
                 }
             }
 
@@ -493,7 +495,8 @@ extension AppViewModel {
                     sources: self.liveSources.isEmpty ? nil : self.liveSources,
                     reasoningByProvider: reasoningByProvider.isEmpty ? nil : reasoningByProvider,
                     tokenUsage: tokenUsage.isEmpty ? nil : tokenUsage,
-                    councilVotes: councilVotes
+                    councilVotes: councilVotes,
+                    sourcesByProvider: sourcesByProvider.isEmpty ? nil : sourcesByProvider
                 )
                 self.conversations[idx].turns.append(turn)
                 self.conversations[idx].updatedAt = Date()
@@ -1179,10 +1182,12 @@ extension AppViewModel {
                 case .reasoning(let r):  state.appendReasoning(r)
                 case .toolEvent(let e):  state.logEvent(e)
                 case .sources(let refs):
-                    // web_search 命中的来源:累积到本轮 liveSources(按 url 去重),落盘进 Turn.sources。
-                    // runOne 在 @MainActor 上串行执行,跨并发 panel 的追加是安全的。
+                    // web_search 命中的来源:累积到本轮 liveSources(全轮合并,落盘进 Turn.sources),
+                    // 同时按本卡 state 单独留一份(各 panel 小卡显示自己引用的地址),都按 url 去重。
                     let known = Set(self.liveSources.map(\.url))
                     self.liveSources.append(contentsOf: refs.filter { !known.contains($0.url) })
+                    let stateKnown = Set(state.sources.map(\.url))
+                    state.sources.append(contentsOf: refs.filter { !stateKnown.contains($0.url) })
                 case .usage(let input, let output):
                     // 存进 state(回填进 Turn.tokenUsage 算成本)+ 记一笔到 UsageStore(按天分桶)
                     state.inputTokens = input

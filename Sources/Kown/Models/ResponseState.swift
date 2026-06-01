@@ -23,6 +23,8 @@ final class ResponseState: Identifiable {
     /// 本轮 token 用量(流末尾的 usage chunk 填充)。用于回答卡的成本角标 + 落盘进 Turn。
     var inputTokens: Int = 0
     var outputTokens: Int = 0
+    /// 本卡(provider)自己 web_search 命中的来源(按 url 去重)。用于 panel 小卡显示各自引用。
+    var sources: [SourceRef] = []
 
     /// 流式 chunk 缓冲。每次 `append(_:)` 写这里、不立刻碰 `text`(避免触发 SwiftUI invalidate)。
     /// 一个 throttle 的 task 把 buffer 一次性 flush 到 `text`,把 layout pass 从几十次/秒
@@ -60,6 +62,7 @@ final class ResponseState: Identifiable {
         events = []
         inputTokens = 0
         outputTokens = 0
+        sources = []
         phase = .streaming
         startedAt = Date()
         finishedAt = nil

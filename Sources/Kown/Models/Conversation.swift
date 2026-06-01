@@ -154,6 +154,9 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
     var tokenUsage: [String: TurnTokenUsage]?
     /// Council 投票结果(仅 Council 模式且开启投票时有)。旧会话没有,保持 optional。
     var councilVotes: CouncilVote?
+    /// 各 panel provider 各自 web_search 命中的来源,key = providerID(uuidString)。
+    /// 旧会话没有,保持 optional;与全轮合并的 `sources` 并存。
+    var sourcesByProvider: [String: [SourceRef]]?
 
     init(id: UUID = UUID(),
          timestamp: Date = Date(),
@@ -175,7 +178,8 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
          sources: [SourceRef]? = nil,
          reasoningByProvider: [String: String]? = nil,
          tokenUsage: [String: TurnTokenUsage]? = nil,
-         councilVotes: CouncilVote? = nil) {
+         councilVotes: CouncilVote? = nil,
+         sourcesByProvider: [String: [SourceRef]]? = nil) {
         self.id = id
         self.timestamp = timestamp
         self.prompt = prompt
@@ -197,6 +201,7 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
         self.reasoningByProvider = reasoningByProvider
         self.tokenUsage = tokenUsage
         self.councilVotes = councilVotes
+        self.sourcesByProvider = sourcesByProvider
     }
 
     // 兼容旧 JSON(缺新字段时 sources 等以 decodeIfPresent 解码,默认 nil),不破坏现有存档/同步。
@@ -205,7 +210,7 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
         case chairProviderID, chairSummary, chairError
         case summaryProviderID, summaryText, summaryError
         case providerSnapshot, panelOrder, debateRounds, appliedWrites, images, sources
-        case reasoningByProvider, tokenUsage, councilVotes
+        case reasoningByProvider, tokenUsage, councilVotes, sourcesByProvider
     }
 
     init(from decoder: Decoder) throws {
@@ -231,6 +236,7 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
         self.reasoningByProvider = try c.decodeIfPresent([String: String].self, forKey: .reasoningByProvider)
         self.tokenUsage = try c.decodeIfPresent([String: TurnTokenUsage].self, forKey: .tokenUsage)
         self.councilVotes = try c.decodeIfPresent(CouncilVote.self, forKey: .councilVotes)
+        self.sourcesByProvider = try c.decodeIfPresent([String: [SourceRef]].self, forKey: .sourcesByProvider)
     }
 
     /// 取顺序化的 panel 配置（按发送顺序，Chair 不在内）

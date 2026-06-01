@@ -66,6 +66,56 @@ struct SourcesStrip: View {
     }
 }
 
+/// 紧凑「Sources」小药丸 —— 放回答卡 footer。点开 popover 展示来源列表。
+/// 像 ChatGPT/Perplexity 那样:小图标 + Sources + 数量,不占正文空间。
+struct SourcesChip: View {
+    let sources: [SourceRef]
+    @State private var showPopover = false
+    private var tint: Color { Color(red: 0.26, green: 0.52, blue: 0.96) }
+
+    var body: some View {
+        if !sources.isEmpty {
+            Button {
+                showPopover = true
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "link")
+                        .font(.system(size: 10, weight: .bold))
+                    Text("Sources \(sources.count)")
+                        .font(.caption2.weight(.semibold))
+                }
+                .foregroundStyle(tint)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(tint.opacity(0.10), in: Capsule())
+                .overlay { Capsule().strokeBorder(tint.opacity(0.22), lineWidth: 1) }
+            }
+            .buttonStyle(.plain)
+            .popover(isPresented: $showPopover) {
+                sourceList
+                    .frame(idealWidth: 340)
+                    #if os(iOS)
+                    .presentationCompactAdaptation(.popover)
+                    #endif
+            }
+        }
+    }
+
+    private var sourceList: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("引用来源(\(sources.count))")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(tint)
+                ForEach(sources) { SourceCard(source: $0, tint: tint) }
+            }
+            .padding(14)
+            .frame(maxWidth: 340, alignment: .leading)
+        }
+        .frame(maxHeight: 360)
+    }
+}
+
 /// 单条来源卡片:标题 + 域名。整卡可点,用 `Link` 打开 url(跨 macOS / iOS)。
 private struct SourceCard: View {
     let source: SourceRef
