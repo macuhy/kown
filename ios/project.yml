@@ -76,6 +76,8 @@ targets:
         MARKETING_VERSION: "0.7.0"
         CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_STYLE: Automatic
+        # 仅当 CI 把 CODE_SIGN_STYLE 覆盖成 Manual 时才生效;本地 Automatic 会忽略它。
+        PROVISIONING_PROFILE_SPECIFIER: "Kown AppStore"
         DEVELOPMENT_TEAM: 4257SFGRFK   # 写死付费 Team,Archive 不再每次让人选
         SWIFT_VERSION: "6.0"
         IPHONEOS_DEPLOYMENT_TARGET: "17.0"
@@ -122,6 +124,7 @@ targets:
         MARKETING_VERSION: "0.7.0"
         CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_STYLE: Automatic
+        PROVISIONING_PROFILE_SPECIFIER: "Kown Share AppStore"
         DEVELOPMENT_TEAM: 4257SFGRFK
         SWIFT_VERSION: "6.0"
         IPHONEOS_DEPLOYMENT_TARGET: "17.0"
