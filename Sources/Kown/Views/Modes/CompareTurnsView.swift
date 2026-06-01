@@ -142,10 +142,10 @@ struct CompareTurnsView: View {
             .tabViewStyle(.page(indexDisplayMode: .always))
             .frame(minHeight: 440)
             #else
-            HStack(alignment: .top, spacing: 14) { content() }
+            AdaptivePanelGrid(minColumnWidth: 420) { content() }
             #endif
         } else {
-            HStack(alignment: .top, spacing: 14) { content() }
+            AdaptivePanelGrid(minColumnWidth: 420) { content() }
         }
     }
 

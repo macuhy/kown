@@ -165,13 +165,13 @@ struct CouncilTurnsView: View {
         }
     }
 
-    /// 紧凑(iPhone)用 VStack,常规(iPad / Mac)用 HStack。
+    /// 紧凑(iPhone)用 VStack,常规(iPad / Mac)按可用宽度自动换列。
     @ViewBuilder
     private func panelStack<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         if stacksVertically {
             VStack(alignment: .leading, spacing: 14) { content() }
         } else {
-            HStack(alignment: .top, spacing: 14) { content() }
+            AdaptivePanelGrid { content() }
         }
     }
 

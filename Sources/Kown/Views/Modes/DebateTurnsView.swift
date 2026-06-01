@@ -237,7 +237,7 @@ struct DebateTurnsView: View {
         if stacksVertically {
             VStack(alignment: .leading, spacing: 14) { content() }
         } else {
-            HStack(alignment: .top, spacing: 14) { content() }
+            AdaptivePanelGrid { content() }
         }
     }
 

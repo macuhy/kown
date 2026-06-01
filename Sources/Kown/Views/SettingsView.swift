@@ -501,7 +501,10 @@ struct SettingsView: View {
 
             sidebarStatusCard
         }
-        .padding(16)
+        .padding(.top, 30)
+        .padding(.leading, 18)
+        .padding(.trailing, 16)
+        .padding(.bottom, 16)
         .frame(width: 230)
         .background(.ultraThinMaterial)
     }

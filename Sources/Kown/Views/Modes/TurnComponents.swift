@@ -1215,3 +1215,33 @@ struct ModeTurnCard<Content: View>: View {
         .shadow(color: tint.opacity(isLive ? 0.11 : 0.06), radius: 24, x: 0, y: 12)
     }
 }
+
+/// Multi-model panels should fill available width, then wrap instead of overflowing horizontally.
+struct AdaptivePanelGrid<Content: View>: View {
+    var minColumnWidth: CGFloat = 380
+    var spacing: CGFloat = 14
+    private let content: Content
+
+    init(
+        minColumnWidth: CGFloat = 380,
+        spacing: CGFloat = 14,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.minColumnWidth = minColumnWidth
+        self.spacing = spacing
+        self.content = content()
+    }
+
+    var body: some View {
+        LazyVGrid(
+            columns: [
+                GridItem(.adaptive(minimum: minColumnWidth), spacing: spacing, alignment: .top)
+            ],
+            alignment: .leading,
+            spacing: spacing
+        ) {
+            content
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+}
