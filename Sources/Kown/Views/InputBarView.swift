@@ -20,6 +20,8 @@ struct InputBarView: View {
     #if os(macOS)
     @State private var showFileImporter = false
     @State private var showImageImporter = false
+    /// ⌘V 本地事件监听:抢在字段编辑器前拦截图片/文件粘贴(否则 file-url 会被当文本贴成路径)。
+    @State private var pasteMonitor: Any?
     #endif
     #if os(iOS)
     @State private var showPhotoPicker = false
@@ -208,12 +210,14 @@ struct InputBarView: View {
             .onTapGesture { inputFocused = true }
             #endif
             #if os(macOS)
-            // ⌘V 粘贴图片/文件直接成附件 — 普通文本粘贴让 TextField 自己处理(不消费这条 paste)。
-            // 含 public.file-url:从 Finder 复制的图片/文件,剪贴板里是文件引用而非位图数据,
-            // 不拦截就会被 TextField 当成路径文本贴进来(只显示路径、没缩略图)。
-            .onPasteCommand(of: ["public.image", "public.png", "public.jpeg", "public.tiff", "public.file-url"]) { _ in
+            // ⌘V 粘贴图片(位图字节)兜底 — file-url 由下面的 NSEvent monitor 抢在字段编辑器前拦。
+            .onPasteCommand(of: ["public.image", "public.png", "public.jpeg", "public.tiff"]) { _ in
                 handlePasteImage()
             }
+            // 关键:聚焦时装 local keyDown monitor。聚焦的 TextField 字段编辑器会先把 file-url
+            // 当文本吃掉 ⌘V(只贴路径、无缩略图),onPasteCommand 根本轮不到 → 这里抢在它前面。
+            .onAppear { installPasteMonitor() }
+            .onDisappear { removePasteMonitor() }
             #endif
     }
 
@@ -676,35 +680,62 @@ struct InputBarView: View {
             pickerError = nil
             return
         }
-        // 2) 剪贴板里是文件引用(从 Finder 复制了图片/文件)。按扩展名分流:
-        //    图片 → 走 attachImageNormalized(HEIC 自动转 JPEG、展示缩略图);其它 → attachFile(文本/PDF)。
+        // 2) 剪贴板里是文件引用(从 Finder 复制了图片/文件)。
         if let urls = pb.readObjects(forClasses: [NSURL.self],
                                      options: [.urlReadingFileURLsOnly: true]) as? [URL],
            !urls.isEmpty {
-            var attached = false
-            for url in urls {
-                do {
-                    if Self.pasteImageExtensions.contains(url.pathExtension.lowercased()) {
-                        let data = try Data(contentsOf: url)
-                        try viewModel.attachImageNormalized(data, name: url.lastPathComponent)
-                    } else {
-                        try viewModel.attachFile(at: url)
-                    }
-                    attached = true
-                } catch {
-                    pickerError = error.localizedDescription
-                }
-            }
-            if attached { pickerError = nil }
+            attachFileURLs(urls)
             return
         }
         // 真没图片/文件就给个兜底提示(普通文本粘贴不会进到这里)。
         pickerError = "剪贴板里没有可识别的图片或文件"
     }
 
-    /// 粘贴文件引用时按扩展名识别图片(走缩略图路径)。
-    private static let pasteImageExtensions: Set<String> =
+    /// 把若干文件 URL 按扩展名分流成附件:图片 → attachImageNormalized(HEIC 转 JPEG、缩略图);
+    /// 其它 → attachFile(文本 / PDF)。粘贴 file-url 与拖拽共用。
+    func attachFileURLs(_ urls: [URL]) {
+        var attached = false
+        for url in urls {
+            do {
+                if Self.pasteImageExtensions.contains(url.pathExtension.lowercased()) {
+                    let data = try Data(contentsOf: url)
+                    try viewModel.attachImageNormalized(data, name: url.lastPathComponent)
+                } else {
+                    try viewModel.attachFile(at: url)
+                }
+                attached = true
+            } catch {
+                pickerError = error.localizedDescription
+            }
+        }
+        if attached { pickerError = nil }
+    }
+
+    /// 粘贴/拖拽文件时按扩展名识别图片(走缩略图路径)。
+    static let pasteImageExtensions: Set<String> =
         ["png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "bmp", "tiff", "tif"]
+
+    /// 装/卸 ⌘V 本地监听:聚焦输入框时,⌘V 且剪贴板含图片字节或 file-url → 自己处理并吞掉事件
+    /// (返回 nil),抢在字段编辑器把 file-url 当文本贴进来之前。普通文本 → 放行,正常粘贴。
+    private func installPasteMonitor() {
+        guard pasteMonitor == nil else { return }
+        pasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard inputFocused,
+                  event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
+                  event.charactersIgnoringModifiers?.lowercased() == "v" else { return event }
+            let pb = NSPasteboard.general
+            let hasImage = pb.data(forType: .png) != nil || pb.data(forType: .tiff) != nil
+            let hasFileURL = ((pb.readObjects(forClasses: [NSURL.self],
+                              options: [.urlReadingFileURLsOnly: true]) as? [URL])?.isEmpty == false)
+            guard hasImage || hasFileURL else { return event }  // 纯文本等 → 放行
+            handlePasteImage()
+            return nil  // 吞掉,字段编辑器不再把路径当文本贴
+        }
+    }
+
+    private func removePasteMonitor() {
+        if let m = pasteMonitor { NSEvent.removeMonitor(m); pasteMonitor = nil }
+    }
 
     private func pastedName(ext: String) -> String {
         let f = DateFormatter()
