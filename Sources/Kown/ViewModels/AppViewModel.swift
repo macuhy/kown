@@ -90,6 +90,8 @@ final class AppViewModel {
     private static let debateRoundsKey = "kown.debate.rounds.v1"
     private var runningTask: Task<Void, Never>?
     private var summarizingTasks: [UUID: Task<Void, Never>] = [:]
+    /// 正在自动起标题的会话(防重复触发)。
+    private var autoTitleTasks: Set<UUID> = []
 
     // MARK: - Init
 
@@ -1216,6 +1218,8 @@ final class AppViewModel {
 
                 // 触发增量摘要(后台跑,不阻塞 UI)
                 self.scheduleSummarization(for: convID)
+                // 首轮后自动起标题(后台跑,仅当标题还是首问截断)
+                self.scheduleAutoTitle(for: convID)
             }
 
             // 完成 — 停无声音频 + 释放后台 token + 后台时通知用户
@@ -1284,6 +1288,51 @@ final class AppViewModel {
     }
 
     // MARK: - 摘要调度
+
+    /// 首轮回答后用小模型给会话起一个 ≤14 字标题(仅当标题仍是首问截断、未被改名时)。后台异步,失败不动原标题。
+    private func scheduleAutoTitle(for convID: UUID) {
+        guard !autoTitleTasks.contains(convID),
+              let idx = conversations.firstIndex(where: { $0.id == convID }),
+              conversations[idx].turns.count == 1 else { return }
+        let turn = conversations[idx].turns[0]
+        let autoTitle = String(turn.prompt.prefix(30))
+        // 只在标题仍是首问截断(说明用户没手动改名)时才覆盖
+        guard conversations[idx].title == autoTitle else { return }
+        guard let cfg = chairProvider ?? providers.first(where: { $0.enabled && !$0.kind.isCLI }),
+              !cfg.kind.isCLI else { return }
+        let answer = turn.chairSummary ?? turn.summaryText
+            ?? turn.responses.values.first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) ?? ""
+        guard !answer.isEmpty else { return }
+        let q = String(turn.prompt.prefix(500))
+        let a = String(answer.prefix(500))
+        autoTitleTasks.insert(convID)
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.autoTitleTasks.remove(convID) }
+            let apiKey = cfg.kind.isCLI ? "" : ((try? KeychainStore.load(id: cfg.id)) ?? "")
+            let prompt = "为下面的对话起一个不超过 14 个字的简洁标题,只输出标题本身,不要引号、标点或解释。\n\n问:\(q)\n答:\(a)"
+            let options = ChatOptions(systemPrompt: nil, temperature: 0.3, maxTokens: 32)
+            var collected = ""
+            do {
+                let client = ProviderRegistry.client(for: cfg.kind)
+                for try await chunk in client.stream(prompt: prompt, options: options, config: cfg, apiKey: apiKey) {
+                    if case .text(let t) = chunk { collected += t }
+                }
+            } catch { return }
+            var title = collected.trimmingCharacters(in: .whitespacesAndNewlines)
+            for ch in ["\"", "「", "」", "『", "』", "\n", "。", "："] {
+                title = title.replacingOccurrences(of: ch, with: ch == "\n" ? " " : "")
+            }
+            title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+            if title.count > 20 { title = String(title.prefix(20)) }
+            // 期间用户没手动改名才写回
+            guard !title.isEmpty,
+                  let liveIdx = self.conversations.firstIndex(where: { $0.id == convID }),
+                  self.conversations[liveIdx].title == autoTitle else { return }
+            self.conversations[liveIdx].title = title
+            ConversationStore.save(self.conversations[liveIdx])
+        }
+    }
 
     private func scheduleSummarization(for convID: UUID) {
         if let running = summarizingTasks[convID], !running.isCancelled { return }
