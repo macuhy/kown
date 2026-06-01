@@ -89,6 +89,8 @@ struct OpenAICompatibleClient: LLMClient {
                             continuation.yield(.toolEvent(Self.eventLineForCall(call)))
                             let toolResult = await router.execute(call)
                             continuation.yield(.toolEvent(toolResult.summary))
+                            let refs = ToolRouter.sources(from: toolResult)
+                            if !refs.isEmpty { continuation.yield(.sources(refs)) }
                             messages.append([
                                 "role": "tool",
                                 "tool_call_id": toolResult.callID,

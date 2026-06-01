@@ -105,6 +105,8 @@ struct AnthropicClient: LLMClient {
                             continuation.yield(.toolEvent(Self.eventLineForCall(call)))
                             let tr = await router.execute(call)
                             continuation.yield(.toolEvent(tr.summary))
+                            let refs = ToolRouter.sources(from: tr)
+                            if !refs.isEmpty { continuation.yield(.sources(refs)) }
                             var block: [String: Any] = [
                                 "type": "tool_result",
                                 "tool_use_id": tr.callID,

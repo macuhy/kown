@@ -80,6 +80,8 @@ final class AppViewModel {
     var liveTurnPrompt: String?
     /// 本轮附带的图片（直播期间也展示,等 Turn 落盘后由 turn.images 接管）
     var liveTurnImages: [TurnImage] = []
+    /// 本轮 web_search 命中的引用来源(各 provider 经 .sources chunk 上报,按 url 去重),落盘进 Turn.sources。
+    var liveSources: [SourceRef] = []
 
     // MARK: - 内部
     private static let systemPromptKey = "kown.systemPrompt.v1"
@@ -910,6 +912,7 @@ final class AppViewModel {
         liveDebateRounds.removeAll()
         liveTurnPrompt = promptSnapshot
         liveTurnImages = turnImages
+        liveSources.removeAll()
         for cfg in panel {
             let s = ResponseState(id: cfg.id)
             s.reset()
@@ -1174,7 +1177,8 @@ final class AppViewModel {
                     panelOrder: panelOrder,
                     debateRounds: debateRounds,
                     appliedWrites: appliedWrites,
-                    images: turnImages.isEmpty ? nil : turnImages
+                    images: turnImages.isEmpty ? nil : turnImages,
+                    sources: self.liveSources.isEmpty ? nil : self.liveSources
                 )
                 self.conversations[idx].turns.append(turn)
                 self.conversations[idx].updatedAt = Date()
@@ -1398,6 +1402,7 @@ final class AppViewModel {
                     switch chunk {
                     case .text(let t): collected += t
                     case .toolEvent: break
+                    case .sources: break
                     case .usage(let input, let output):
                         UsageStore.shared.record(
                             providerKind: cfg.kind,
@@ -1576,6 +1581,7 @@ final class AppViewModel {
                     switch chunk {
                     case .text(let t): collected += t
                     case .toolEvent: break
+                    case .sources: break
                     case .usage(let input, let output):
                         UsageStore.shared.record(
                             providerKind: cfg.kind,
@@ -1737,6 +1743,11 @@ final class AppViewModel {
                 switch chunk {
                 case .text(let t):       state.append(t)
                 case .toolEvent(let e):  state.logEvent(e)
+                case .sources(let refs):
+                    // web_search 命中的来源:累积到本轮 liveSources(按 url 去重),落盘进 Turn.sources。
+                    // runOne 在 @MainActor 上串行执行,跨并发 panel 的追加是安全的。
+                    let known = Set(self.liveSources.map(\.url))
+                    self.liveSources.append(contentsOf: refs.filter { !known.contains($0.url) })
                 case .usage(let input, let output):
                     // 记一笔到 UsageStore(按天分桶,本地持久化)
                     UsageStore.shared.record(

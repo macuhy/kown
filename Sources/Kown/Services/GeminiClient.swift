@@ -115,6 +115,8 @@ struct GeminiClient: LLMClient {
                             continuation.yield(.toolEvent(Self.eventLineForCall(call)))
                             let tr = await router.execute(call)
                             continuation.yield(.toolEvent(tr.summary))
+                            let refs = ToolRouter.sources(from: tr)
+                            if !refs.isEmpty { continuation.yield(.sources(refs)) }
                             let contentObj: Any = (try? JSONSerialization.jsonObject(with: Data(tr.content.utf8))) ?? ["raw": tr.content]
                             functionResponseParts.append([
                                 "functionResponse": [

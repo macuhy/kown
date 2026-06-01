@@ -48,6 +48,7 @@ struct DirectTurnsView: View {
             if let writes = turn.appliedWrites, !writes.isEmpty {
                 AppliedWritesStrip(writes: writes)
             }
+            TurnSourcesStrip(turn: turn)
         }
     }
 
