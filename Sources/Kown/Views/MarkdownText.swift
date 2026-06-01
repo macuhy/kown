@@ -38,13 +38,13 @@ struct MarkdownText: View {
             if src.count > Self.maxLiveMarkdownChars {
                 rawText(src)
             } else {
-                // 流式期间也渲 markdown(节流快照 + 补全未闭合代码围栏),但不开 textSelection(更轻)。
-                rendered(for: Self.balancedFences(src), selectable: false)
+                // 流式期间也渲 markdown(节流快照 + 数学样式 + 补全未闭合代码围栏),不开 textSelection(更轻)。
+                rendered(for: Self.balancedFences(Self.stylizeMath(src)), selectable: false)
             }
         } else if text.count > Self.maxFinishedMarkdownChars {
             rawText(text)  // 防失控:超长走 raw,避开 anchor/布局重路径
         } else {
-            rendered(for: text, selectable: true)
+            rendered(for: Self.stylizeMath(text), selectable: true)
         }
     }
 
@@ -83,6 +83,32 @@ struct MarkdownText: View {
     private static func balancedFences(_ s: String) -> String {
         let fences = s.components(separatedBy: "```").count - 1
         return fences % 2 == 1 ? s + "\n```" : s
+    }
+
+    /// 数学公式(`$...$` / `$$...$$`)以等宽样式清晰呈现、可复制。
+    /// 块公式 → 代码块,行内公式 → 行内 code。行内仅当内含 LaTeX 字符(`\ ^ _ { }`)才转,避免把
+    /// 「$5」这类货币误判成公式。(完整 KaTeX 排版需离线打包字体,本版先保证清晰可读。)
+    private static func stylizeMath(_ s: String) -> String {
+        guard s.contains("$") else { return s }
+        var out = replaceCapture(s, pattern: #"\$\$([\s\S]+?)\$\$"#) { "\n```\n\($0)\n```\n" }
+        out = replaceCapture(out, pattern: #"\$([^\$\n]*[\\^_{}][^\$\n]*)\$"#) { "`\($0)`" }
+        return out
+    }
+
+    /// 用 transform(第一个捕获组) 替换每处匹配。
+    private static func replaceCapture(_ s: String, pattern: String, _ transform: (String) -> String) -> String {
+        guard let re = try? NSRegularExpression(pattern: pattern) else { return s }
+        let ns = s as NSString
+        var result = ""
+        var last = 0
+        re.enumerateMatches(in: s, range: NSRange(location: 0, length: ns.length)) { m, _, _ in
+            guard let m, m.numberOfRanges >= 2 else { return }
+            result += ns.substring(with: NSRange(location: last, length: m.range.location - last))
+            result += transform(ns.substring(with: m.range(at: 1)))
+            last = m.range.location + m.range.length
+        }
+        result += ns.substring(from: last)
+        return result
     }
 
     /// 含代码块 / 表格 / 表头分隔 / 任务列表 — 这些 block 用 AttributedString 渲染体验差,继续走 MarkdownUI
