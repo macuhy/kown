@@ -8,6 +8,11 @@ struct SidebarView: View {
     @State private var renameDraft: String = ""
     /// 正在编辑会话系统提示的会话(nil = 未打开)。包一层以满足 `.sheet(item:)` 的 Identifiable。
     @State private var promptEditTarget: IdentifiedID?
+    /// 标签过滤(nil = 全部)。
+    @State private var selectedTag: String?
+    /// 正在编辑标签的会话 + 草稿(逗号分隔)。
+    @State private var tagEditTarget: IdentifiedID?
+    @State private var tagDraft: String = ""
     /// 跨会话全文搜索:内存倒排索引,随侧栏生命周期存在,不落盘(重启重建)。
     @State private var searchIndex = ConversationSearchIndex()
     /// 搜索框输入
@@ -28,11 +33,23 @@ struct SidebarView: View {
         return map
     }
 
-    /// 过滤后展示的会话:有 query 时按命中过滤并维持原顺序,无 query 维持现状。
+    /// 过滤后展示的会话:标签过滤 + 搜索命中过滤,然后置顶优先(其余维持数组序)。
     private var displayedConversations: [Conversation] {
-        guard isSearching else { return viewModel.conversations }
-        let hits = hitsByID
-        return viewModel.conversations.filter { hits[$0.id] != nil }
+        var list = viewModel.conversations
+        if let tag = selectedTag {
+            list = list.filter { $0.tags.contains(tag) }
+        }
+        if isSearching {
+            let hits = hitsByID
+            list = list.filter { hits[$0.id] != nil }
+        }
+        // 置顶优先,其余保持原数组序(已是改动顶到最前的 updatedAt 序)
+        return list.enumerated()
+            .sorted { a, b in
+                if a.element.pinned != b.element.pinned { return a.element.pinned }
+                return a.offset < b.offset
+            }
+            .map(\.element)
     }
 
     var body: some View {
@@ -42,6 +59,7 @@ struct SidebarView: View {
                 .fill(Color.primary.opacity(0.08))
                 .frame(height: 1)
             searchField
+            tagFilterBar
             list
         }
         .frame(minWidth: 240)
@@ -54,6 +72,53 @@ struct SidebarView: View {
         .sheet(item: $promptEditTarget) { target in
             ConversationPromptSheet(viewModel: viewModel, conversationID: target.id)
         }
+        .alert("编辑标签", isPresented: Binding(
+            get: { tagEditTarget != nil },
+            set: { if !$0 { tagEditTarget = nil } }
+        )) {
+            TextField("用逗号分隔,如 工作, 研究", text: $tagDraft)
+            Button("保存") {
+                if let id = tagEditTarget?.id {
+                    viewModel.setTags(id, tags: tagDraft.split(separator: ",").map(String.init))
+                }
+                tagEditTarget = nil
+            }
+            Button("取消", role: .cancel) { tagEditTarget = nil }
+        } message: {
+            Text("多个标签用逗号分隔")
+        }
+    }
+
+    /// 标签过滤条 — 有标签时显示「全部 + 各标签」chips,点选过滤。
+    @ViewBuilder
+    private var tagFilterBar: some View {
+        let tags = viewModel.allTags
+        if !tags.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    tagChip("全部", active: selectedTag == nil) { selectedTag = nil }
+                    ForEach(tags, id: \.self) { tag in
+                        tagChip(tag, active: selectedTag == tag) {
+                            selectedTag = (selectedTag == tag) ? nil : tag
+                        }
+                    }
+                }
+                .padding(.horizontal, 12)
+            }
+            .padding(.bottom, 6)
+        }
+    }
+
+    private func tagChip(_ label: String, active: Bool, _ tap: @escaping () -> Void) -> some View {
+        Button(action: tap) {
+            Text(label)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(active ? Color.white : Color.primary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(active ? Color.accentColor : Color.primary.opacity(0.07), in: Capsule())
+        }
+        .buttonStyle(.plain)
     }
 
     /// 顶部搜索框 — 自绘以贴合现有侧栏视觉(沿用 material + 圆角风格)。
@@ -286,7 +351,12 @@ struct SidebarView: View {
                                 },
                                 onCancelRename: { renamingID = nil },
                                 onDelete: { viewModel.deleteConversation(conv.id) },
-                                onEditSystemPrompt: { promptEditTarget = IdentifiedID(id: conv.id) }
+                                onEditSystemPrompt: { promptEditTarget = IdentifiedID(id: conv.id) },
+                                onTogglePin: { viewModel.togglePinned(conv.id) },
+                                onEditTags: {
+                                    tagDraft = conv.tags.joined(separator: ", ")
+                                    tagEditTarget = IdentifiedID(id: conv.id)
+                                }
                             )
                             // 搜索态下,在行下方展示命中片段(带关键词高亮)
                             if let hit = hits[conv.id], let snippet = highlightedSnippet(hit) {

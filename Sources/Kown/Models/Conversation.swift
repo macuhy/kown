@@ -255,6 +255,10 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
     var workspaceDisplayPath: String?
     /// 本会话的系统提示覆盖。非 nil 且非空时取代全局 `AppViewModel.systemPrompt`;nil/空则回退全局。
     var systemPrompt: String?
+    /// 置顶 — 侧栏排序时优先于普通会话。
+    var pinned: Bool
+    /// 标签 — 侧栏可按标签过滤分组。
+    var tags: [String]
 
     init(id: UUID = UUID(),
          title: String = "New Conversation",
@@ -268,7 +272,9 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
          activeModelChoices: [ProviderModelChoice] = [],
          workspaceBookmark: Data? = nil,
          workspaceDisplayPath: String? = nil,
-         systemPrompt: String? = nil) {
+         systemPrompt: String? = nil,
+         pinned: Bool = false,
+         tags: [String] = []) {
         self.id = id
         self.title = title
         self.mode = mode
@@ -282,6 +288,8 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
         self.workspaceBookmark = workspaceBookmark
         self.workspaceDisplayPath = workspaceDisplayPath
         self.systemPrompt = systemPrompt
+        self.pinned = pinned
+        self.tags = tags
     }
 
     // 兼容旧 JSON(缺新字段)
@@ -300,6 +308,8 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
         self.workspaceBookmark = try c.decodeIfPresent(Data.self, forKey: .workspaceBookmark)
         self.workspaceDisplayPath = try c.decodeIfPresent(String.self, forKey: .workspaceDisplayPath)
         self.systemPrompt = try c.decodeIfPresent(String.self, forKey: .systemPrompt)
+        self.pinned = try c.decodeIfPresent(Bool.self, forKey: .pinned) ?? false
+        self.tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []
     }
 
     var lastPromptPreview: String {

@@ -11,6 +11,8 @@ struct ConversationRowView: View {
     let onCancelRename: () -> Void
     let onDelete: () -> Void
     var onEditSystemPrompt: () -> Void = {}
+    var onTogglePin: () -> Void = {}
+    var onEditTags: () -> Void = {}
 
     @State private var confirmDelete = false
     @FocusState private var renameFocused: Bool
@@ -53,10 +55,18 @@ struct ConversationRowView: View {
                     baseField
                     #endif
                 } else {
-                    Text(conversation.title.isEmpty ? "New Conversation" : conversation.title)
-                        .font(.system(.subheadline, design: .rounded).weight(.bold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
+                    HStack(spacing: 5) {
+                        if conversation.pinned {
+                            Image(systemName: "pin.fill")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(modeColor)
+                                .rotationEffect(.degrees(45))
+                        }
+                        Text(conversation.title.isEmpty ? "New Conversation" : conversation.title)
+                            .font(.system(.subheadline, design: .rounded).weight(.bold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                    }
                 }
 
                 if !conversation.lastPromptPreview.isEmpty {
@@ -82,6 +92,15 @@ struct ConversationRowView: View {
                             .font(.caption2.weight(.medium))
                             .foregroundStyle(.tertiary)
                             .monospacedDigit()
+                        ForEach(conversation.tags.prefix(2), id: \.self) { tag in
+                            Text(tag)
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.secondary.opacity(0.12), in: Capsule())
+                        }
                     }
                 }
             }
@@ -124,6 +143,8 @@ struct ConversationRowView: View {
             if !isRenaming { onSelect() }
         }
         .contextMenu {
+            Button(conversation.pinned ? "取消置顶" : "置顶") { onTogglePin() }
+            Button("编辑标签…") { onEditTags() }
             Button("重命名") { onStartRename() }
             Button("会话系统提示…") { onEditSystemPrompt() }
             Button("删除", role: .destructive) { confirmDelete = true }

@@ -303,6 +303,33 @@ final class AppViewModel {
         conversations.first(where: { $0.id == id })?.systemPrompt ?? ""
     }
 
+    /// 置顶/取消置顶会话(侧栏排序时置顶优先)。
+    func togglePinned(_ id: UUID) {
+        guard let idx = conversations.firstIndex(where: { $0.id == id }) else { return }
+        conversations[idx].pinned.toggle()
+        conversations[idx].updatedAt = Date()
+        ConversationStore.save(conversations[idx])
+    }
+
+    /// 设置会话标签(去空白、去空、去重、保序)。
+    func setTags(_ id: UUID, tags: [String]) {
+        guard let idx = conversations.firstIndex(where: { $0.id == id }) else { return }
+        var seen = Set<String>()
+        let cleaned = tags
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && seen.insert($0).inserted }
+        conversations[idx].tags = cleaned
+        conversations[idx].updatedAt = Date()
+        ConversationStore.save(conversations[idx])
+    }
+
+    /// 全部会话出现过的标签(按出现频率降序),用于侧栏过滤 chips。
+    var allTags: [String] {
+        var count: [String: Int] = [:]
+        for c in conversations { for t in c.tags { count[t, default: 0] += 1 } }
+        return count.keys.sorted { (count[$0] ?? 0, $1) > (count[$1] ?? 0, $0) }
+    }
+
     /// 切换 tab：当前会话空 → 直接改模式；非空 → 新建会话。返回 true 表示进行了切换。
     func switchMode(to mode: ConversationMode) -> Bool {
         if let id = selectedConversationID,
