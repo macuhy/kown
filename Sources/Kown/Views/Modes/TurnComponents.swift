@@ -311,6 +311,20 @@ struct HistoricalResponseCard: View {
                 .fixedSize()
             }
             if !text.isEmpty {
+                Button {
+                    AnswerImageExporter.exportPNG(providerName: config.displayName, model: config.model,
+                                                  text: text, suggestedName: "Kown-\(config.displayName)")
+                } label: {
+                    Label("图片", systemImage: "photo")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.secondary.opacity(0.10), in: Capsule())
+                }
+                .buttonStyle(.borderless)
+            }
+            if !text.isEmpty {
                 let reading = speech.speakingText == text
                 Button {
                     speech.toggle(text)
