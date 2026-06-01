@@ -3,10 +3,12 @@ import Speech
 import AVFoundation
 
 /// 语音听写(STT)。麦克风 + SFSpeechRecognizer(中文),边说边出文字。
-/// 与 SpeechService(朗读)分开:朗读用 playback session,听写用 record session,互斥使用。
-@MainActor
-final class SpeechRecognizer: NSObject, ObservableObject {
-    static let shared = SpeechRecognizer()
+///
+/// **不能标 `@MainActor`**:Speech / TCC 权限 / 音频 tap 的回调都在后台线程触发,
+/// 若闭包被推断成 MainActor 隔离,Swift 6 运行时会在后台线程做执行器断言 → SIGTRAP 崩溃。
+/// 所以本类不隔离到 MainActor;`@Published` 的变更统一派发回主线程,音频 tap 只碰局部 request。
+final class SpeechRecognizer: NSObject, ObservableObject, @unchecked Sendable {
+    @MainActor static let shared = SpeechRecognizer()
 
     @Published private(set) var isRecording = false
     @Published var lastError: String?
@@ -16,10 +18,13 @@ final class SpeechRecognizer: NSObject, ObservableObject {
     private let audioEngine = AVAudioEngine()
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
-    /// 每次部分识别结果回调(传完整的当前转写文本)。
     private var onPartial: ((String) -> Void)?
 
     var isAvailable: Bool { recognizer?.isAvailable ?? false }
+
+    private func onMain(_ block: @escaping () -> Void) {
+        if Thread.isMainThread { block() } else { DispatchQueue.main.async(execute: block) }
+    }
 
     /// 切换:正在录就停,否则申请权限后开始。
     func toggle(onPartial: @escaping (String) -> Void) {
@@ -27,11 +32,11 @@ final class SpeechRecognizer: NSObject, ObservableObject {
     }
 
     func start(onPartial: @escaping (String) -> Void) {
-        lastError = nil
         self.onPartial = onPartial
-        requestAuthorization { [weak self] granted, message in
-            Task { @MainActor in
-                guard let self else { return }
+        onMain { self.lastError = nil }
+        // 权限回调在后台线程 → 全部切回主线程再动引擎 / 状态
+        requestAuthorization { granted, message in
+            DispatchQueue.main.async {
                 guard granted else {
                     self.lastError = message ?? "麦克风 / 语音识别权限被拒绝"
                     return
@@ -48,20 +53,21 @@ final class SpeechRecognizer: NSObject, ObservableObject {
     }
 
     func stop() {
-        if audioEngine.isRunning {
-            audioEngine.stop()
-            audioEngine.inputNode.removeTap(onBus: 0)
+        onMain {
+            if self.audioEngine.isRunning {
+                self.audioEngine.stop()
+                self.audioEngine.inputNode.removeTap(onBus: 0)
+            }
+            self.request?.endAudio()
+            self.task?.finish()
+            self.teardown()
+            self.isRecording = false
         }
-        request?.endAudio()
-        task?.finish()
-        teardown()
-        isRecording = false
     }
 
-    // MARK: - 内部
+    // MARK: - 录音(在主线程调用)
 
     private func beginRecording() throws {
-        // 收尾上一段(若有)
         task?.cancel()
         task = nil
 
@@ -71,29 +77,28 @@ final class SpeechRecognizer: NSObject, ObservableObject {
         try session.setActive(true, options: .notifyOthersOnDeactivation)
         #endif
 
-        let request = SFSpeechAudioBufferRecognitionRequest()
-        request.shouldReportPartialResults = true
-        self.request = request
+        let req = SFSpeechAudioBufferRecognitionRequest()
+        req.shouldReportPartialResults = true
+        self.request = req
 
         let inputNode = audioEngine.inputNode
         let format = inputNode.outputFormat(forBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
-            self?.request?.append(buffer)
+        // tap 在音频线程回调:只 append 局部 req(线程安全),不碰 self,避免隔离断言。
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
+            req.append(buffer)
         }
 
         audioEngine.prepare()
         try audioEngine.start()
 
-        task = recognizer?.recognitionTask(with: request) { [weak self] result, error in
+        task = recognizer?.recognitionTask(with: req) { [weak self] result, error in
             guard let self else { return }
             if let result {
                 let text = result.bestTranscription.formattedString
-                Task { @MainActor in self.onPartial?(text) }
+                self.onMain { self.onPartial?(text) }
             }
             if error != nil || (result?.isFinal ?? false) {
-                Task { @MainActor in
-                    if self.isRecording { self.stop() }
-                }
+                self.stop()
             }
         }
     }
@@ -106,8 +111,9 @@ final class SpeechRecognizer: NSObject, ObservableObject {
         #endif
     }
 
-    /// 申请语音识别 + 麦克风权限(都通过才回调 granted=true)。
-    private func requestAuthorization(_ completion: @escaping @Sendable (Bool, String?) -> Void) {
+    // MARK: - 权限(回调在后台线程,闭包非隔离)
+
+    private func requestAuthorization(_ completion: @escaping (Bool, String?) -> Void) {
         SFSpeechRecognizer.requestAuthorization { status in
             guard status == .authorized else {
                 completion(false, "请在系统设置里允许 Kown 使用语音识别")
@@ -119,7 +125,7 @@ final class SpeechRecognizer: NSObject, ObservableObject {
         }
     }
 
-    private static func requestMic(_ completion: @escaping @Sendable (Bool) -> Void) {
+    private static func requestMic(_ completion: @escaping (Bool) -> Void) {
         #if os(iOS)
         if #available(iOS 17.0, *) {
             AVAudioApplication.requestRecordPermission { completion($0) }

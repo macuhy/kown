@@ -65,7 +65,14 @@ final class SpeechService: NSObject, ObservableObject, AVSpeechSynthesizerDelega
         lastNote = nil
         let voice = TTSConfig.voice(for: engine)
         let rate = TTSConfig.ratePercent
-        let segments = Self.segments(from: trimmed)
+        // 讯飞按「次」计费(每日 500 次免费),用接近字节上限的大段,尽量一次装下整篇;
+        // 其他引擎按字符计费,用小段抢首音。
+        let segments: [String]
+        if engine == .xunfei {
+            segments = Self.segments(from: trimmed, target: 1800, hardMax: 1800)
+        } else {
+            segments = Self.segments(from: trimmed, target: 80, hardMax: 200)
+        }
 
         synthTask = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -166,14 +173,15 @@ final class SpeechService: NSObject, ObservableObject, AVSpeechSynthesizerDelega
             return try await SiliconFlowTTSEngine(
                 baseURL: TTSConfig.siliconflowBaseURL, key: key, model: TTSConfig.siliconflowModel
             ).synthesize(text: text, voiceName: voice, ratePercent: rate)
-        case .edge:
-            return try await EdgeTTSEngine().synthesize(text: text, voice: voice, ratePercent: rate)
-        case .azure:
-            guard let key = TTSConfig.azureKey, !key.isEmpty else {
-                throw TTSError.notConfigured("未配置 Azure Key(设置 ▸ 朗读)")
+        case .xunfei:
+            guard let apiKey = TTSConfig.xunfeiAPIKey, !apiKey.isEmpty,
+                  let apiSecret = TTSConfig.xunfeiAPISecret, !apiSecret.isEmpty,
+                  !TTSConfig.xunfeiAppID.isEmpty else {
+                throw TTSError.notConfigured("未配置讯飞 APPID/APIKey/APISecret(设置 ▸ 朗读)")
             }
-            return try await AzureTTSEngine(region: TTSConfig.azureRegion, key: key)
-                .synthesize(text: text, voice: voice, ratePercent: rate)
+            return try await XunfeiTTSEngine(
+                appID: TTSConfig.xunfeiAppID, apiKey: apiKey, apiSecret: apiSecret
+            ).synthesize(text: text, voice: voice, ratePercent: rate)
         case .system:
             throw TTSError.notConfigured("系统语音不走该路径")
         }

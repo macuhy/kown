@@ -23,34 +23,6 @@ enum NeuralTTS {
     }
 }
 
-/// Azure 官方 TTS(REST)。需要 subscription key + region。返回 mp3 字节。
-struct AzureTTSEngine {
-    let region: String
-    let key: String
-
-    func synthesize(text: String, voice: String, ratePercent: Int) async throws -> Data {
-        let urlString = "https://\(region).tts.speech.microsoft.com/cognitiveservices/v1"
-        guard let url = URL(string: urlString) else {
-            throw TTSError.notConfigured("Azure region 无效: \(region)")
-        }
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        req.setValue(key, forHTTPHeaderField: "Ocp-Apim-Subscription-Key")
-        req.setValue("application/ssml+xml", forHTTPHeaderField: "Content-Type")
-        req.setValue(NeuralTTS.outputFormat, forHTTPHeaderField: "X-Microsoft-OutputFormat")
-        req.setValue("kown", forHTTPHeaderField: "User-Agent")
-        req.httpBody = NeuralTTS.ssml(text: text, voice: voice, ratePercent: ratePercent).data(using: .utf8)
-
-        let (data, response) = try await URLSession.shared.data(for: req)
-        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-            let body = String(data: data.prefix(500), encoding: .utf8) ?? ""
-            throw TTSError.network("Azure HTTP \(http.statusCode) \(body)")
-        }
-        guard !data.isEmpty else { throw TTSError.empty }
-        return data
-    }
-}
-
 /// 硅基流动 CosyVoice2 TTS(OpenAI 兼容 `/audio/speech`,国内直连,返回 mp3)。
 struct SiliconFlowTTSEngine {
     let baseURL: String

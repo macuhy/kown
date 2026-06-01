@@ -1,15 +1,16 @@
 import SwiftUI
 
-/// 朗读(TTS)设置:选引擎 / 音色 / 语速,Azure key+region,试听。
+/// 朗读(TTS)设置:选引擎(硅基流动 / 讯飞 / 系统)/ 音色 / 语速,凭证,试听。
 struct TTSSettingsView: View {
     @State private var engine: TTSEngineKind = TTSConfig.engine
     @State private var voice: String = TTSConfig.voice
     @State private var rate: Double = Double(TTSConfig.ratePercent)
-    @State private var azureRegion: String = TTSConfig.azureRegion
-    @State private var azureKey: String = ""
-    @State private var keySaved: Bool = false
     @State private var sfKey: String = ""
     @State private var sfKeySaved: Bool = false
+    @State private var xfAppID: String = TTSConfig.xunfeiAppID
+    @State private var xfAPIKey: String = ""
+    @State private var xfAPISecret: String = ""
+    @State private var xfSaved: Bool = false
 
     @ObservedObject private var speech = SpeechService.shared
 
@@ -22,12 +23,12 @@ struct TTSSettingsView: View {
                 if engine == .siliconflow {
                     siliconflowSection
                 }
+                if engine == .xunfei {
+                    xunfeiSection
+                }
                 if engine != .system {
                     voicePicker
                     rateSlider
-                }
-                if engine == .azure {
-                    azureSection
                 }
                 previewSection
                 noteSection
@@ -36,8 +37,8 @@ struct TTSSettingsView: View {
             .frame(maxWidth: 720, alignment: .leading)
         }
         .onAppear {
-            keySaved = TTSConfig.azureKey?.isEmpty == false
             sfKeySaved = TTSConfig.siliconflowKey?.isEmpty == false
+            xfSaved = (TTSConfig.xunfeiAPIKey?.isEmpty == false) && (TTSConfig.xunfeiAPISecret?.isEmpty == false)
         }
     }
 
@@ -130,6 +131,46 @@ struct TTSSettingsView: View {
         .background(Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
+    private var xunfeiSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("讯飞凭证", icon: "key.fill")
+            VStack(alignment: .leading, spacing: 6) {
+                Text("APPID")
+                    .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                TextField("讯飞应用 APPID", text: $xfAppID)
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: xfAppID) { _, new in TTSConfig.xunfeiAppID = new.trimmingCharacters(in: .whitespaces) }
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("APIKey / APISecret")
+                        .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    Spacer()
+                    if xfSaved && xfAPIKey.isEmpty && xfAPISecret.isEmpty {
+                        Label("已保存", systemImage: "checkmark.seal.fill")
+                            .font(.caption2.weight(.semibold)).foregroundStyle(.green)
+                    }
+                }
+                SecureField(xfSaved ? "APIKey 已保存(留空不变)" : "粘贴 APIKey", text: $xfAPIKey)
+                    .textFieldStyle(.roundedBorder)
+                SecureField(xfSaved ? "APISecret 已保存(留空不变)" : "粘贴 APISecret", text: $xfAPISecret)
+                    .textFieldStyle(.roundedBorder)
+                Button {
+                    saveXunfei()
+                } label: {
+                    Label("保存凭证", systemImage: "key.fill").font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.bordered)
+                .disabled(xfAPIKey.isEmpty && xfAPISecret.isEmpty)
+                Text("在 xfyun.cn 开通「在线语音合成」拿 APPID/APIKey/APISecret(每日 500 次免费)。按次计费,Kown 会把整段尽量一次合成以省次数。")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
     private var rateSlider: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -143,46 +184,6 @@ struct TTSSettingsView: View {
             Slider(value: $rate, in: -50...50, step: 5)
                 .onChange(of: rate) { _, new in TTSConfig.ratePercent = Int(new) }
         }
-    }
-
-    private var azureSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            sectionTitle("Azure 凭证", icon: "key.fill")
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Region")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                TextField("如 eastasia / eastus", text: $azureRegion)
-                    .textFieldStyle(.roundedBorder)
-                    .onChange(of: azureRegion) { _, new in TTSConfig.azureRegion = new.trimmingCharacters(in: .whitespaces) }
-            }
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text("Subscription Key")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    if keySaved && azureKey.isEmpty {
-                        Label("已保存", systemImage: "checkmark.seal.fill")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.green)
-                    }
-                }
-                SecureField(keySaved ? "已保存(留空不变)" : "粘贴 Azure Speech Key", text: $azureKey)
-                    .textFieldStyle(.roundedBorder)
-                Button {
-                    saveKey()
-                } label: {
-                    Label("保存 Key", systemImage: "key.fill")
-                        .font(.caption.weight(.semibold))
-                }
-                .buttonStyle(.bordered)
-                .disabled(azureKey.isEmpty)
-            }
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     private var previewSection: some View {
@@ -232,16 +233,6 @@ struct TTSSettingsView: View {
             .font(.subheadline.weight(.bold))
     }
 
-    private func saveKey() {
-        do {
-            try KeychainStore.save(id: TTSConfig.azureKeyID, apiKey: azureKey)
-            azureKey = ""
-            keySaved = true
-        } catch {
-            keySaved = false
-        }
-    }
-
     private func saveSiliconflowKey() {
         do {
             try KeychainStore.save(id: TTSConfig.siliconflowKeyID, apiKey: sfKey)
@@ -250,5 +241,13 @@ struct TTSSettingsView: View {
         } catch {
             sfKeySaved = false
         }
+    }
+
+    private func saveXunfei() {
+        if !xfAPIKey.isEmpty { try? KeychainStore.save(id: TTSConfig.xunfeiAPIKeyID, apiKey: xfAPIKey) }
+        if !xfAPISecret.isEmpty { try? KeychainStore.save(id: TTSConfig.xunfeiAPISecretID, apiKey: xfAPISecret) }
+        xfAPIKey = ""
+        xfAPISecret = ""
+        xfSaved = (TTSConfig.xunfeiAPIKey?.isEmpty == false) && (TTSConfig.xunfeiAPISecret?.isEmpty == false)
     }
 }

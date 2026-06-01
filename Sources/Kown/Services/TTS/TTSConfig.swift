@@ -3,8 +3,7 @@ import Foundation
 /// 朗读引擎类型。默认 Edge(免 key 的微软神经语音),可切 Azure(自带 key),或系统语音(离线兜底)。
 enum TTSEngineKind: String, CaseIterable, Identifiable, Sendable {
     case siliconflow // 硅基流动 CosyVoice2,OpenAI 兼容,国内直连
-    case edge        // 微软 Edge「大声朗读」端点,免 key、神经语音
-    case azure       // Azure 官方 TTS,需自带 key + region
+    case xunfei      // 讯飞在线语音合成,WebSocket,国内直连
     case system      // 系统 AVSpeechSynthesizer,离线兜底
 
     var id: String { rawValue }
@@ -12,8 +11,7 @@ enum TTSEngineKind: String, CaseIterable, Identifiable, Sendable {
     var displayName: String {
         switch self {
         case .siliconflow: return "硅基流动 CosyVoice(国内)"
-        case .edge:   return "Edge 神经语音(免 key)"
-        case .azure:  return "Azure 官方(自带 key)"
+        case .xunfei: return "讯飞语音(国内)"
         case .system: return "系统语音(离线)"
         }
     }
@@ -21,8 +19,7 @@ enum TTSEngineKind: String, CaseIterable, Identifiable, Sendable {
     var detail: String {
         switch self {
         case .siliconflow: return "硅基流动 CosyVoice2,OpenAI 兼容、国内直连,音色自然、支持方言。需在设置里填 SiliconFlow Key(注册送额度)。"
-        case .edge:   return "微软 Edge「大声朗读」同款神经语音,免注册免费,需联网。非官方端点,部分网络会被拦截,失效时自动回退系统语音。"
-        case .azure:  return "Azure 认知服务 TTS,神经语音,免费层每月 50 万字符。需在设置里填 Key 和 Region。"
+        case .xunfei: return "科大讯飞在线语音合成,国内直连、老牌成熟、发音人丰富(每日 500 次免费)。需填 APPID / APIKey / APISecret(讯飞开放平台)。"
         case .system: return "系统内置语音合成,离线可用,音色较生硬。"
         }
     }
@@ -42,16 +39,28 @@ struct TTSVoice: Identifiable, Hashable, Sendable {
 enum TTSConfig {
     private static let engineKey = "kown.tts.engine.v1"
     private static let voiceKey  = "kown.tts.voice.v1"
-    private static let azureRegionKey = "kown.tts.azure.region.v1"
     private static let azureRateKey   = "kown.tts.rate.v1"
     private static let sfVoiceKey = "kown.tts.sf.voice.v1"
     private static let sfModelKey = "kown.tts.sf.model.v1"
     private static let sfBaseURLKey = "kown.tts.sf.baseURL.v1"
+    private static let xfAppIDKey = "kown.tts.xf.appid.v1"
+    private static let xfVoiceKey = "kown.tts.xf.voice.v1"
 
-    /// Azure key 存进 KeychainStore,用一个固定命名空间 UUID 作 id(与 provider 的 id 不冲突)。
-    static let azureKeyID = UUID(uuidString: "7A5C0DE0-0000-4000-A000-000000000A2E")!
     /// 硅基流动 key 的 Keychain id。
     static let siliconflowKeyID = UUID(uuidString: "7A5C0DE0-0000-4000-A000-000000000A2F")!
+    /// 讯飞 APIKey / APISecret 的 Keychain id(APPID 不算密钥,存 UserDefaults)。
+    static let xunfeiAPIKeyID = UUID(uuidString: "7A5C0DE0-0000-4000-A000-000000000A30")!
+    static let xunfeiAPISecretID = UUID(uuidString: "7A5C0DE0-0000-4000-A000-000000000A31")!
+
+    /// 讯飞常用发音人(部分需在控制台开通/购买;xiaoyan 为默认免费)。
+    static let xunfeiVoices: [TTSVoice] = [
+        TTSVoice(id: "x4_yezi",    label: "叶子 · 女声(超拟人,需开通)"),
+        TTSVoice(id: "xiaoyan",    label: "讯飞小燕 · 女声(默认免费)"),
+        TTSVoice(id: "aisjiuxu",   label: "许久 · 男声"),
+        TTSVoice(id: "aisxping",   label: "小萍 · 女声"),
+        TTSVoice(id: "aisjinger",  label: "婧儿 · 女声"),
+        TTSVoice(id: "aisbabyxu",  label: "许小宝 · 童声"),
+    ]
 
     /// CosyVoice2 预置音色(存短名,请求时拼成 `model:name`)。
     static let siliconflowVoices: [TTSVoice] = [
@@ -82,35 +91,55 @@ enum TTSConfig {
 
     static let defaultVoice = "zh-CN-XiaoxiaoNeural"
 
-    static var engine: TTSEngineKind {
-        get {
-            let raw = UserDefaults.standard.string(forKey: engineKey)
-            return raw.flatMap(TTSEngineKind.init(rawValue:)) ?? .edge
+    // MARK: - 偏好持久化(放同步目录 tts.json → 随 iCloud 同步;密钥另在 apikeys.json 同步)
+
+    private struct Prefs: Codable {
+        var engine, voice, sfVoice, sfModel, sfBaseURL, xfAppID, xfVoice: String?
+        var ratePercent: Int?
+    }
+    private static var prefsURL: URL {
+        Platform.syncedDataDir.appendingPathComponent("tts.json")
+    }
+    private static func loadPrefs() -> Prefs {
+        if let d = try? Data(contentsOf: prefsURL), let p = try? JSONDecoder().decode(Prefs.self, from: d) {
+            return p
         }
-        set { UserDefaults.standard.set(newValue.rawValue, forKey: engineKey) }
+        // 首次:把旧版本存在 UserDefaults.standard 的设置迁移进同步文件
+        let ud = UserDefaults.standard
+        var p = Prefs()
+        p.engine = ud.string(forKey: engineKey)
+        p.voice = ud.string(forKey: voiceKey)
+        if ud.object(forKey: azureRateKey) != nil { p.ratePercent = ud.integer(forKey: azureRateKey) }
+        p.sfVoice = ud.string(forKey: sfVoiceKey)
+        p.sfModel = ud.string(forKey: sfModelKey)
+        p.sfBaseURL = ud.string(forKey: sfBaseURLKey)
+        p.xfAppID = ud.string(forKey: xfAppIDKey)
+        p.xfVoice = ud.string(forKey: xfVoiceKey)
+        if p.engine != nil || p.voice != nil { savePrefs(p) }  // 有旧值才落盘,避免给新装用户建空文件
+        return p
+    }
+    private static func savePrefs(_ p: Prefs) {
+        try? FileManager.default.createDirectory(at: Platform.syncedDataDir, withIntermediateDirectories: true)
+        if let d = try? JSONEncoder().encode(p) { try? d.write(to: prefsURL, options: .atomic) }
+    }
+    private static func update(_ mutate: (inout Prefs) -> Void) {
+        var p = loadPrefs(); mutate(&p); savePrefs(p)
+    }
+
+    static var engine: TTSEngineKind {
+        get { loadPrefs().engine.flatMap(TTSEngineKind.init(rawValue:)) ?? .siliconflow }
+        set { update { $0.engine = newValue.rawValue } }
     }
 
     static var voice: String {
-        get { UserDefaults.standard.string(forKey: voiceKey) ?? defaultVoice }
-        set { UserDefaults.standard.set(newValue, forKey: voiceKey) }
-    }
-
-    static var azureRegion: String {
-        get { UserDefaults.standard.string(forKey: azureRegionKey) ?? "eastasia" }
-        set { UserDefaults.standard.set(newValue, forKey: azureRegionKey) }
+        get { loadPrefs().voice ?? defaultVoice }
+        set { update { $0.voice = newValue } }
     }
 
     /// 语速百分比偏移(-50 ~ +50),SSML 的 prosody rate。默认 0。
     static var ratePercent: Int {
-        get {
-            let v = UserDefaults.standard.object(forKey: azureRateKey) as? Int
-            return v ?? 0
-        }
-        set { UserDefaults.standard.set(newValue, forKey: azureRateKey) }
-    }
-
-    static var azureKey: String? {
-        try? KeychainStore.load(id: azureKeyID)
+        get { loadPrefs().ratePercent ?? 0 }
+        set { update { $0.ratePercent = newValue } }
     }
 
     // MARK: - 硅基流动
@@ -119,34 +148,53 @@ enum TTSConfig {
         try? KeychainStore.load(id: siliconflowKeyID)
     }
     static var siliconflowVoice: String {
-        get { UserDefaults.standard.string(forKey: sfVoiceKey) ?? "alex" }
-        set { UserDefaults.standard.set(newValue, forKey: sfVoiceKey) }
+        get { loadPrefs().sfVoice ?? "alex" }
+        set { update { $0.sfVoice = newValue } }
     }
     static var siliconflowModel: String {
-        get {
-            let v = UserDefaults.standard.string(forKey: sfModelKey) ?? ""
-            return v.isEmpty ? siliconflowDefaultModel : v
-        }
-        set { UserDefaults.standard.set(newValue, forKey: sfModelKey) }
+        get { let v = loadPrefs().sfModel ?? ""; return v.isEmpty ? siliconflowDefaultModel : v }
+        set { update { $0.sfModel = newValue } }
     }
     static var siliconflowBaseURL: String {
-        get {
-            let v = UserDefaults.standard.string(forKey: sfBaseURLKey) ?? ""
-            return v.isEmpty ? siliconflowDefaultBaseURL : v
-        }
-        set { UserDefaults.standard.set(newValue, forKey: sfBaseURLKey) }
+        get { let v = loadPrefs().sfBaseURL ?? ""; return v.isEmpty ? siliconflowDefaultBaseURL : v }
+        set { update { $0.sfBaseURL = newValue } }
+    }
+
+    // MARK: - 讯飞
+
+    static var xunfeiAppID: String {
+        get { loadPrefs().xfAppID ?? "" }
+        set { update { $0.xfAppID = newValue } }
+    }
+    static var xunfeiAPIKey: String? { try? KeychainStore.load(id: xunfeiAPIKeyID) }
+    static var xunfeiAPISecret: String? { try? KeychainStore.load(id: xunfeiAPISecretID) }
+    static var xunfeiVoice: String {
+        get { loadPrefs().xfVoice ?? "xiaoyan" }
+        set { update { $0.xfVoice = newValue } }
     }
 
     // MARK: - 按引擎取音色(不同引擎音色名空间不同)
 
     static func voices(for engine: TTSEngineKind) -> [TTSVoice] {
-        engine == .siliconflow ? siliconflowVoices : voices
+        switch engine {
+        case .siliconflow: return siliconflowVoices
+        case .xunfei:      return xunfeiVoices
+        default:           return voices
+        }
     }
     static func voice(for engine: TTSEngineKind) -> String {
-        engine == .siliconflow ? siliconflowVoice : voice
+        switch engine {
+        case .siliconflow: return siliconflowVoice
+        case .xunfei:      return xunfeiVoice
+        default:           return voice
+        }
     }
     static func setVoice(_ v: String, for engine: TTSEngineKind) {
-        if engine == .siliconflow { siliconflowVoice = v } else { voice = v }
+        switch engine {
+        case .siliconflow: siliconflowVoice = v
+        case .xunfei:      xunfeiVoice = v
+        default:           voice = v
+        }
     }
 
     static func voiceLabel(for id: String) -> String {
