@@ -894,7 +894,7 @@ struct SettingsView: View {
         case .providers:   return "管理连接、密钥和每个模型的默认生成参数。"
         case .prompts:     return "保存可复用的 Prompt 模板,用 {{变量}} 占位,填充后一键复制。"
         case .webSearch:   return "配置 Firecrawl 让模型在需要时调用 web_search。"
-        case .tts:         return "选择朗读引擎与音色:Edge 神经语音(免 key)、Azure(自带 key)或系统语音。"
+        case .tts:         return "选择朗读引擎与音色:硅基流动 CosyVoice、讯飞语音(均国内直连)或系统语音。"
         case .sync:        return "iCloud 同步 会话、Provider 配置、Web Search 配置 与 API Key。容器对 Files app 隐藏。"
         case .backup:      return "把当前配置(不含会话)导出成 JSON 文件,或从备份恢复。可作为多设备同步的离线备选。"
         case .usage:       return "按天 + 模型查看 token 用量。input / output 分别计,辅助估算成本。"

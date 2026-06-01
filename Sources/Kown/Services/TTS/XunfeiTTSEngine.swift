@@ -16,10 +16,13 @@ struct XunfeiTTSEngine {
         guard !appID.isEmpty, !apiKey.isEmpty, !apiSecret.isEmpty else {
             throw TTSError.notConfigured("讯飞需要 APPID / APIKey / APISecret(设置 ▸ 朗读)")
         }
-        let url = try makeSignedURL()
+        guard let url = Self.signedURL(host: Self.host, path: Self.path,
+                                       apiKey: apiKey, apiSecret: apiSecret, date: Self.rfc1123Date()) else {
+            throw TTSError.network("讯飞 URL 构造失败")
+        }
 
-        var req = URLRequest(url: url)
-        req.setValue(Self.host, forHTTPHeaderField: "Host")
+        // 不手动设 Host(URLSessionWebSocketTask 自己管握手头;手动设会干扰)。
+        let req = URLRequest(url: url)
         let session = URLSession(configuration: .default)
         let ws = session.webSocketTask(with: req)
         ws.resume()
@@ -57,25 +60,32 @@ struct XunfeiTTSEngine {
         return audio
     }
 
-    // MARK: - 鉴权 URL
+    // MARK: - 鉴权(静态纯函数,便于单测)
 
-    private func makeSignedURL() throws -> URL {
-        let date = Self.rfc1123Date()
-        let signatureOrigin = "host: \(Self.host)\ndate: \(date)\nGET \(Self.path) HTTP/1.1"
-        let sigKey = SymmetricKey(data: Data(apiSecret.utf8))
-        let mac = HMAC<SHA256>.authenticationCode(for: Data(signatureOrigin.utf8), using: sigKey)
-        let signature = Data(mac).base64EncodedString()
-        let authOrigin = "api_key=\"\(apiKey)\", algorithm=\"hmac-sha256\", headers=\"host date request-line\", signature=\"\(signature)\""
-        let authorization = Data(authOrigin.utf8).base64EncodedString()
+    /// HMAC-SHA256 签名(base64)。签名串:`host: <host>\ndate: <date>\nGET <path> HTTP/1.1`。
+    static func signature(apiSecret: String, host: String, path: String, date: String) -> String {
+        let origin = "host: \(host)\ndate: \(date)\nGET \(path) HTTP/1.1"
+        let mac = HMAC<SHA256>.authenticationCode(for: Data(origin.utf8), using: SymmetricKey(data: Data(apiSecret.utf8)))
+        return Data(mac).base64EncodedString()
+    }
 
-        func enc(_ s: String) -> String {
-            s.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? s
-        }
-        let urlString = "wss://\(Self.host)\(Self.path)?authorization=\(enc(authorization))&date=\(enc(date))&host=\(enc(Self.host))"
-        guard let url = URL(string: urlString) else {
-            throw TTSError.network("讯飞 URL 构造失败")
-        }
-        return url
+    /// authorization 参数(base64 of `api_key="…", algorithm="hmac-sha256", headers="host date request-line", signature="…"`)。
+    static func authorization(apiKey: String, signature: String) -> String {
+        let origin = "api_key=\"\(apiKey)\", algorithm=\"hmac-sha256\", headers=\"host date request-line\", signature=\"\(signature)\""
+        return Data(origin.utf8).base64EncodedString()
+    }
+
+    /// 拼出带鉴权 query 的 wss URL。用 percentEncodedQuery 锁死编码,避免 URLSession 二次规范化。
+    static func signedURL(host: String, path: String, apiKey: String, apiSecret: String, date: String) -> URL? {
+        let sig = signature(apiSecret: apiSecret, host: host, path: path, date: date)
+        let auth = authorization(apiKey: apiKey, signature: sig)
+        func enc(_ s: String) -> String { s.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? s }
+        var comps = URLComponents()
+        comps.scheme = "wss"
+        comps.host = host
+        comps.path = path
+        comps.percentEncodedQuery = "authorization=\(enc(auth))&date=\(enc(date))&host=\(enc(host))"
+        return comps.url
     }
 
     private func frame(text: String, voice: String, ratePercent: Int) -> String {

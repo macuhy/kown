@@ -16,6 +16,7 @@ struct CompareTurnsView: View {
     /// 历史 turn 的追问 / 导出报告动作(由父视图注入)。
     var onFollowUpTurn: ((UUID) -> Void)? = nil
     var onExportTurn: ((UUID) -> Void)? = nil
+    var onShareTurn: ((UUID) -> Void)? = nil
 
     @State private var collapsedTurns: Set<UUID> = []
     @Environment(\.horizontalSizeClass) private var hSizeClass
@@ -55,7 +56,8 @@ struct CompareTurnsView: View {
                          onFork: { viewModel.forkConversation(fromTurnID: turn.id) },
                          onEdit: onEditTurn.map { f in { f(turn.id) } },
                          onFollowUp: onFollowUpTurn.map { f in { f(turn.id) } },
-                         onExportReport: onExportTurn.map { f in { f(turn.id) } })
+                         onExportReport: onExportTurn.map { f in { f(turn.id) } },
+                         onShareImage: onShareTurn.map { f in { f(turn.id) } })
             comparePanels {
                 ForEach(Array(turn.orderedPanelConfigs.prefix(2))) { cfg in
                     let key = cfg.id.uuidString

@@ -148,6 +148,19 @@ struct MainContentView: View {
         #endif
     }
 
+    /// 复制单轮为图片(并排各模型回答)到剪贴板。
+    private func shareTurnImage(_ turnID: UUID) {
+        guard let conv = viewModel.selectedConversation,
+              let turn = conv.turns.first(where: { $0.id == turnID }) else { return }
+        AnswerImageExporter.copyTurnToClipboard(turn: turn, mode: conv.mode)
+    }
+
+    /// 复制整会话为一张长图到剪贴板。
+    private func shareSessionImage() {
+        guard let conv = viewModel.selectedConversation else { return }
+        AnswerImageExporter.copySessionToClipboard(conversation: conv)
+    }
+
     // MARK: - 整会话导出
 
     /// 会话区工具栏的「导出」菜单 — 导出当前会话为 Markdown / JSON。
@@ -164,6 +177,11 @@ struct MainContentView: View {
                 }
             }
             Divider()
+            Button {
+                shareSessionImage()
+            } label: {
+                Label("复制整会话为图片", systemImage: "photo.on.rectangle.angled")
+            }
             Button {
                 if let conv { Platform.copyText(ConversationExporter.markdown(for: conv)) }
             } label: {
@@ -254,7 +272,8 @@ struct MainContentView: View {
                                 liveSummary: viewModel.summaryProvider,
                                 onEditTurn: { requestEdit($0) },
                                 onFollowUpTurn: { requestFollowUp($0) },
-                                onExportTurn: { exportTurnReport($0) }
+                                onExportTurn: { exportTurnReport($0) },
+                                onShareTurn: { shareTurnImage($0) }
                             )
                         case .direct:
                             DirectTurnsView(
@@ -267,6 +286,7 @@ struct MainContentView: View {
                                 onEditTurn: { requestEdit($0) },
                                 onFollowUpTurn: { requestFollowUp($0) },
                                 onExportTurn: { exportTurnReport($0) },
+                                onShareTurn: { shareTurnImage($0) },
                                 onUndoWrite: { viewModel.undoWrite(turnID: $0, write: $1) }
                             )
                         case .compare:
@@ -281,7 +301,8 @@ struct MainContentView: View {
                                 liveChair: viewModel.providersForCurrentSend().chair,
                                 onEditTurn: { requestEdit($0) },
                                 onFollowUpTurn: { requestFollowUp($0) },
-                                onExportTurn: { exportTurnReport($0) }
+                                onExportTurn: { exportTurnReport($0) },
+                                onShareTurn: { shareTurnImage($0) }
                             )
                         case .debate:
                             DebateTurnsView(
@@ -297,7 +318,8 @@ struct MainContentView: View {
                                 liveChair: viewModel.chairProvider,
                                 onEditTurn: { requestEdit($0) },
                                 onFollowUpTurn: { requestFollowUp($0) },
-                                onExportTurn: { exportTurnReport($0) }
+                                onExportTurn: { exportTurnReport($0) },
+                                onShareTurn: { shareTurnImage($0) }
                             )
                         }
                     }

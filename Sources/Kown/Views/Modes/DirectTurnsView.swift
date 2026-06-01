@@ -12,6 +12,7 @@ struct DirectTurnsView: View {
     var onEditTurn: ((UUID) -> Void)? = nil
     var onFollowUpTurn: ((UUID) -> Void)? = nil
     var onExportTurn: ((UUID) -> Void)? = nil
+    var onShareTurn: ((UUID) -> Void)? = nil
     /// 撤销某轮的 workspace 写入(turnID, write)。
     var onUndoWrite: ((UUID, AppliedWrite) -> Void)? = nil
 
@@ -44,7 +45,8 @@ struct DirectTurnsView: View {
                        onFork: onForkTurn.map { f in { f(turn.id) } },
                        onEdit: onEditTurn.map { f in { f(turn.id) } },
                        onFollowUp: onFollowUpTurn.map { f in { f(turn.id) } },
-                       onExportReport: onExportTurn.map { f in { f(turn.id) } })
+                       onExportReport: onExportTurn.map { f in { f(turn.id) } },
+                       onShareImage: onShareTurn.map { f in { f(turn.id) } })
             if let cfg = turn.orderedPanelConfigs.first {
                 let key = cfg.id.uuidString
                 assistantBubble(
@@ -151,7 +153,8 @@ struct DirectTurnsView: View {
 
     private func userBubble(prompt: String, timestamp: Date, images: [TurnImage] = [],
                             onFork: (() -> Void)? = nil, onEdit: (() -> Void)? = nil,
-                            onFollowUp: (() -> Void)? = nil, onExportReport: (() -> Void)? = nil) -> some View {
+                            onFollowUp: (() -> Void)? = nil, onExportReport: (() -> Void)? = nil,
+                            onShareImage: (() -> Void)? = nil) -> some View {
         HStack {
             Spacer(minLength: userLeadingGutter)
             VStack(alignment: .trailing, spacing: 4) {
@@ -178,7 +181,7 @@ struct DirectTurnsView: View {
                         }
                 }
                 HStack(spacing: 6) {
-                    if onFork != nil || onEdit != nil || onFollowUp != nil || onExportReport != nil {
+                    if onFork != nil || onEdit != nil || onFollowUp != nil || onExportReport != nil || onShareImage != nil {
                         Menu {
                             if let onEdit {
                                 Button { onEdit() } label: { Label("编辑并重发", systemImage: "pencil") }
@@ -188,6 +191,9 @@ struct DirectTurnsView: View {
                             }
                             if let onFork {
                                 Button { onFork() } label: { Label("从这里分支", systemImage: "arrow.triangle.branch") }
+                            }
+                            if let onShareImage {
+                                Button { onShareImage() } label: { Label("复制本轮为图片", systemImage: "photo.on.rectangle") }
                             }
                             if let onExportReport {
                                 Button { onExportReport() } label: { Label("导出本轮报告", systemImage: "square.and.arrow.up") }

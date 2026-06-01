@@ -19,6 +19,7 @@ struct CouncilTurnsView: View {
     /// 历史 turn 的追问 / 导出报告动作(由父视图注入)。
     var onFollowUpTurn: ((UUID) -> Void)? = nil
     var onExportTurn: ((UUID) -> Void)? = nil
+    var onShareTurn: ((UUID) -> Void)? = nil
 
     /// 已折叠的历史轮(整轮收起)。
     @State private var collapsedTurns: Set<UUID> = []
@@ -60,7 +61,8 @@ struct CouncilTurnsView: View {
                          onFork: { viewModel.forkConversation(fromTurnID: turn.id) },
                          onEdit: onEditTurn.map { f in { f(turn.id) } },
                          onFollowUp: onFollowUpTurn.map { f in { f(turn.id) } },
-                         onExportReport: onExportTurn.map { f in { f(turn.id) } })
+                         onExportReport: onExportTurn.map { f in { f(turn.id) } },
+                         onShareImage: onShareTurn.map { f in { f(turn.id) } })
             panelStack {
                 ForEach(turn.orderedPanelConfigs) { cfg in
                     let key = cfg.id.uuidString

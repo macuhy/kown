@@ -6,10 +6,9 @@ struct ModeTabsView: View {
     @State private var confirmSwitch = false
 
     var body: some View {
-        HStack(spacing: 4) {
-            ForEach(ConversationMode.allCases, id: \.self) { mode in
-                tab(for: mode)
-            }
+        ViewThatFits(in: .horizontal) {
+            tabs(showLabels: true)
+            tabs(showLabels: false)
         }
         .padding(3)
         #if os(iOS)
@@ -48,7 +47,15 @@ struct ModeTabsView: View {
         }
     }
 
-    private func tab(for mode: ConversationMode) -> some View {
+    private func tabs(showLabels: Bool) -> some View {
+        HStack(spacing: 4) {
+            ForEach(ConversationMode.allCases, id: \.self) { mode in
+                tab(for: mode, showLabel: showLabels)
+            }
+        }
+    }
+
+    private func tab(for mode: ConversationMode, showLabel: Bool) -> some View {
         let isActive = viewModel.currentMode == mode
         let tint = modeTint(mode)
         return Button {
@@ -57,13 +64,15 @@ struct ModeTabsView: View {
             HStack(spacing: 6) {
                 Image(systemName: mode.symbol)
                     .font(.system(size: tabIconSize, weight: .bold))
-                Text(mode.displayName)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.76)
+                if showLabel {
+                    Text(mode.displayName)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.76)
+                }
             }
             .font(tabFont)
             .foregroundStyle(isActive ? Color.white : Color.secondary)
-            .padding(.horizontal, tabHorizontalPadding)
+            .padding(.horizontal, tabHorizontalPadding(showLabel: showLabel))
             .padding(.vertical, tabVerticalPadding)
             #if os(iOS)
             .frame(maxWidth: .infinity, minHeight: 32)
@@ -91,6 +100,7 @@ struct ModeTabsView: View {
         }
         .buttonStyle(.plain)
         .help(mode.displayName)
+        .accessibilityLabel(mode.displayName)
     }
 
     private var tabFont: Font {
@@ -109,11 +119,11 @@ struct ModeTabsView: View {
         #endif
     }
 
-    private var tabHorizontalPadding: CGFloat {
+    private func tabHorizontalPadding(showLabel: Bool) -> CGFloat {
         #if os(iOS)
-        3
+        showLabel ? 3 : 8
         #else
-        11
+        showLabel ? 11 : 10
         #endif
     }
 

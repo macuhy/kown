@@ -75,9 +75,11 @@ struct PromptBubble: View {
     var onFollowUp: (() -> Void)? = nil
     /// 历史 turn 才传:把该轮导出成单轮报告。
     var onExportReport: (() -> Void)? = nil
+    /// 历史 turn 才传:把该轮(并排各模型回答)复制成图片到剪贴板。
+    var onShareImage: (() -> Void)? = nil
 
     private var hasMenu: Bool {
-        onFork != nil || onEdit != nil || onFollowUp != nil || onExportReport != nil
+        onFork != nil || onEdit != nil || onFollowUp != nil || onExportReport != nil || onShareImage != nil
     }
 
     var body: some View {
@@ -124,6 +126,9 @@ struct PromptBubble: View {
                             }
                             if let onFork {
                                 Button { onFork() } label: { Label("从这里分支", systemImage: "arrow.triangle.branch") }
+                            }
+                            if let onShareImage {
+                                Button { onShareImage() } label: { Label("复制本轮为图片", systemImage: "photo.on.rectangle") }
                             }
                             if let onExportReport {
                                 Button { onExportReport() } label: { Label("导出本轮报告", systemImage: "square.and.arrow.up") }
@@ -1163,13 +1168,16 @@ struct ModeTurnCard<Content: View>: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
                         .font(.system(.headline, design: .rounded).weight(.bold))
+                        .lineLimit(1)
                     if !subtitle.isEmpty {
                         Text(subtitle)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
+                            .truncationMode(.tail)
                     }
                 }
+                .layoutPriority(1)
                 Spacer(minLength: 10)
                 if isLive {
                     HStack(spacing: 6) {
@@ -1185,6 +1193,7 @@ struct ModeTurnCard<Content: View>: View {
                     .overlay {
                         Capsule().strokeBorder(tint.opacity(0.20), lineWidth: 1)
                     }
+                    .fixedSize()
                 }
             }
 

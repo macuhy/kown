@@ -219,7 +219,7 @@ struct TTSSettingsView: View {
 
     private var noteSection: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Label("Edge 引擎走微软非官方端点,免费但可能偶发失效 —— 失败会自动回退系统语音。",
+            Label("硅基流动 / 讯飞均为国内直连;合成失败会自动回退系统语音。朗读配置随 iCloud 同步。",
                   systemImage: "info.circle")
                 .font(.caption)
                 .foregroundStyle(.secondary)

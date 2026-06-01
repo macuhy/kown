@@ -59,24 +59,44 @@ struct ResponseColumnView: View {
         HStack(spacing: 12) {
             providerMark
             VStack(alignment: .leading, spacing: 6) {
-                // Provider name + status
-                HStack(spacing: 8) {
-                    Text(config.displayName)
-                        .font(.system(.subheadline, design: .rounded).weight(.bold))
-                        .lineLimit(1)
-                    Spacer()
-                    HStack(spacing: 6) {
-                        httpStatusBadge
-                        statusDot
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) {
+                        providerName
+                        Spacer(minLength: 8)
+                        responseStatusGroup
                     }
-                    .fixedSize()
+                    VStack(alignment: .leading, spacing: 5) {
+                        providerName
+                        responseStatusGroup
+                    }
                 }
-                HStack(spacing: 6) {
-                    metadataPill(config.model, icon: "cpu", emphasized: true)
-                    metadataPill(endpointDisplay, icon: config.kind.isCLI ? "terminal" : "network", prefix: config.kind.isCLI ? "EXEC" : "POST")
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 6) {
+                        metadataPill(config.model, icon: "cpu", emphasized: true)
+                        metadataPill(endpointDisplay, icon: config.kind.isCLI ? "terminal" : "network", prefix: config.kind.isCLI ? "EXEC" : "POST")
+                    }
+                    VStack(alignment: .leading, spacing: 5) {
+                        metadataPill(config.model, icon: "cpu", emphasized: true)
+                        metadataPill(endpointDisplay, icon: config.kind.isCLI ? "terminal" : "network", prefix: config.kind.isCLI ? "EXEC" : "POST")
+                    }
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    private var providerName: some View {
+        Text(config.displayName)
+            .font(.system(.subheadline, design: .rounded).weight(.bold))
+            .lineLimit(1)
+    }
+
+    private var responseStatusGroup: some View {
+        HStack(spacing: 6) {
+            httpStatusBadge
+            statusDot
+        }
+        .fixedSize()
     }
 
     private var endpointDisplay: String {
