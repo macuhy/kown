@@ -34,6 +34,7 @@
 		38123390632F07ACF834D2E5 /* DirectTurnsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C593599EB8BDECA69569492 /* DirectTurnsView.swift */; };
 		3CC5FEA9353CFE14294D54F2 /* BackupSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0749B24CA1D69C9404037BCC /* BackupSettingsView.swift */; };
 		3FBF4569C76A065A37E5F123 /* AppViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74FECDB1C53A73FB4AD2834E /* AppViewModel.swift */; };
+		4FDBDE512061E3B291077A54 /* AppViewModel+Send.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4592A4913C32C4F72D9FF27 /* AppViewModel+Send.swift */; };
 		54F12825C0643F97AE2B3D62 /* AnswerCardImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 461939F39D73ACC5E7E54AE4 /* AnswerCardImage.swift */; };
 		55AEC594F531FC2EAF0BEB6E /* ConversationSearchIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8F6CE55B7CBED99EF0E804A /* ConversationSearchIndex.swift */; };
 		5F28C5030B88AF0BBCE9BAFB /* ConversationRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E99E10045CA633CC12C339A4 /* ConversationRowView.swift */; };
@@ -159,6 +160,7 @@
 		EA814C2E69E49C2CE4217231 /* SSELineStream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSELineStream.swift; sourceTree = "<group>"; };
 		EB64A12EBE235CC880ADEBA4 /* WebSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSearch.swift; sourceTree = "<group>"; };
 		ED3B4692DB0791298A87B40E /* Attachment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Attachment.swift; sourceTree = "<group>"; };
+		F4592A4913C32C4F72D9FF27 /* AppViewModel+Send.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppViewModel+Send.swift"; sourceTree = "<group>"; };
 		F66270B7AD94FD820AABAF62 /* LLMClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMClient.swift; sourceTree = "<group>"; };
 		F6FD94D467DED20B51080333 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
 		F8F6CE55B7CBED99EF0E804A /* ConversationSearchIndex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationSearchIndex.swift; sourceTree = "<group>"; };
@@ -267,6 +269,7 @@
 			isa = PBXGroup;
 			children = (
 				74FECDB1C53A73FB4AD2834E /* AppViewModel.swift */,
+				F4592A4913C32C4F72D9FF27 /* AppViewModel+Send.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -428,6 +431,7 @@
 				9BA152E8F7777DC70B8C49D6 /* ActiveProviderBar.swift in Sources */,
 				54F12825C0643F97AE2B3D62 /* AnswerCardImage.swift in Sources */,
 				A284C3C6C49D6F251FC06DD0 /* AnthropicClient.swift in Sources */,
+				4FDBDE512061E3B291077A54 /* AppViewModel+Send.swift in Sources */,
 				3FBF4569C76A065A37E5F123 /* AppViewModel.swift in Sources */,
 				1D2F258436D3A95D0C941FF2 /* Attachment.swift in Sources */,
 				2DE4CB8A385A990438C05770 /* BackgroundAudioKeepalive.swift in Sources */,
