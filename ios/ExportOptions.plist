@@ -18,6 +18,8 @@
     <dict>
         <key>com.xiaobo.kown</key>
         <string>Kown AppStore</string>
+        <key>com.xiaobo.kown.Share</key>
+        <string>Kown Share AppStore</string>
     </dict>
 
     <key>destination</key>
