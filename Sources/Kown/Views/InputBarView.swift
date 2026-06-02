@@ -22,6 +22,7 @@ struct InputBarView: View {
     @State private var showURLScrape = false
     @State private var urlDraft = ""
     @State private var scraping = false
+    @State private var showVoice = false
     #if os(macOS)
     @State private var showFileImporter = false
     @State private var showImageImporter = false
@@ -321,6 +322,7 @@ struct InputBarView: View {
             }
             .disabled(viewModel.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             micButton
+            voiceButton
             #if os(macOS)
             workspaceButton
             #endif
@@ -330,6 +332,25 @@ struct InputBarView: View {
         .overlay {
             Capsule().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
         }
+        #if os(iOS)
+        .fullScreenCover(isPresented: $showVoice) {
+            VoiceConversationView(viewModel: viewModel)
+        }
+        #else
+        .sheet(isPresented: $showVoice) {
+            VoiceConversationView(viewModel: viewModel)
+        }
+        #endif
+    }
+
+    /// 语音对话模式入口:听 → 发 → 朗读 → 再听的免手循环。
+    /// 无可用 provider 或设备不支持语音识别时禁用。
+    private var voiceButton: some View {
+        let ready = dictation.isAvailable && viewModel.providers.contains(where: \.enabled)
+        return iconButton("waveform", help: ready ? "语音对话(免手连续对话)" : "语音对话(需启用 provider 且设备支持语音识别)") {
+            showVoice = true
+        }
+        .disabled(!ready)
     }
 
     #if os(macOS)
