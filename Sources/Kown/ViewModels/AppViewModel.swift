@@ -18,6 +18,10 @@ final class AppViewModel {
     var prompt: String = ""
     /// 各会话未发送的输入草稿(切走暂存、切回还原)。会话级,内存留存。
     private var drafts: [UUID: String] = [:]
+    /// 当前轮的「追问建议」(点「追问建议」按需生成);发送/切换会话清空。
+    var followUpSuggestions: [String] = []
+    /// 正在生成追问建议。
+    var suggestingFollowUps = false
     /// ⌘K 命令面板是否打开(macOS 菜单命令与 RootView sheet 共用此开关)。
     var showCommandPalette = false
     /// 会话内查找条是否显示(⌘F)。
@@ -198,6 +202,7 @@ final class AppViewModel {
         conversations.insert(conv, at: 0)
         selectedConversationID = conv.id
         prompt = ""
+        followUpSuggestions = []
         activeMode = mode
         ConversationStore.save(conv)
         applyAlwaysEnableWebSearchIfNeeded()
@@ -236,6 +241,7 @@ final class AppViewModel {
         conversations.insert(fork, at: 0)
         selectedConversationID = fork.id
         prompt = ""
+        followUpSuggestions = []
         activeMode = fork.mode
         ConversationStore.save(fork)
         applyAlwaysEnableWebSearchIfNeeded()
@@ -260,6 +266,7 @@ final class AppViewModel {
         stashDraft()
         selectedConversationID = id
         prompt = drafts[id] ?? ""
+        followUpSuggestions = []
         applyAlwaysEnableWebSearchIfNeeded()
         if let conv = conversations.first(where: { $0.id == id }) {
             activeMode = conv.mode
@@ -270,6 +277,49 @@ final class AppViewModel {
     func continueGenerating() {
         guard !isRunning, let conv = selectedConversation, !conv.turns.isEmpty else { return }
         prompt = "继续"
+        send()
+    }
+
+    /// 按需生成 3 条追问建议(基于最近一轮问答),用便宜的小调用。
+    func suggestFollowUps() {
+        guard !suggestingFollowUps, !isRunning,
+              let turn = selectedConversation?.turns.last,
+              let cfg = chairProvider ?? providers.first(where: { $0.enabled && !$0.kind.isCLI }) else { return }
+        let answer = turn.chairSummary ?? turn.summaryText
+            ?? turn.responses.values.first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) ?? ""
+        guard !answer.isEmpty else { return }
+        let q = String(turn.prompt.prefix(800))
+        let a = String(answer.prefix(1200))
+        suggestingFollowUps = true
+        followUpSuggestions = []
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.suggestingFollowUps = false }
+            let apiKey = (try? KeychainStore.load(id: cfg.id)) ?? ""
+            let prompt = "基于下面的问答,提出 3 个简短、具体、互不相同的后续追问(中文)。每行一个,不要编号、引号或解释。\n\n问:\(q)\n答:\(a)"
+            let options = ChatOptions(systemPrompt: nil, temperature: 0.7, maxTokens: 200)
+            var collected = ""
+            do {
+                let client = ProviderRegistry.client(for: cfg.kind)
+                for try await chunk in client.stream(prompt: prompt, options: options, config: cfg, apiKey: apiKey) {
+                    if case .text(let t) = chunk { collected += t }
+                }
+            } catch { return }
+            let lines = collected.split(whereSeparator: \.isNewline).map { raw -> String in
+                var s = raw.trimmingCharacters(in: .whitespaces)
+                while let f = s.first, f == "-" || f == "*" || f == "•" || f == "." || f == "、" || f == ")" || f == ")" || f.isNumber || f == " " {
+                    s.removeFirst()
+                }
+                return s.trimmingCharacters(in: .whitespaces)
+            }.filter { !$0.isEmpty }
+            self.followUpSuggestions = Array(lines.prefix(3))
+        }
+    }
+
+    /// 点某条追问建议 → 直接发送。
+    func askFollowUp(_ question: String) {
+        followUpSuggestions = []
+        prompt = question
         send()
     }
 

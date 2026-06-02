@@ -84,6 +84,7 @@ extension AppViewModel {
         // 清空 prompt 输入框 + 附件(🌐 状态保留,跨发送/跨重启持久化)
         prompt = ""
         attachments = []
+        followUpSuggestions = []
 
         let convID = conversations[convIdx].id
         runSend(

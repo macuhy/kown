@@ -276,6 +276,58 @@ struct MainContentView: View {
         .padding(.vertical, 6)
     }
 
+    /// 追问建议:无建议时显示「追问建议」按钮(按需生成);有建议时列出可点的追问 chips。
+    @ViewBuilder
+    private var followUpBar: some View {
+        if viewModel.followUpSuggestions.isEmpty {
+            HStack {
+                Spacer()
+                Button { viewModel.suggestFollowUps() } label: {
+                    Label(viewModel.suggestingFollowUps ? "生成中…" : "追问建议", systemImage: "sparkles")
+                        .font(.callout.weight(.semibold))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                }
+                .buttonStyle(.bordered)
+                .clipShape(Capsule())
+                .disabled(viewModel.suggestingFollowUps)
+                Spacer()
+            }
+            .padding(.bottom, 6)
+        } else {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(viewModel.followUpSuggestions, id: \.self) { q in
+                    Button { viewModel.askFollowUp(q) } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "sparkles")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(Color.accentColor)
+                            Text(q)
+                                .font(.callout)
+                                .foregroundStyle(.primary)
+                                .multilineTextAlignment(.leading)
+                            Spacer(minLength: 6)
+                            Image(systemName: "arrow.up.circle.fill")
+                                .foregroundStyle(Color.accentColor.opacity(0.7))
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 11)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .strokeBorder(Color.accentColor.opacity(0.18), lineWidth: 1)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 18)
+            .padding(.bottom, 8)
+        }
+    }
+
     @ViewBuilder
     private var content: some View {
         let conv = viewModel.selectedConversation
@@ -375,6 +427,7 @@ struct MainContentView: View {
                         }
                         if hasTurns, !(viewModel.runningConvID == conv?.id && viewModel.isRunning) {
                             continueButton
+                            followUpBar
                         }
                     }
                     Color.clear.frame(height: 4).id("bottom")
