@@ -194,7 +194,7 @@ struct MainContentView: View {
                 Label("复制为 Markdown", systemImage: "doc.on.doc")
             }
             Button {
-                let all = ConversationExporter.markdownForAll(viewModel.conversations)
+                let all = ConversationExporter.markdownForAll(viewModel.activeConversations)
                 saveText(all, fileName: "Kown-全部会话.md")
             } label: {
                 Label("导出全部会话(Markdown)", systemImage: "tray.full")

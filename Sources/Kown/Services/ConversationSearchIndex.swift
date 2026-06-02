@@ -32,7 +32,7 @@ final class ConversationSearchIndex {
     func rebuild(_ conversations: [Conversation]) {
         inverted.removeAll(keepingCapacity: true)
         documents.removeAll(keepingCapacity: true)
-        for conv in conversations {
+        for conv in conversations where conv.deletedAt == nil {
             index(conv)
         }
     }

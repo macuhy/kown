@@ -17,6 +17,10 @@ struct SidebarView: View {
     @State private var searchIndex = ConversationSearchIndex()
     /// 搜索框输入
     @State private var searchText: String = ""
+    /// 是否在看回收站。
+    @State private var isViewingTrash = false
+    /// 清空回收站确认。
+    @State private var confirmEmptyTrash = false
 
     /// 当前是否处于搜索态
     private var isSearching: Bool {
@@ -35,7 +39,11 @@ struct SidebarView: View {
 
     /// 过滤后展示的会话:标签过滤 + 搜索命中过滤,然后置顶优先(其余维持数组序)。
     private var displayedConversations: [Conversation] {
-        var list = viewModel.conversations
+        if isViewingTrash {
+            return viewModel.trashedConversations
+                .sorted { ($0.deletedAt ?? .distantPast) > ($1.deletedAt ?? .distantPast) }
+        }
+        var list = viewModel.activeConversations
         if let tag = selectedTag {
             list = list.filter { $0.tags.contains(tag) }
         }
@@ -58,9 +66,12 @@ struct SidebarView: View {
             Rectangle()
                 .fill(Color.primary.opacity(0.08))
                 .frame(height: 1)
-            searchField
-            tagFilterBar
+            if !isViewingTrash {
+                searchField
+                tagFilterBar
+            }
             list
+            trashBar
         }
         .frame(minWidth: 240)
         .background(sidebarBackdrop)
@@ -88,6 +99,65 @@ struct SidebarView: View {
             Button("取消", role: .cancel) { tagEditTarget = nil }
         } message: {
             Text("多个标签用逗号分隔")
+        }
+        .confirmationDialog("清空回收站?将永久删除 \(viewModel.trashedConversations.count) 个会话,不可恢复。",
+                            isPresented: $confirmEmptyTrash) {
+            Button("清空回收站", role: .destructive) { viewModel.emptyTrash() }
+            Button("取消", role: .cancel) { }
+        }
+    }
+
+    /// 底部回收站条:正常态显示「回收站(n)」入口;回收站态显示「返回 + 清空」。
+    @ViewBuilder
+    private var trashBar: some View {
+        let trashCount = viewModel.trashedConversations.count
+        if isViewingTrash {
+            HStack(spacing: 10) {
+                Button {
+                    isViewingTrash = false
+                } label: {
+                    Label("返回会话", systemImage: "chevron.left")
+                        .font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.plain)
+                Spacer()
+                Button(role: .destructive) {
+                    confirmEmptyTrash = true
+                } label: {
+                    Label("清空", systemImage: "trash")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.red)
+                }
+                .buttonStyle(.plain)
+                .disabled(trashCount == 0)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(.thinMaterial)
+            .overlay(alignment: .top) { Rectangle().fill(Color.primary.opacity(0.08)).frame(height: 1) }
+        } else if trashCount > 0 {
+            Button {
+                isViewingTrash = true
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "trash")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.secondary)
+                    Text("回收站(\(trashCount))")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.tertiary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(.thinMaterial)
+            .overlay(alignment: .top) { Rectangle().fill(Color.primary.opacity(0.08)).frame(height: 1) }
         }
     }
 
@@ -187,7 +257,7 @@ struct SidebarView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("All Conversations")
                     .font(.system(.headline, design: .rounded).weight(.bold))
-                Text("\(viewModel.conversations.count) 个会话")
+                Text("\(viewModel.activeConversations.count) 个会话")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
@@ -238,7 +308,7 @@ struct SidebarView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("会话库")
                     .font(.headline.weight(.black))
-                Text("\(viewModel.conversations.count) 个会话 · \(viewModel.currentMode.displayName)")
+                Text("\(viewModel.activeConversations.count) 个会话 · \(viewModel.currentMode.displayName)")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
@@ -286,7 +356,19 @@ struct SidebarView: View {
 
     @ViewBuilder
     private var list: some View {
-        if viewModel.conversations.isEmpty {
+        if isViewingTrash && displayedConversations.isEmpty {
+            VStack(spacing: 8) {
+                Image(systemName: "trash")
+                    .font(.system(size: 30, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 62, height: 62)
+                    .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                Text("回收站为空")
+                    .font(.headline.weight(.bold))
+            }
+            .padding(22)
+            .frame(maxHeight: .infinity)
+        } else if !isViewingTrash && viewModel.activeConversations.isEmpty {
             VStack(spacing: 8) {
                 Image(systemName: "bubble.left.and.bubble.right")
                     .font(.system(size: 32, weight: .semibold))
@@ -358,10 +440,13 @@ struct SidebarView: View {
                                 onEditTags: {
                                     tagDraft = conv.tags.joined(separator: ", ")
                                     tagEditTarget = IdentifiedID(id: conv.id)
-                                }
+                                },
+                                inTrash: isViewingTrash,
+                                onRestore: { viewModel.restoreConversation(conv.id) },
+                                onPurge: { viewModel.permanentlyDeleteConversation(conv.id) }
                             )
                             // 搜索态下,在行下方展示命中片段(带关键词高亮)
-                            if let hit = hits[conv.id], let snippet = highlightedSnippet(hit) {
+                            if !isViewingTrash, let hit = hits[conv.id], let snippet = highlightedSnippet(hit) {
                                 snippet
                                     .font(.caption)
                                     .foregroundStyle(.secondary)

@@ -161,16 +161,17 @@ struct CommandPaletteView: View {
     private var conversationActions: [Action] {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let convs: [Conversation]
+        let active = viewModel.activeConversations
         if q.isEmpty {
-            convs = Array(viewModel.conversations.prefix(8))
+            convs = Array(active.prefix(8))
         } else {
             // 全文命中(标题 + 正文)优先;再并上标题直接命中,去重保持顺序。
             let hitIDs = searchIndex.search(q).map(\.id)
             var ordered: [UUID] = hitIDs
-            for c in viewModel.conversations where c.title.localizedCaseInsensitiveContains(q) && !ordered.contains(c.id) {
+            for c in active where c.title.localizedCaseInsensitiveContains(q) && !ordered.contains(c.id) {
                 ordered.append(c.id)
             }
-            let byID = Dictionary(uniqueKeysWithValues: viewModel.conversations.map { ($0.id, $0) })
+            let byID = Dictionary(uniqueKeysWithValues: active.map { ($0.id, $0) })
             convs = ordered.compactMap { byID[$0] }
         }
         return convs.map { conv in

@@ -281,6 +281,8 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
     var mode: ConversationMode
     var createdAt: Date
     var updatedAt: Date
+    /// 软删除时间戳。非 nil = 在回收站(可恢复);超过 30 天启动时自动永久清理。
+    var deletedAt: Date?
     var turns: [Turn]
     /// 滚动摘要 — 由 `ConversationSummarizer` 维护,发送时注入到 prompt 头部。
     var contextSummary: String?
@@ -312,6 +314,7 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
          mode: ConversationMode = .council,
          createdAt: Date = Date(),
          updatedAt: Date = Date(),
+         deletedAt: Date? = nil,
          turns: [Turn] = [],
          contextSummary: String? = nil,
          summarizedThroughTurnCount: Int = 0,
@@ -328,6 +331,7 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
         self.mode = mode
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.deletedAt = deletedAt
         self.turns = turns
         self.contextSummary = contextSummary
         self.summarizedThroughTurnCount = summarizedThroughTurnCount
@@ -349,6 +353,7 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
         self.mode = try c.decode(ConversationMode.self, forKey: .mode)
         self.createdAt = try c.decode(Date.self, forKey: .createdAt)
         self.updatedAt = try c.decode(Date.self, forKey: .updatedAt)
+        self.deletedAt = try c.decodeIfPresent(Date.self, forKey: .deletedAt)
         self.turns = try c.decode([Turn].self, forKey: .turns)
         self.contextSummary = try c.decodeIfPresent(String.self, forKey: .contextSummary)
         self.summarizedThroughTurnCount = try c.decodeIfPresent(Int.self, forKey: .summarizedThroughTurnCount) ?? 0

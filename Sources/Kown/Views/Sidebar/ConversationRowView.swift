@@ -13,8 +13,12 @@ struct ConversationRowView: View {
     var onEditSystemPrompt: () -> Void = {}
     var onTogglePin: () -> Void = {}
     var onEditTags: () -> Void = {}
+    /// 回收站态:菜单改为「恢复 / 永久删除」。
+    var inTrash: Bool = false
+    var onRestore: () -> Void = {}
+    var onPurge: () -> Void = {}
 
-    @State private var confirmDelete = false
+    @State private var confirmPurge = false
     @FocusState private var renameFocused: Bool
 
     var body: some View {
@@ -140,17 +144,22 @@ struct ConversationRowView: View {
         // 整行可点 = 选中（重命名状态下不响应，避免点 TextField 退出 rename）
         .contentShape(RoundedRectangle(cornerRadius: rowCorner, style: .continuous))
         .onTapGesture {
-            if !isRenaming { onSelect() }
+            if !isRenaming && !inTrash { onSelect() }
         }
         .contextMenu {
-            Button(conversation.pinned ? "取消置顶" : "置顶") { onTogglePin() }
-            Button("编辑标签…") { onEditTags() }
-            Button("重命名") { onStartRename() }
-            Button("会话系统提示…") { onEditSystemPrompt() }
-            Button("删除", role: .destructive) { confirmDelete = true }
+            if inTrash {
+                Button("恢复") { onRestore() }
+                Button("永久删除", role: .destructive) { confirmPurge = true }
+            } else {
+                Button(conversation.pinned ? "取消置顶" : "置顶") { onTogglePin() }
+                Button("编辑标签…") { onEditTags() }
+                Button("重命名") { onStartRename() }
+                Button("会话系统提示…") { onEditSystemPrompt() }
+                Button("移到回收站", role: .destructive) { onDelete() }
+            }
         }
-        .confirmationDialog("删除「\(conversation.title)」?", isPresented: $confirmDelete) {
-            Button("删除", role: .destructive) { onDelete() }
+        .confirmationDialog("永久删除「\(conversation.title)」?此操作不可恢复。", isPresented: $confirmPurge) {
+            Button("永久删除", role: .destructive) { onPurge() }
             Button("取消", role: .cancel) { }
         }
     }

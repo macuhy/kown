@@ -139,6 +139,9 @@ final class AppViewModel {
         self.councilVotingEnabled = UserDefaults.standard.bool(forKey: Self.councilVotingKey)
         self.autoRouteEnabled = UserDefaults.standard.bool(forKey: Self.autoRouteKey)
 
+        // 清理被删超过 30 天的会话(回收站自动过期)。
+        purgeExpiredTrash()
+
         // iCloud 容器探测是异步后台进行的(ICloudSync.init 里 Task.detached)。
         // 冷启动时 init() 跑 loadAll 那一刻容器可能还没就绪,iPhone 端尤甚。
         // ICloudSync 现在有 `readyForCloudWrite` 闸门(等本地 `.kown` 出现或 10s timeout),
@@ -294,17 +297,58 @@ final class AppViewModel {
         ConversationStore.save(conversations[idx])
     }
 
+    /// 未删除(主列表)与已删除(回收站)的会话。
+    var activeConversations: [Conversation] { conversations.filter { $0.deletedAt == nil } }
+    var trashedConversations: [Conversation] { conversations.filter { $0.deletedAt != nil } }
+
+    /// 软删除:移入回收站(可恢复)。bump updatedAt 保证跨 iCloud 同步以本次为准。
     func deleteConversation(_ id: UUID) {
+        guard let idx = conversations.firstIndex(where: { $0.id == id }) else { return }
+        conversations[idx].deletedAt = Date()
+        conversations[idx].updatedAt = Date()
+        ConversationStore.save(conversations[idx])
+        if selectedConversationID == id {
+            selectedConversationID = activeConversations.first?.id
+            liveStates.removeAll()
+            liveChairState = nil
+            liveSummaryState = nil
+            liveDebateRounds.removeAll()
+        }
+    }
+
+    /// 从回收站恢复。
+    func restoreConversation(_ id: UUID) {
+        guard let idx = conversations.firstIndex(where: { $0.id == id }) else { return }
+        conversations[idx].deletedAt = nil
+        conversations[idx].updatedAt = Date()
+        ConversationStore.save(conversations[idx])
+    }
+
+    /// 永久删除(删文件 + 日志 + 内存),不可恢复。
+    func permanentlyDeleteConversation(_ id: UUID) {
         let title = conversations.first(where: { $0.id == id })?.title ?? ""
         conversations.removeAll { $0.id == id }
         ConversationStore.delete(id)
         ResponseLogger.deleteDirectory(title: title, conversationID: id.uuidString)
         if selectedConversationID == id {
-            selectedConversationID = nil
+            selectedConversationID = activeConversations.first?.id
             liveStates.removeAll()
             liveChairState = nil
             liveSummaryState = nil
             liveDebateRounds.removeAll()
+        }
+    }
+
+    /// 清空回收站(永久删除所有已软删的会话)。
+    func emptyTrash() {
+        for c in trashedConversations { permanentlyDeleteConversation(c.id) }
+    }
+
+    /// 启动时清理被删超过 30 天的会话(永久删除)。
+    func purgeExpiredTrash() {
+        let threshold = Date().addingTimeInterval(-30 * 24 * 3600)
+        for c in conversations where (c.deletedAt.map { $0 < threshold } ?? false) {
+            permanentlyDeleteConversation(c.id)
         }
     }
 
@@ -357,7 +401,7 @@ final class AppViewModel {
     /// 全部会话出现过的标签(按出现频率降序),用于侧栏过滤 chips。
     var allTags: [String] {
         var count: [String: Int] = [:]
-        for c in conversations { for t in c.tags { count[t, default: 0] += 1 } }
+        for c in conversations where c.deletedAt == nil { for t in c.tags { count[t, default: 0] += 1 } }
         return count.keys.sorted { (count[$0] ?? 0, $1) > (count[$1] ?? 0, $0) }
     }
 
