@@ -203,6 +203,7 @@ private struct VoiceError: Error {
 struct VoiceConversationView: View {
     let viewModel: AppViewModel
     @StateObject private var controller: VoiceLoopController
+    @ObservedObject private var speech = SpeechService.shared
     @Environment(\.dismiss) private var dismiss
     @State private var pulse = false
 
@@ -330,17 +331,37 @@ struct VoiceConversationView: View {
 
     private func assistantBubble(_ text: String) -> some View {
         HStack(alignment: .top) {
-            MarkdownText(text: text)
-                .padding(14)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.platformControlBackground.opacity(0.5),
-                            in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
+            Group {
+                // 正在朗读这条 → karaoke 高亮(已读/未读);否则渲染 markdown。
+                if speech.speakingText == text, let full = speech.spokenText {
+                    karaokeText(full, progress: speech.spokenCharProgress)
+                        .font(.body)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    MarkdownText(text: text)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
+            }
+            .padding(14)
+            .background(Color.platformControlBackground.opacity(0.5),
+                        in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
+            }
             Spacer(minLength: 40)
         }
+    }
+
+    /// 已读部分用正常色、未读部分降透明度,游标按 Character 计数切分。
+    private func karaokeText(_ full: String, progress: Int) -> Text {
+        let clamped = max(0, min(progress, full.count))
+        let idx = full.index(full.startIndex, offsetBy: clamped)
+        let read = String(full[..<idx])
+        let rest = String(full[idx...])
+        return Text(read).foregroundColor(.primary)
+            + Text(rest).foregroundColor(.secondary.opacity(0.45))
     }
 
     private var thinkingBubble: some View {

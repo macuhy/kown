@@ -22,8 +22,18 @@ final class SpeechService: NSObject, ObservableObject, AVSpeechSynthesizerDelega
     /// 预取上限:最多领先播放 3 段,避免长文一次性全合成(省成本 + 不打满限流)。
     private let prefetchAhead = 3
 
+    // karaoke 进度状态(神经引擎按音频时长插值)
+    private var segmentCharOffsets: [Int] = []   // 各段在 spokenText 内的起始 Character 偏移
+    private var segmentCharLengths: [Int] = []
+    private var playingSegmentIndex = -1         // 当前播放到第几段(出队计数)
+    private var progressTimer: Timer?
+
     /// 当前正在朗读的文本(供卡片判断按钮显示「朗读」还是「停止」)。
     @Published private(set) var speakingText: String?
+    /// karaoke 高亮:当前朗读的全文(= speakingText 的 trim 版,用于按游标切分)。
+    @Published private(set) var spokenText: String?
+    /// karaoke 高亮:已读到的字符数(`spokenText` 内 Character 计数游标)。
+    @Published private(set) var spokenCharProgress: Int = 0
     /// 网络引擎首段还在合成中 — UI 可显示 loading。
     @Published private(set) var preparing: Bool = false
     /// 上次朗读的诊断信息:网络引擎失败回退/中断时记下原因(设置页展示),成功则清空。
@@ -61,6 +71,8 @@ final class SpeechService: NSObject, ObservableObject, AVSpeechSynthesizerDelega
         }
 
         speakingText = text
+        spokenText = trimmed
+        spokenCharProgress = 0
         preparing = true
         lastNote = nil
         let voice = TTSConfig.voice(for: engine)
@@ -73,6 +85,7 @@ final class SpeechService: NSObject, ObservableObject, AVSpeechSynthesizerDelega
         } else {
             segments = Self.segments(from: trimmed, target: 80, hardMax: 200)
         }
+        computeSegmentOffsets(segments, in: trimmed)
 
         synthTask = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -122,6 +135,56 @@ final class SpeechService: NSObject, ObservableObject, AVSpeechSynthesizerDelega
         playToken += 1
         speakingText = nil
         preparing = false
+        resetKaraoke()
+    }
+
+    /// 顺序定位每段在全文中的起始 Character 偏移 + 段长,供 karaoke 插值。
+    private func computeSegmentOffsets(_ segments: [String], in full: String) {
+        var offsets: [Int] = []
+        var lengths: [Int] = []
+        var cursor = full.startIndex
+        for seg in segments {
+            if let r = full.range(of: seg, range: cursor..<full.endIndex) {
+                offsets.append(full.distance(from: full.startIndex, to: r.lowerBound))
+                lengths.append(seg.count)
+                cursor = r.upperBound
+            } else {
+                let start = (offsets.last ?? 0) + (lengths.last ?? 0)
+                offsets.append(start)
+                lengths.append(seg.count)
+            }
+        }
+        segmentCharOffsets = offsets
+        segmentCharLengths = lengths
+        playingSegmentIndex = -1
+    }
+
+    private func resetKaraoke() {
+        progressTimer?.invalidate()
+        progressTimer = nil
+        segmentCharOffsets = []
+        segmentCharLengths = []
+        playingSegmentIndex = -1
+        spokenText = nil
+        spokenCharProgress = 0
+    }
+
+    /// 段内按音频时长插值推进游标(神经引擎)。
+    private func startProgressTimer(token: Int) {
+        progressTimer?.invalidate()
+        let i = playingSegmentIndex
+        guard i >= 0, i < segmentCharOffsets.count else { return }
+        let start = segmentCharOffsets[i]
+        let len = segmentCharLengths[i]
+        progressTimer = Timer.scheduledTimer(withTimeInterval: 0.08, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                guard self.playToken == token, self.isPlayingSegment, let p = self.player else { return }
+                let dur = p.duration
+                let frac = dur > 0 ? min(1, max(0, p.currentTime / dur)) : 0
+                self.spokenCharProgress = start + Int(frac * Double(len))
+            }
+        }
     }
 
     // MARK: - 分段播放
@@ -141,12 +204,17 @@ final class SpeechService: NSObject, ObservableObject, AVSpeechSynthesizerDelega
             return
         }
         let data = pendingSegments.removeFirst()
+        playingSegmentIndex += 1
+        if playingSegmentIndex < segmentCharOffsets.count {
+            spokenCharProgress = segmentCharOffsets[playingSegmentIndex]
+        }
         do {
             activatePlaybackSession()
             let p = try AVAudioPlayer(data: data)
             p.delegate = self
             player = p
             isPlayingSegment = true
+            startProgressTimer(token: token)
             p.play()
         } catch {
             // 这一段坏了就跳过,继续下一段
@@ -160,6 +228,7 @@ final class SpeechService: NSObject, ObservableObject, AVSpeechSynthesizerDelega
         player = nil
         speakingText = nil
         preparing = false
+        resetKaraoke()
     }
 
     // MARK: - 合成
@@ -195,6 +264,8 @@ final class SpeechService: NSObject, ObservableObject, AVSpeechSynthesizerDelega
             ?? AVSpeechSynthesisVoice(language: Locale.current.identifier)
         synth.speak(u)
         speakingText = original
+        spokenText = trimmed
+        spokenCharProgress = 0
     }
 
     /// 停掉当前播放(合成器 + mp3 player),但不动 speakingText/synthTask/队列。
@@ -263,10 +334,20 @@ final class SpeechService: NSObject, ObservableObject, AVSpeechSynthesizerDelega
     // MARK: - delegates
 
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-        Task { @MainActor in self.speakingText = nil }
+        Task { @MainActor in self.speakingText = nil; self.resetKaraoke() }
     }
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
-        Task { @MainActor in self.speakingText = nil }
+        Task { @MainActor in self.speakingText = nil; self.resetKaraoke() }
+    }
+
+    /// 系统语音逐词回调:把已读游标推进到当前词末尾(精确逐字)。
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer,
+                                       willSpeakRangeOfSpeechString characterRange: NSRange,
+                                       utterance: AVSpeechUtterance) {
+        Task { @MainActor in
+            guard let text = self.spokenText, let r = Range(characterRange, in: text) else { return }
+            self.spokenCharProgress = text.distance(from: text.startIndex, to: r.upperBound)
+        }
     }
 
     nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
@@ -274,6 +355,12 @@ final class SpeechService: NSObject, ObservableObject, AVSpeechSynthesizerDelega
             guard self.isPlayingSegment else { return }
             self.isPlayingSegment = false
             self.player = nil
+            // 段播完:游标对齐到该段末尾,再播下一段。
+            let i = self.playingSegmentIndex
+            if i >= 0, i < self.segmentCharOffsets.count {
+                self.spokenCharProgress = self.segmentCharOffsets[i] + self.segmentCharLengths[i]
+            }
+            self.progressTimer?.invalidate()
             self.playNextSegment(token: self.playToken)
         }
     }
