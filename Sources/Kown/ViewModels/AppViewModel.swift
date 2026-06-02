@@ -16,6 +16,8 @@ final class AppViewModel {
     /// 没选会话时新建会话使用的默认模式
     var activeMode: ConversationMode = .council
     var prompt: String = ""
+    /// 各会话未发送的输入草稿(切走暂存、切回还原)。会话级,内存留存。
+    private var drafts: [UUID: String] = [:]
     /// ⌘K 命令面板是否打开(macOS 菜单命令与 RootView sheet 共用此开关)。
     var showCommandPalette = false
     /// 会话内查找条是否显示(⌘F)。
@@ -191,9 +193,11 @@ final class AppViewModel {
     func newConversation(mode: ConversationMode) {
         // 不再取消 isRunning 的任务 — task 继续跑在原 conv 上,只是当前 UI 不再展示其直播。
         // 直播 UI 是否显示由 `runningConvID == selectedConversationID` 决定(MainContentView)。
+        stashDraft()
         let conv = Conversation(mode: mode)
         conversations.insert(conv, at: 0)
         selectedConversationID = conv.id
+        prompt = ""
         activeMode = mode
         ConversationStore.save(conv)
         applyAlwaysEnableWebSearchIfNeeded()
@@ -228,8 +232,10 @@ final class AppViewModel {
             workspaceDisplayPath: source.workspaceDisplayPath,
             systemPrompt: source.systemPrompt
         )
+        stashDraft()
         conversations.insert(fork, at: 0)
         selectedConversationID = fork.id
+        prompt = ""
         activeMode = fork.mode
         ConversationStore.save(fork)
         applyAlwaysEnableWebSearchIfNeeded()
@@ -251,11 +257,20 @@ final class AppViewModel {
     func selectConversation(_ id: UUID) {
         // 不打断后台运行的请求 — 它绑定的还是原会话 ID(send() 闭包里 captured),
         // 结束后会正确把 turn 写回 `conversations[原 idx]`。当前选中切换只影响 UI 显示。
+        stashDraft()
         selectedConversationID = id
+        prompt = drafts[id] ?? ""
         applyAlwaysEnableWebSearchIfNeeded()
         if let conv = conversations.first(where: { $0.id == id }) {
             activeMode = conv.mode
         }
+    }
+
+    /// 把当前输入暂存为当前会话的草稿(切换/新建前调用)。
+    private func stashDraft() {
+        guard let old = selectedConversationID else { return }
+        let t = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        if t.isEmpty { drafts.removeValue(forKey: old) } else { drafts[old] = prompt }
     }
 
     // MARK: - Working Folder
@@ -307,8 +322,10 @@ final class AppViewModel {
         conversations[idx].deletedAt = Date()
         conversations[idx].updatedAt = Date()
         ConversationStore.save(conversations[idx])
+        drafts.removeValue(forKey: id)
         if selectedConversationID == id {
             selectedConversationID = activeConversations.first?.id
+            prompt = selectedConversationID.flatMap { drafts[$0] } ?? ""
             liveStates.removeAll()
             liveChairState = nil
             liveSummaryState = nil
@@ -330,8 +347,10 @@ final class AppViewModel {
         conversations.removeAll { $0.id == id }
         ConversationStore.delete(id)
         ResponseLogger.deleteDirectory(title: title, conversationID: id.uuidString)
+        drafts.removeValue(forKey: id)
         if selectedConversationID == id {
             selectedConversationID = activeConversations.first?.id
+            prompt = selectedConversationID.flatMap { drafts[$0] } ?? ""
             liveStates.removeAll()
             liveChairState = nil
             liveSummaryState = nil
