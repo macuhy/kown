@@ -7,11 +7,50 @@ struct UsageSettingsView: View {
     @State private var confirmReset = false
     /// 当前显示的统计范围:全部设备汇总 / 仅本机
     @State private var scope: UsageStore.Scope = .all
+    /// 时间范围:近 7 天 / 近 30 天 / 全部。
+    @State private var range: RangeOption = .all
 
     private let tint = Color(red: 0.24, green: 0.63, blue: 0.36)
     private let secondaryTint = Color(red: 0.08, green: 0.70, blue: 0.78)
 
-    private var days: [String] { store.sortedDays(scope: scope) }
+    enum RangeOption: Hashable { case d7, d30, all }
+
+    /// 所选范围内、按日期倒序的有记录日期。
+    private var days: [String] {
+        let all = store.sortedDays(scope: scope)
+        guard let cutoff = rangeCutoff else { return all }
+        return all.filter { $0 >= cutoff }   // "yyyy-MM-dd" 字典序 == 时间序
+    }
+
+    private var rangeCutoff: String? {
+        switch range {
+        case .all: return nil
+        case .d7:  return Self.dayString(daysAgo: 6)
+        case .d30: return Self.dayString(daysAgo: 29)
+        }
+    }
+
+    private static func dayString(daysAgo: Int) -> String {
+        let d = Calendar.current.date(byAdding: .day, value: -daysAgo, to: Date()) ?? Date()
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = .current
+        return f.string(from: d)
+    }
+
+    /// 所选范围内,按模型聚合的用量(总量降序)。
+    private var byModel: [(key: String, value: UsageEntry)] {
+        var grouped: [String: UsageEntry] = [:]
+        for day in days {
+            for e in store.entries(for: day, scope: scope) {
+                var g = grouped[e.key] ?? UsageEntry()
+                g.input += e.value.input; g.output += e.value.output; g.callCount += e.value.callCount
+                grouped[e.key] = g
+            }
+        }
+        return grouped.sorted { $0.value.total > $1.value.total }
+    }
 
     var body: some View {
         #if os(iOS)
@@ -19,9 +58,11 @@ struct UsageSettingsView: View {
             LazyVStack(alignment: .leading, spacing: 12) {
                 heroCard
                 scopePickerCard
+                rangePickerCard
                 if days.isEmpty {
                     emptyStateCard
                 } else {
+                    byModelCard
                     ForEach(days, id: \.self) { day in
                         dayCard(day)
                     }
@@ -39,9 +80,11 @@ struct UsageSettingsView: View {
             VStack(alignment: .leading, spacing: 18) {
                 heroCard
                 scopePickerCard
+                rangePickerCard
                 if days.isEmpty {
                     emptyStateCard
                 } else {
+                    byModelCard
                     LazyVStack(spacing: 14) {
                         ForEach(days, id: \.self) { day in
                             dayCard(day)
@@ -218,6 +261,33 @@ struct UsageSettingsView: View {
                 sectionHeader("查看范围", subtitle: "在所有设备汇总和本机记录之间切换,不影响实际数据。", icon: "scope", color: tint)
                 scopePicker
                 summaryRow
+            }
+        }
+    }
+
+    private var rangePickerCard: some View {
+        cardShell(tint: tint) {
+            VStack(alignment: .leading, spacing: 12) {
+                sectionHeader("时间范围", subtitle: "汇总与每日明细都按此范围。", icon: "calendar", color: tint)
+                Picker("", selection: $range) {
+                    Text("近 7 天").tag(RangeOption.d7)
+                    Text("近 30 天").tag(RangeOption.d30)
+                    Text("全部").tag(RangeOption.all)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
+        }
+    }
+
+    /// 按模型汇总卡:所选范围内各模型的用量与成本(总量降序)。
+    private var byModelCard: some View {
+        cardShell(tint: secondaryTint) {
+            VStack(alignment: .leading, spacing: 12) {
+                sectionHeader("按模型汇总", subtitle: "所选范围内各模型的用量与成本。", icon: "chart.bar.fill", color: secondaryTint)
+                ForEach(byModel, id: \.key) { item in
+                    modelRow(key: item.key, entry: item.value)
+                }
             }
         }
     }
