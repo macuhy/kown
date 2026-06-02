@@ -61,6 +61,8 @@ git add ios/Kown.xcodeproj/project.pbxproj mac/Kown.xcodeproj/project.pbxproj
 
 通用:**先 `git push origin main`,再 push tag**(保证 tag 指向的 commit 已在远端)。版本递增:多个新功能 → minor,纯 bugfix → patch。版本号由 **tag 名**决定,build 号 = **git 提交数**(单调递增,每次上传唯一)。**打 tag 前先确认 CHANGELOG.md 已补好当次版本条目**(见上)。
 
+**iOS 与 mac 版本号必须保持一致** ⚠️:同一份代码、同一份 `CHANGELOG.md`(条目以这个统一号为标题)。`ChangelogService` 按 `CFBundleShortVersionString` 匹配 What's New,两端版本号若不一致,版本号落后的那端会匹配不到 CHANGELOG 条目 → What's New 弹空。所以每次发版**两端用同一个 `<version>`**,同时打 `v<version>`(mac)和 `ios-v<version>`(iOS)两个 tag。
+
 ### iOS → TestFlight
 
 - 触发:push tag `ios-v<version>` → `.github/workflows/ios-release.yml`。
