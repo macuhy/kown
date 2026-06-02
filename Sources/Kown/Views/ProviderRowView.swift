@@ -113,45 +113,92 @@ struct ProviderRowView: View {
     }
 
     private var headerRow: some View {
+        ViewThatFits(in: .horizontal) {
+            providerHeaderWide
+            providerHeaderCompact
+        }
+    }
+
+    private var providerHeaderWide: some View {
         HStack(spacing: 14) {
             providerMark
 
             VStack(alignment: .leading, spacing: 7) {
-                HStack(spacing: 6) {
-                    providerChip(config.kind.displayName, color: kindColor)
-                    providerChip(config.enabled ? "启用中" : "未启用", color: config.enabled ? .green : .secondary)
-                    if config.isChair {
-                        providerChip("Chair", color: .orange)
-                    }
-                    if config.isSummary {
-                        providerChip("Summary", color: .teal)
-                    }
-                }
-
-                TextField("显示名", text: $config.displayName)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(.headline, design: .rounded).weight(.semibold))
-                    .onSubmit { onSave() }
+                providerChips
+                displayNameField
             }
+            .layoutPriority(1)
 
             Spacer()
 
-            HStack(spacing: 8) {
-                chairButton
-                summaryButton
-            }
+            providerRoleButtons
 
-            Toggle("启用", isOn: $config.enabled)
-                .toggleStyle(.switch)
-                .onChange(of: config.enabled) { _, _ in onSave() }
+            enableToggle
 
-            Button(role: .destructive) { confirmingDelete = true } label: {
-                Image(systemName: "trash")
-                    .foregroundStyle(.red.opacity(0.75))
-            }
-            .buttonStyle(.borderless)
-            .help("删除厂商")
+            deleteButton
         }
+    }
+
+    private var providerHeaderCompact: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                providerMark
+                displayNameField
+                    .layoutPriority(1)
+                deleteButton
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    providerChips
+                    providerRoleButtons
+                    enableToggle
+                }
+                .padding(.vertical, 1)
+            }
+        }
+    }
+
+    private var providerChips: some View {
+        HStack(spacing: 6) {
+            providerChip(config.kind.displayName, color: kindColor)
+            providerChip(config.enabled ? "启用中" : "未启用", color: config.enabled ? .green : .secondary)
+            if config.isChair {
+                providerChip("Chair", color: .orange)
+            }
+            if config.isSummary {
+                providerChip("Summary", color: .teal)
+            }
+        }
+    }
+
+    private var displayNameField: some View {
+        TextField("显示名", text: $config.displayName)
+            .textFieldStyle(.roundedBorder)
+            .font(.system(.headline, design: .rounded).weight(.semibold))
+            .onSubmit { onSave() }
+    }
+
+    private var providerRoleButtons: some View {
+        HStack(spacing: 8) {
+            chairButton
+            summaryButton
+        }
+    }
+
+    private var enableToggle: some View {
+        Toggle("启用", isOn: $config.enabled)
+            .toggleStyle(.switch)
+            .onChange(of: config.enabled) { _, _ in onSave() }
+    }
+
+    private var deleteButton: some View {
+        Button(role: .destructive) { confirmingDelete = true } label: {
+            Image(systemName: "trash")
+                .foregroundStyle(.red.opacity(0.75))
+        }
+        .buttonStyle(.borderless)
+        .help("删除厂商")
     }
 
     private var fieldsGrid: some View {
@@ -185,76 +232,129 @@ struct ProviderRowView: View {
         if config.kind == .openAICompatible {
             GridRow {
                 label("Vendor")
-                HStack {
-                    Picker("", selection: Binding(
-                        get: { config.vendor ?? "" },
-                        set: { newValue in
-                            config.vendor = newValue.isEmpty ? nil : newValue
-                            onSave()
-                        }
-                    )) {
-                        Text("(自定义/未指定)").tag("")
-                        ForEach(ProviderVendor.allCases) { v in
-                            Text(v.displayName).tag(v.rawValue)
-                        }
+                ViewThatFits(in: .horizontal) {
+                    HStack {
+                        vendorPicker
+                        vendorHint
+                        Spacer(minLength: 0)
                     }
-                    .pickerStyle(.menu)
-                    .labelsHidden()
-                    .fixedSize()
-                    Text("决定对话里出现哪些可选模型")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                    Spacer()
+                    VStack(alignment: .leading, spacing: 5) {
+                        vendorPicker
+                        vendorHint
+                    }
                 }
             }
         }
         GridRow {
             label("Model")
-            HStack(spacing: 6) {
-                TextField(config.kind.defaultModel, text: $config.model)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.callout)
-                    .onSubmit { onSave() }
-                modelPickerMenu
-                if config.vendor == "ollama" { ollamaModelButton }
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 6) {
+                    modelField
+                    modelPickerMenu
+                    if config.vendor == "ollama" { ollamaModelButton }
+                }
+                VStack(alignment: .leading, spacing: 7) {
+                    modelField
+                    HStack(spacing: 6) {
+                        modelPickerMenu
+                        if config.vendor == "ollama" { ollamaModelButton }
+                    }
+                }
             }
         }
         GridRow {
             label("API Key")
-            HStack(spacing: 8) {
-                SecureField(keyPlaceholder, text: $apiKey)
-                    .textFieldStyle(.roundedBorder)
-                    .onChange(of: apiKey) { _, newValue in keyDirty = !newValue.isEmpty }
-                if hasStoredKey && !keyDirty && apiKey.isEmpty {
-                    Label("已保存", systemImage: "key.fill")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.green)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.green.opacity(0.10), in: Capsule())
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    apiKeyField
+                    savedKeyBadge
+                    keyActionButtons
                 }
-                Button {
-                    saveKey()
-                } label: {
-                    Label("保存 Key", systemImage: "key.fill")
-                }
-                .controlSize(.small)
-                .disabled(apiKey.isEmpty || !keyDirty)
-                Button {
-                    runTest()
-                } label: {
-                    if testing {
-                        HStack(spacing: 6) {
-                            ProgressView().controlSize(.small)
-                            Text("测试中")
-                        }
-                    } else {
-                        Label("测试", systemImage: "bolt.horizontal.circle")
+                VStack(alignment: .leading, spacing: 8) {
+                    apiKeyField
+                    HStack(spacing: 8) {
+                        savedKeyBadge
+                        keyActionButtons
                     }
                 }
-                .controlSize(.small)
-                .disabled(!canTest)
             }
+        }
+    }
+
+    private var vendorPicker: some View {
+        Picker("", selection: Binding(
+            get: { config.vendor ?? "" },
+            set: { newValue in
+                config.vendor = newValue.isEmpty ? nil : newValue
+                onSave()
+            }
+        )) {
+            Text("(自定义/未指定)").tag("")
+            ForEach(ProviderVendor.allCases) { v in
+                Text(v.displayName).tag(v.rawValue)
+            }
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .fixedSize()
+    }
+
+    private var vendorHint: some View {
+        Text("决定对话里出现哪些可选模型")
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var modelField: some View {
+        TextField(config.kind.defaultModel, text: $config.model)
+            .textFieldStyle(.roundedBorder)
+            .font(.callout)
+            .onSubmit { onSave() }
+    }
+
+    private var apiKeyField: some View {
+        SecureField(keyPlaceholder, text: $apiKey)
+            .textFieldStyle(.roundedBorder)
+            .onChange(of: apiKey) { _, newValue in keyDirty = !newValue.isEmpty }
+    }
+
+    @ViewBuilder
+    private var savedKeyBadge: some View {
+        if hasStoredKey && !keyDirty && apiKey.isEmpty {
+            Label("已保存", systemImage: "key.fill")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.green)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.green.opacity(0.10), in: Capsule())
+        }
+    }
+
+    private var keyActionButtons: some View {
+        HStack(spacing: 8) {
+            Button {
+                saveKey()
+            } label: {
+                Label("保存 Key", systemImage: "key.fill")
+            }
+            .controlSize(.small)
+            .disabled(apiKey.isEmpty || !keyDirty)
+
+            Button {
+                runTest()
+            } label: {
+                if testing {
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.small)
+                        Text("测试中")
+                    }
+                } else {
+                    Label("测试", systemImage: "bolt.horizontal.circle")
+                }
+            }
+            .controlSize(.small)
+            .disabled(!canTest)
         }
     }
 
@@ -284,27 +384,42 @@ struct ProviderRowView: View {
         }
         GridRow {
             label("提示")
-            HStack(spacing: 8) {
-                Text("{prompt} 会被替换成实际输入。不带 {prompt} 则通过 stdin 传入。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Button {
-                    runTest()
-                } label: {
-                    if testing {
-                        HStack(spacing: 6) {
-                            ProgressView().controlSize(.small)
-                            Text("测试中")
-                        }
-                    } else {
-                        Label("测试", systemImage: "bolt.horizontal.circle")
-                    }
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    cliPromptHint
+                    Spacer(minLength: 0)
+                    cliTestButton
                 }
-                .controlSize(.small)
-                .disabled(testing)
+                VStack(alignment: .leading, spacing: 8) {
+                    cliPromptHint
+                    cliTestButton
+                }
             }
         }
+    }
+
+    private var cliPromptHint: some View {
+        Text("{prompt} 会被替换成实际输入。不带 {prompt} 则通过 stdin 传入。")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var cliTestButton: some View {
+        Button {
+            runTest()
+        } label: {
+            if testing {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text("测试中")
+                }
+            } else {
+                Label("测试", systemImage: "bolt.horizontal.circle")
+            }
+        }
+        .controlSize(.small)
+        .disabled(testing)
     }
 
     /// Ollama:拉取本地已安装模型,拉到后用 Menu 选。未运行 / 拉空时给提示。
@@ -425,6 +540,8 @@ struct ProviderRowView: View {
                 Text(advancedSummary)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
                 Spacer()
             }
         }

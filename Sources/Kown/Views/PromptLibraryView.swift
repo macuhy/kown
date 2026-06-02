@@ -27,7 +27,12 @@ struct PromptLibraryView: View {
                     }
                 }
             }
+            #if os(iOS)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            #else
             .padding(20)
+            #endif
             .frame(maxWidth: 1040, alignment: .topLeading)
         }
         .scrollIndicators(.hidden)
@@ -51,23 +56,72 @@ struct PromptLibraryView: View {
     }
 
     private var header: some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("模板")
-                    .font(.headline)
-                Text("用 {{变量}} 写可复用的 Prompt,填充后一键复制。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline) {
+                headerText
+                Spacer(minLength: 12)
+                newTemplateButton
             }
-            Spacer(minLength: 12)
-            Button {
-                isCreating = true
-                editing = PromptTemplate(title: "", body: "")
-            } label: {
-                Label("新建模板", systemImage: "plus")
+            VStack(alignment: .leading, spacing: 10) {
+                headerText
+                newTemplateButton
             }
-            .buttonStyle(.borderedProminent)
-            .tint(Self.tint)
+        }
+    }
+
+    private var headerText: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("模板")
+                .font(.headline)
+            Text("用 {{变量}} 写可复用的 Prompt,填充后一键复制。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var newTemplateButton: some View {
+        Button {
+            isCreating = true
+            editing = PromptTemplate(title: "", body: "")
+        } label: {
+            Label("新建模板", systemImage: "plus")
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(Self.tint)
+    }
+
+    private func fillButton(for template: PromptTemplate) -> some View {
+        Button {
+            filling = template
+        } label: {
+            Label("填充并复制", systemImage: "doc.on.doc")
+                .font(.caption.weight(.semibold))
+        }
+        .buttonStyle(.bordered)
+        .tint(Self.tint)
+    }
+
+    private func editButton(for template: PromptTemplate) -> some View {
+        Button {
+            isCreating = false
+            editing = template
+        } label: {
+            Label("编辑", systemImage: "pencil")
+                .font(.caption.weight(.semibold))
+        }
+        .buttonStyle(.bordered)
+    }
+
+    private func templateActionButtons(for template: PromptTemplate) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) {
+                fillButton(for: template)
+                editButton(for: template)
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                fillButton(for: template)
+                editButton(for: template)
+            }
         }
     }
 
@@ -143,25 +197,7 @@ struct PromptLibraryView: View {
                 }
             }
 
-            HStack(spacing: 10) {
-                Button {
-                    filling = template
-                } label: {
-                    Label("填充并复制", systemImage: "doc.on.doc")
-                        .font(.caption.weight(.semibold))
-                }
-                .buttonStyle(.bordered)
-                .tint(Self.tint)
-
-                Button {
-                    isCreating = false
-                    editing = template
-                } label: {
-                    Label("编辑", systemImage: "pencil")
-                        .font(.caption.weight(.semibold))
-                }
-                .buttonStyle(.bordered)
-            }
+            templateActionButtons(for: template)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -284,7 +320,11 @@ private struct PromptTemplateEditor: View {
                     .disabled(!canSave)
                 }
             }
+            #if os(macOS)
             .frame(minWidth: 480, minHeight: 460)
+            #else
+            .frame(minHeight: 420)
+            #endif
         }
     }
 }
@@ -356,7 +396,11 @@ private struct PromptFillSheet: View {
                     .tint(Self.tint)
                 }
             }
+            #if os(macOS)
             .frame(minWidth: 480, minHeight: 420)
+            #else
+            .frame(minHeight: 380)
+            #endif
         }
     }
 }

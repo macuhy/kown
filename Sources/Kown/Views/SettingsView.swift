@@ -167,9 +167,9 @@ struct SettingsView: View {
     private var mobileTabBar: some View {
         ScrollViewReader { proxy in
             VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
+                HStack(spacing: 7) {
                     SettingsAppIcon()
-                        .frame(width: 30, height: 30)
+                        .frame(width: 26, height: 26)
                         .shadow(color: tab.tint.opacity(0.16), radius: 10, x: 0, y: 5)
                         .overlay {
                             RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -183,25 +183,26 @@ struct SettingsView: View {
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
+                            .minimumScaleFactor(0.86)
                     }
 
                     Spacer(minLength: 0)
                 }
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
+                    HStack(spacing: 7) {
                         ForEach(availableTabs) { t in
                             mobileTabPill(t)
                                 .id(t.id)
                         }
                     }
-                    .padding(.horizontal, 18)
+                    .padding(.horizontal, 14)
                     .padding(.vertical, 2)
                 }
-                .padding(.horizontal, -18)
+                .padding(.horizontal, -14)
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 14)
             .padding(.top, 4)
-            .padding(.bottom, 6)
+            .padding(.bottom, 5)
             .background(.ultraThinMaterial)
             .overlay(alignment: .bottom) {
                 Rectangle()
@@ -224,9 +225,9 @@ struct SettingsView: View {
             }
         } label: {
             Image(systemName: t.symbol)
-                .font(.system(size: 16, weight: .bold))
+                .font(.system(size: 15, weight: .bold))
                 .foregroundStyle(selected ? Color.white : Color.primary)
-                .frame(width: 42, height: 42)
+                .frame(width: 36, height: 36)
             .background {
                 Capsule(style: .continuous)
                     .fill(Color.platformControlBackground.opacity(selected ? 0 : 0.72))
@@ -256,7 +257,7 @@ struct SettingsView: View {
 
     private var mobileProvidersList: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 11) {
                 mobileProviderHero
                 mobileProviderMetrics
 
@@ -307,9 +308,9 @@ struct SettingsView: View {
                     }
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
-            .padding(.bottom, 24)
+            .padding(.horizontal, 14)
+            .padding(.top, 10)
+            .padding(.bottom, 20)
         }
         .scrollIndicators(.hidden)
     }
@@ -319,7 +320,7 @@ struct SettingsView: View {
         let enabled = viewModel.providers.filter(\.enabled).count
         let tint = enabled == 0 ? Color.orange : tab.tint
         return VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .fill(
@@ -333,7 +334,7 @@ struct SettingsView: View {
                         .font(.system(size: 18, weight: .bold))
                         .foregroundStyle(tint)
                 }
-                .frame(width: 46, height: 46)
+                .frame(width: 42, height: 42)
                 .overlay {
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .strokeBorder(tint.opacity(0.22), lineWidth: 1)
@@ -358,7 +359,7 @@ struct SettingsView: View {
                     .foregroundStyle(tint)
             }
 
-            HStack(spacing: 10) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 8)], spacing: 8) {
                 mobileHeroChip(title: "启用", value: "\(enabled)/\(total)", color: enabled == 0 ? .orange : .green)
                 mobileHeroChip(title: "总数", value: "\(total)", color: .secondary)
                 if let chair = viewModel.providers.first(where: \.isChair) {
@@ -366,7 +367,7 @@ struct SettingsView: View {
                 }
             }
         }
-        .padding(12)
+        .padding(11)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay {
@@ -415,11 +416,11 @@ struct SettingsView: View {
     }
 
     private func mobileMetricCard(title: String, value: String, icon: String, color: Color) -> some View {
-        HStack(spacing: 9) {
+        HStack(spacing: 8) {
             Image(systemName: icon)
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(color)
-                .frame(width: 28, height: 28)
+                .frame(width: 26, height: 26)
                 .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             VStack(alignment: .leading, spacing: 1) {
                 Text(value)
@@ -433,9 +434,9 @@ struct SettingsView: View {
                     .lineLimit(1)
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .frame(width: 142, alignment: .leading)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 7)
+        .frame(width: 132, alignment: .leading)
         .background(Color.platformControlBackground.opacity(0.78), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -1005,7 +1006,7 @@ private struct MobileProviderSummaryRow: View {
     let config: ProviderConfig
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             providerMark
 
             VStack(alignment: .leading, spacing: 5) {
@@ -1033,8 +1034,9 @@ private struct MobileProviderSummaryRow: View {
                     }
                 }
             }
+            .layoutPriority(1)
 
-            Spacer()
+            Spacer(minLength: 6)
 
             VStack(alignment: .trailing, spacing: 8) {
                 statusChip
@@ -1043,7 +1045,7 @@ private struct MobileProviderSummaryRow: View {
                     .foregroundStyle(.tertiary)
             }
         }
-        .padding(11)
+        .padding(10)
         .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay {
@@ -1068,7 +1070,7 @@ private struct MobileProviderSummaryRow: View {
                 .font(.system(size: 16, weight: .bold))
                 .foregroundStyle(kindColor)
         }
-        .frame(width: 42, height: 42)
+        .frame(width: 38, height: 38)
         .overlay {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .strokeBorder(kindColor.opacity(0.16), lineWidth: 1)
@@ -1079,8 +1081,8 @@ private struct MobileProviderSummaryRow: View {
         Text(config.enabled ? "启用" : "关闭")
             .font(.caption.weight(.bold))
             .foregroundStyle(config.enabled ? .green : .secondary)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 5)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
             .background((config.enabled ? Color.green : Color.secondary).opacity(0.12), in: Capsule(style: .continuous))
     }
 
@@ -1169,20 +1171,16 @@ private struct MobileProviderEditorView: View {
     private var editorHeroSection: some View {
         Section {
             VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .top, spacing: 14) {
-                    providerMark
-                        .frame(width: 52, height: 52)
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text(config.displayName)
-                            .font(.system(.title3, design: .rounded).weight(.bold))
-                            .lineLimit(1)
-                        Text("\(config.kind.displayName) · \(config.model)")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: 12) {
+                        editorHeroTitle
+                        Spacer(minLength: 8)
+                        editorStatusChip
                     }
-                    Spacer(minLength: 8)
-                    editorStatusChip
+                    VStack(alignment: .leading, spacing: 10) {
+                        editorHeroTitle
+                        editorStatusChip
+                    }
                 }
 
                 Text(config.enabled ? "这个 Provider 会参与回答。你可以在这里调整连接、模型和 Council 角色。" : "当前不会参与回答，打开后会立即保存到本机配置。")
@@ -1200,6 +1198,25 @@ private struct MobileProviderEditorView: View {
         }
         .listRowInsets(EdgeInsets(top: 16, leading: 16, bottom: 8, trailing: 16))
         .listRowBackground(Color.clear)
+    }
+
+    private var editorHeroTitle: some View {
+        HStack(alignment: .top, spacing: 12) {
+            providerMark
+                .frame(width: 46, height: 46)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(config.displayName)
+                    .font(.system(.title3, design: .rounded).weight(.bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+                Text("\(config.kind.displayName) · \(config.model)")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .truncationMode(.middle)
+            }
+            .layoutPriority(1)
+        }
     }
 
     private var identitySection: some View {
@@ -1283,28 +1300,49 @@ private struct MobileProviderEditorView: View {
                     .onChange(of: apiKey) { _, newValue in
                         keyDirty = !newValue.isEmpty
                     }
-                HStack(spacing: 10) {
-                    Button {
-                        saveKey()
-                    } label: {
-                        Label("保存 Key", systemImage: "key.fill")
-                    }
-                    .disabled(apiKey.isEmpty || !keyDirty)
-
-                    Button {
-                        runTest()
-                    } label: {
-                        if testing {
-                            Label("测试中", systemImage: "hourglass")
-                        } else {
-                            Label("测试连接", systemImage: "bolt.horizontal.circle")
-                        }
-                    }
-                    .disabled(!canTest)
+                ViewThatFits(in: .horizontal) {
+                    keyEditorButtons(axis: .horizontal)
+                    keyEditorButtons(axis: .vertical)
                 }
-                .buttonStyle(.bordered)
             }
             .padding(.vertical, 4)
+        }
+    }
+
+    private enum ButtonAxis {
+        case horizontal
+        case vertical
+    }
+
+    @ViewBuilder
+    private func keyEditorButtons(axis: ButtonAxis) -> some View {
+        let buttons = Group {
+            Button {
+                saveKey()
+            } label: {
+                Label("保存 Key", systemImage: "key.fill")
+            }
+            .disabled(apiKey.isEmpty || !keyDirty)
+
+            Button {
+                runTest()
+            } label: {
+                if testing {
+                    Label("测试中", systemImage: "hourglass")
+                } else {
+                    Label("测试连接", systemImage: "bolt.horizontal.circle")
+                }
+            }
+            .disabled(!canTest)
+        }
+
+        switch axis {
+        case .horizontal:
+            HStack(spacing: 10) { buttons }
+                .buttonStyle(.bordered)
+        case .vertical:
+            VStack(alignment: .leading, spacing: 8) { buttons }
+                .buttonStyle(.bordered)
         }
     }
 

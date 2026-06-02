@@ -347,7 +347,7 @@ struct PerformanceSettingsView: View {
             }
         }
         #if os(iOS)
-        .pickerStyle(.segmented)
+        .pickerStyle(.menu)
         #endif
         #if os(macOS)
         .pickerStyle(.segmented)

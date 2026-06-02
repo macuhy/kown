@@ -174,16 +174,31 @@ struct InputBarView: View {
         VStack(spacing: 6) {
             promptField
             HStack(spacing: 8) {
-                toolButtons
-                Spacer(minLength: 8)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    toolButtons
+                        .padding(.vertical, 1)
+                }
                 sendButton
             }
         }
         #else
-        HStack(spacing: 10) {
-            promptField
-            toolButtons
-            sendButton
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) {
+                promptField
+                    .frame(minWidth: 260)
+                toolButtons
+                sendButton
+            }
+            VStack(spacing: 8) {
+                promptField
+                HStack(spacing: 8) {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        toolButtons
+                            .padding(.vertical, 1)
+                    }
+                    sendButton
+                }
+            }
         }
         #endif
     }
@@ -332,6 +347,8 @@ struct InputBarView: View {
                         Text((displayPath as NSString).lastPathComponent)
                             .font(.caption.weight(.bold))
                             .lineLimit(1)
+                            .truncationMode(.middle)
+                            .frame(maxWidth: 140)
                     }
                     .foregroundStyle(Color.accentColor)
                     .padding(.horizontal, 9)

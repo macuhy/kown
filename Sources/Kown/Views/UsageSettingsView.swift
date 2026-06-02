@@ -232,22 +232,42 @@ struct UsageSettingsView: View {
         }
         let dayCost = store.cost(for: day, scope: scope)
         return VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                statusBadge("当日合计", icon: "sum", color: tint)
-                Spacer(minLength: 0)
-                costBadge(dayCost)
-                Text("\(formatTokens(dayTotal.total))")
-                    .font(.callout.weight(.bold))
-                    .monospacedDigit()
-                    .foregroundStyle(.primary)
-                Text("· \(dayTotal.callCount) 次调用")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    statusBadge("当日合计", icon: "sum", color: tint)
+                    Spacer(minLength: 0)
+                    costBadge(dayCost)
+                    dayTotalText(dayTotal)
+                    dayCallsText(dayTotal)
+                }
+                VStack(alignment: .leading, spacing: 7) {
+                    HStack(spacing: 8) {
+                        statusBadge("当日合计", icon: "sum", color: tint)
+                        costBadge(dayCost)
+                    }
+                    HStack(spacing: 8) {
+                        dayTotalText(dayTotal)
+                        dayCallsText(dayTotal)
+                    }
+                }
             }
             ForEach(entries, id: \.key) { entry in
                 modelRow(key: entry.key, entry: entry.value)
             }
         }
+    }
+
+    private func dayTotalText(_ total: UsageEntry) -> some View {
+        Text("\(formatTokens(total.total))")
+            .font(.callout.weight(.bold))
+            .monospacedDigit()
+            .foregroundStyle(.primary)
+    }
+
+    private func dayCallsText(_ total: UsageEntry) -> some View {
+        Text("· \(total.callCount) 次调用")
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
     }
 
     /// 成本小徽章:显示已知金额,含未知价条目时追加「+未知」灰字。
@@ -383,6 +403,54 @@ struct UsageSettingsView: View {
         let totalCost = store.totalCost(scope: scope)
         let devices = store.deviceCount
         let isThisDeviceOnly = (scope == .thisDevice)
+        #if os(iOS)
+        return VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(isThisDeviceOnly ? "本机累计" : "全部累计")
+                    .font(.subheadline.weight(.semibold))
+                HStack(spacing: 6) {
+                    Text("\(total.callCount) 次调用 · \(days.count) 天")
+                    if !isThisDeviceOnly, devices > 1 {
+                        Text("· \(devices) 台设备")
+                            .foregroundStyle(tint)
+                    }
+                    if isThisDeviceOnly {
+                        Text("· 仅本机")
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(formatTokens(total.total))
+                    .font(.title3.weight(.bold))
+                    .monospacedDigit()
+                HStack(spacing: 6) {
+                    Text("in \(formatTokens(total.input))")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.blue)
+                    Text("out \(formatTokens(total.output))")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.orange)
+                }
+                .monospacedDigit()
+                HStack(spacing: 4) {
+                    Text("约 \(CostFormat.usd(totalCost.knownCostUSD))")
+                        .font(.caption2.weight(.bold))
+                        .monospacedDigit()
+                        .foregroundStyle(tint)
+                    if totalCost.hasUnknown {
+                        Text("· \(totalCost.unknownEntryCount) 项价格未知")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        #else
         return HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text(isThisDeviceOnly ? "本机累计" : "全部累计")
@@ -430,6 +498,7 @@ struct UsageSettingsView: View {
         }
         .padding(12)
         .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        #endif
     }
 
     private func dayCard(_ day: String) -> some View {
