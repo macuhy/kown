@@ -96,8 +96,8 @@ struct ActiveProviderBar: View {
 
     @ViewBuilder
     private func chips(_ mode: ConversationMode) -> some View {
-        // 展示「当前可参与回答」的 provider 集合:enabled 的(可点击停用)+ 真正进 panel 的。
-        // 全为空(一个 provider 都没配)才报警告。点 chip 可快速启停。
+        // 只展示本轮真正会回答的模型(Direct = 1,Compare = ≤2)。
+        // 增删 / 换模型走右侧「选择 ≤2 / 切换模型」菜单。
         let chipList = chipProviders()
         if chipList.isEmpty {
             statusChip("无可用 provider", icon: "exclamationmark.triangle.fill", tint: .orange)
@@ -114,13 +114,11 @@ struct ActiveProviderBar: View {
         }
     }
 
-    /// chip 列表 = 真正进 panel 的(本轮会回答的)∪ 其余 enabled 的(随手可停用)。
-    /// 全部 enabled 都展示,这样关掉某家后仍能在条上把它重新点亮。
+    /// chip 列表 = 本轮真正会回答的模型(Direct 1 个 / Compare ≤2 个)。
+    /// 之前还把其余 enabled 的也一并列出「随手停用」,但在 Direct/Compare 下会让人误以为
+    /// 没选中的模型也参与回答 → 困惑。选择交给右侧菜单,这里只反映实际参与的模型。
     private func chipProviders() -> [ProviderConfig] {
-        let (panel, _) = viewModel.providersForCurrentSend()
-        let panelIDs = Set(panel.map(\.id))
-        let extras = viewModel.providers.filter { $0.enabled && !panelIDs.contains($0.id) }
-        return panel + extras
+        viewModel.providersForCurrentSend().panel
     }
 
     private func statusChip(_ text: String, icon: String, tint: Color) -> some View {
@@ -139,60 +137,37 @@ struct ActiveProviderBar: View {
         }
     }
 
+    /// 参与本轮回答的模型 chip(纯展示)。增删 / 换模型走右侧菜单。
     private func providerChip(_ cfg: ProviderConfig) -> some View {
         let tint = accentColor(cfg)
-        let isOn = cfg.enabled
-        // 点 chip 即快速开关该 provider 的启用态(沿用 setChair/setSummary 的
-        // 「直接改 providers[i] + saveProviders()」模式,只动 public 接口)。
-        return Button {
-            toggleEnabled(cfg)
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: providerSymbol(cfg))
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(isOn ? tint : Color.secondary)
-                    .frame(width: 26, height: 26)
-                    .background((isOn ? tint : Color.secondary).opacity(0.13),
-                                in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-                VStack(alignment: .leading, spacing: 1) {
-                    HStack(spacing: 5) {
-                        Text(cfg.displayName)
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(isOn ? Color.primary : Color.secondary)
-                            .lineLimit(1)
-                        if cfg.isChair { roleBadge("主席", icon: "crown.fill", tint: chairTint) }
-                        if cfg.isSummary { roleBadge("总结", icon: "list.bullet.rectangle.fill", tint: summaryTint) }
-                    }
-                    #if !os(iOS)
-                    Text(cfg.model)
-                        .font(.system(.caption2, design: .monospaced))
-                        .foregroundStyle(.secondary)
+        return HStack(spacing: 8) {
+            Image(systemName: providerSymbol(cfg))
+                .font(.caption.weight(.bold))
+                .foregroundStyle(tint)
+                .frame(width: 26, height: 26)
+                .background(tint.opacity(0.13), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 5) {
+                    Text(cfg.displayName)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(Color.primary)
                         .lineLimit(1)
-                    #endif
+                    if cfg.isChair { roleBadge("主席", icon: "crown.fill", tint: chairTint) }
+                    if cfg.isSummary { roleBadge("总结", icon: "list.bullet.rectangle.fill", tint: summaryTint) }
                 }
-                // 启用态的小指示器:开 = 实心点,关 = 空心(灰)。
-                Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(isOn ? tint : Color.secondary.opacity(0.6))
+                #if !os(iOS)
+                Text(cfg.model)
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                #endif
             }
-            .padding(.leading, 6)
-            .padding(.trailing, chipTrailingPadding)
-            .padding(.vertical, chipVerticalPadding)
-            .background {
-                Capsule()
-                    .fill((isOn ? tint : Color.secondary).opacity(isOn ? 0.10 : 0.06))
-            }
-            .overlay {
-                Capsule().strokeBorder((isOn ? tint : Color.secondary).opacity(isOn ? 0.24 : 0.16), lineWidth: 1)
-            }
-            .opacity(isOn ? 1 : 0.6)
-            .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
-        #if os(iOS)
-        .hoverEffect(.lift)
-        #endif
-        .help(isOn ? "点按停用 \(cfg.displayName)" : "点按启用 \(cfg.displayName)")
+        .padding(.leading, 6)
+        .padding(.trailing, chipTrailingPadding)
+        .padding(.vertical, chipVerticalPadding)
+        .background { Capsule().fill(tint.opacity(0.10)) }
+        .overlay { Capsule().strokeBorder(tint.opacity(0.24), lineWidth: 1) }
     }
 
     /// Chair / Summary 角色小徽标 — 紧凑 capsule,跟 chip 内文对齐。
@@ -210,14 +185,6 @@ struct ActiveProviderBar: View {
         .overlay {
             Capsule().strokeBorder(tint.opacity(0.30), lineWidth: 0.5)
         }
-    }
-
-    /// 快速开关某个 provider 的启用态。直接改 `viewModel.providers` 并持久化,
-    /// 与 AppViewModel 内 setChair / setSummary 一致的写法,只用 public 接口。
-    private func toggleEnabled(_ cfg: ProviderConfig) {
-        guard let idx = viewModel.providers.firstIndex(where: { $0.id == cfg.id }) else { return }
-        viewModel.providers[idx].enabled.toggle()
-        viewModel.saveProviders()
     }
 
     @ViewBuilder
