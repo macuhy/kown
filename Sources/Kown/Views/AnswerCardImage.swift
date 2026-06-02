@@ -410,7 +410,9 @@ enum AnswerImageExporter {
         // (用户报「生成几轮对话时出空白图」即此)。把最长边的像素数压到安全预算内即可。
         var contentSize: CGSize = .zero
         renderer.render { size, _ in contentSize = size }
-        let maxPixels: CGFloat = 12000
+        // 位图单边上限约 16384px,贴着上限取(留点余量)以尽量保持 2× 清晰度;
+        // 仅当内容确实过长(超长会话)才降到 2× 以下,避免空白。
+        let maxPixels: CGFloat = 16000
         let longest = max(contentSize.width, contentSize.height)
         renderer.scale = longest > 0 ? min(2, maxPixels / longest) : 2
         #if os(macOS)
