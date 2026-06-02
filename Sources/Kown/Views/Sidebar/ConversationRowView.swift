@@ -17,6 +17,9 @@ struct ConversationRowView: View {
     var inTrash: Bool = false
     var onRestore: () -> Void = {}
     var onPurge: () -> Void = {}
+    /// 「移动到文件夹」子菜单数据(空 = 不显示该项)。
+    var folders: [ConversationFolder] = []
+    var onMoveToFolder: (UUID?) -> Void = { _ in }
 
     @State private var confirmPurge = false
     @FocusState private var renameFocused: Bool
@@ -155,6 +158,23 @@ struct ConversationRowView: View {
                 Button("编辑标签…") { onEditTags() }
                 Button("重命名") { onStartRename() }
                 Button("会话系统提示…") { onEditSystemPrompt() }
+                if !folders.isEmpty {
+                    Menu("移动到文件夹") {
+                        ForEach(folders) { f in
+                            Button {
+                                onMoveToFolder(f.id)
+                            } label: {
+                                if conversation.folderID == f.id {
+                                    Label(f.name, systemImage: "checkmark")
+                                } else {
+                                    Text(f.name)
+                                }
+                            }
+                        }
+                        Divider()
+                        Button("移出(未分组)") { onMoveToFolder(nil) }
+                    }
+                }
                 Button("移到回收站", role: .destructive) { onDelete() }
             }
         }

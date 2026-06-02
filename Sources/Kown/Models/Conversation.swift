@@ -308,6 +308,8 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
     var tags: [String]
     /// 绑定的知识库资料夹 ID — 发送时按问题本地检索片段注入上下文。nil = 未绑定。
     var knowledgeFolderID: UUID?
+    /// 所属会话文件夹 ID(侧栏分组用)。nil = 未分组。
+    var folderID: UUID?
 
     init(id: UUID = UUID(),
          title: String = "New Conversation",
@@ -325,7 +327,8 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
          systemPrompt: String? = nil,
          pinned: Bool = false,
          tags: [String] = [],
-         knowledgeFolderID: UUID? = nil) {
+         knowledgeFolderID: UUID? = nil,
+         folderID: UUID? = nil) {
         self.id = id
         self.title = title
         self.mode = mode
@@ -343,6 +346,7 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
         self.pinned = pinned
         self.tags = tags
         self.knowledgeFolderID = knowledgeFolderID
+        self.folderID = folderID
     }
 
     // 兼容旧 JSON(缺新字段)
@@ -365,10 +369,41 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
         self.pinned = try c.decodeIfPresent(Bool.self, forKey: .pinned) ?? false
         self.tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []
         self.knowledgeFolderID = try c.decodeIfPresent(UUID.self, forKey: .knowledgeFolderID)
+        self.folderID = try c.decodeIfPresent(UUID.self, forKey: .folderID)
     }
 
     var lastPromptPreview: String {
         turns.last?.prompt.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+}
+
+/// 侧栏会话分组「文件夹」。会话通过 `Conversation.folderID` 归属。
+struct ConversationFolder: Identifiable, Codable, Hashable, Sendable {
+    let id: UUID
+    var name: String
+    var createdAt: Date
+
+    init(id: UUID = UUID(), name: String, createdAt: Date = Date()) {
+        self.id = id
+        self.name = name
+        self.createdAt = createdAt
+    }
+}
+
+/// 文件夹列表持久化:`syncedDataDir/conversation-folders.json`(随 iCloud 同步)。
+@MainActor
+enum ConversationFolderStore {
+    private static var url: URL {
+        Platform.syncedDataDir.appendingPathComponent("conversation-folders.json")
+    }
+    static func load() -> [ConversationFolder] {
+        guard let data = try? Data(contentsOf: url),
+              let list = try? JSONDecoder().decode([ConversationFolder].self, from: data) else { return [] }
+        return list
+    }
+    static func save(_ folders: [ConversationFolder]) {
+        guard let data = try? JSONEncoder().encode(folders) else { return }
+        try? data.write(to: url, options: .atomic)
     }
 }
 

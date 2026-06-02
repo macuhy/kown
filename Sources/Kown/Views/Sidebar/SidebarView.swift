@@ -21,6 +21,12 @@ struct SidebarView: View {
     @State private var isViewingTrash = false
     /// 清空回收站确认。
     @State private var confirmEmptyTrash = false
+    /// 折叠的文件夹。
+    @State private var collapsedFolders: Set<UUID> = []
+    @State private var showNewFolder = false
+    @State private var newFolderName = ""
+    @State private var folderRenameTarget: IdentifiedID?
+    @State private var folderRenameDraft = ""
 
     /// 当前是否处于搜索态
     private var isSearching: Bool {
@@ -99,6 +105,22 @@ struct SidebarView: View {
             Button("取消", role: .cancel) { tagEditTarget = nil }
         } message: {
             Text("多个标签用逗号分隔")
+        }
+        .alert("新建文件夹", isPresented: $showNewFolder) {
+            TextField("文件夹名称", text: $newFolderName)
+            Button("创建") { viewModel.createFolder(name: newFolderName) }
+            Button("取消", role: .cancel) { }
+        }
+        .alert("重命名文件夹", isPresented: Binding(
+            get: { folderRenameTarget != nil },
+            set: { if !$0 { folderRenameTarget = nil } }
+        )) {
+            TextField("文件夹名称", text: $folderRenameDraft)
+            Button("保存") {
+                if let id = folderRenameTarget?.id { viewModel.renameFolder(id, name: folderRenameDraft) }
+                folderRenameTarget = nil
+            }
+            Button("取消", role: .cancel) { folderRenameTarget = nil }
         }
         .confirmationDialog("清空回收站?将永久删除 \(viewModel.trashedConversations.count) 个会话,不可恢复。",
                             isPresented: $confirmEmptyTrash) {
@@ -272,6 +294,15 @@ struct SidebarView: View {
             .help("厂商配置")
             #endif
             Button {
+                newFolderName = ""
+                showNewFolder = true
+            } label: {
+                Image(systemName: "folder.badge.plus")
+                    .frame(width: 28, height: 28)
+            }
+            .buttonStyle(.borderless)
+            .help("新建文件夹")
+            Button {
                 viewModel.newConversation(mode: viewModel.activeMode)
                 onSelectConversation()
             } label: {
@@ -317,6 +348,10 @@ struct SidebarView: View {
             Spacer(minLength: 8)
 
             headerIconButton("gearshape.fill", help: "厂商配置", action: onOpenSettings)
+            headerIconButton("folder.badge.plus", help: "新建文件夹") {
+                newFolderName = ""
+                showNewFolder = true
+            }
             headerIconButton("square.and.pencil", help: "新建会话") {
                 viewModel.newConversation(mode: viewModel.activeMode)
                 onSelectConversation()
@@ -408,60 +443,13 @@ struct SidebarView: View {
             .padding(22)
             .frame(maxHeight: .infinity)
         } else {
-            let hits = hitsByID
             ScrollView {
                 LazyVStack(spacing: 7) {
-                    ForEach(displayedConversations) { conv in
-                        VStack(alignment: .leading, spacing: 0) {
-                            ConversationRowView(
-                                conversation: conv,
-                                isSelected: viewModel.selectedConversationID == conv.id,
-                                isRenaming: renamingID == conv.id,
-                                renameDraft: $renameDraft,
-                                onSelect: {
-                                    viewModel.selectConversation(conv.id)
-                                    onSelectConversation()
-                                },
-                                onStartRename: {
-                                    renameDraft = conv.title
-                                    renamingID = conv.id
-                                },
-                                onCommitRename: {
-                                    let trimmed = renameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-                                    if !trimmed.isEmpty {
-                                        viewModel.renameConversation(conv.id, title: trimmed)
-                                    }
-                                    renamingID = nil
-                                },
-                                onCancelRename: { renamingID = nil },
-                                onDelete: { viewModel.deleteConversation(conv.id) },
-                                onEditSystemPrompt: { promptEditTarget = IdentifiedID(id: conv.id) },
-                                onTogglePin: { viewModel.togglePinned(conv.id) },
-                                onEditTags: {
-                                    tagDraft = conv.tags.joined(separator: ", ")
-                                    tagEditTarget = IdentifiedID(id: conv.id)
-                                },
-                                inTrash: isViewingTrash,
-                                onRestore: { viewModel.restoreConversation(conv.id) },
-                                onPurge: { viewModel.permanentlyDeleteConversation(conv.id) }
-                            )
-                            // 搜索态下,在行下方展示命中片段(带关键词高亮)
-                            if !isViewingTrash, let hit = hits[conv.id], let snippet = highlightedSnippet(hit) {
-                                snippet
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(2)
-                                    .padding(.horizontal, 14)
-                                    .padding(.top, 3)
-                                    .padding(.bottom, 2)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .contentShape(Rectangle())
-                                    .onTapGesture {
-                                        viewModel.selectConversation(conv.id)
-                                        onSelectConversation()
-                                    }
-                            }
-                        }
+                    if groupingActive {
+                        ForEach(sortedFolders) { folder in folderSection(folder) }
+                        ungroupedSection
+                    } else {
+                        ForEach(displayedConversations) { conv in conversationRow(conv) }
                     }
                 }
                 .padding(.horizontal, 10)
@@ -471,6 +459,130 @@ struct SidebarView: View {
                 #endif
             }
         }
+    }
+
+    /// 单条会话行(含搜索命中片段)。分组与平铺共用。
+    @ViewBuilder
+    private func conversationRow(_ conv: Conversation) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ConversationRowView(
+                conversation: conv,
+                isSelected: viewModel.selectedConversationID == conv.id,
+                isRenaming: renamingID == conv.id,
+                renameDraft: $renameDraft,
+                onSelect: {
+                    viewModel.selectConversation(conv.id)
+                    onSelectConversation()
+                },
+                onStartRename: {
+                    renameDraft = conv.title
+                    renamingID = conv.id
+                },
+                onCommitRename: {
+                    let trimmed = renameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty {
+                        viewModel.renameConversation(conv.id, title: trimmed)
+                    }
+                    renamingID = nil
+                },
+                onCancelRename: { renamingID = nil },
+                onDelete: { viewModel.deleteConversation(conv.id) },
+                onEditSystemPrompt: { promptEditTarget = IdentifiedID(id: conv.id) },
+                onTogglePin: { viewModel.togglePinned(conv.id) },
+                onEditTags: {
+                    tagDraft = conv.tags.joined(separator: ", ")
+                    tagEditTarget = IdentifiedID(id: conv.id)
+                },
+                inTrash: isViewingTrash,
+                onRestore: { viewModel.restoreConversation(conv.id) },
+                onPurge: { viewModel.permanentlyDeleteConversation(conv.id) },
+                folders: viewModel.conversationFolders,
+                onMoveToFolder: { viewModel.setFolder(conv.id, folderID: $0) }
+            )
+            if !isViewingTrash, let hit = hitsByID[conv.id], let snippet = highlightedSnippet(hit) {
+                snippet
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .padding(.horizontal, 14)
+                    .padding(.top, 3)
+                    .padding(.bottom, 2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        viewModel.selectConversation(conv.id)
+                        onSelectConversation()
+                    }
+            }
+        }
+    }
+
+    // MARK: - 文件夹分组
+
+    /// 仅在「无搜索 + 无标签过滤 + 非回收站 + 有文件夹」时按文件夹分组展示。
+    private var groupingActive: Bool {
+        !isSearching && selectedTag == nil && !isViewingTrash && !viewModel.conversationFolders.isEmpty
+    }
+
+    private var sortedFolders: [ConversationFolder] {
+        viewModel.conversationFolders.sorted { $0.createdAt < $1.createdAt }
+    }
+
+    private func conversations(inFolder folderID: UUID?) -> [Conversation] {
+        viewModel.activeConversations
+            .filter { $0.folderID == folderID }
+            .enumerated()
+            .sorted { a, b in a.element.pinned != b.element.pinned ? a.element.pinned : a.offset < b.offset }
+            .map(\.element)
+    }
+
+    @ViewBuilder
+    private func folderSection(_ folder: ConversationFolder) -> some View {
+        let convs = conversations(inFolder: folder.id)
+        let collapsed = collapsedFolders.contains(folder.id)
+        VStack(spacing: 7) {
+            Button {
+                if collapsed { collapsedFolders.remove(folder.id) } else { collapsedFolders.insert(folder.id) }
+            } label: {
+                groupHeaderLabel(icon: collapsed ? "folder.fill" : "folder.fill",
+                                 chevron: collapsed ? "chevron.right" : "chevron.down",
+                                 name: folder.name, count: convs.count, tint: Color.accentColor)
+            }
+            .buttonStyle(.plain)
+            .contextMenu {
+                Button("重命名文件夹") { folderRenameDraft = folder.name; folderRenameTarget = IdentifiedID(id: folder.id) }
+                Button("删除文件夹", role: .destructive) { viewModel.deleteFolder(folder.id) }
+            }
+            if !collapsed {
+                ForEach(convs) { conv in conversationRow(conv) }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var ungroupedSection: some View {
+        let convs = conversations(inFolder: nil)
+        if !convs.isEmpty {
+            VStack(spacing: 7) {
+                groupHeaderLabel(icon: "tray", chevron: nil, name: "未分组", count: convs.count, tint: .secondary)
+                ForEach(convs) { conv in conversationRow(conv) }
+            }
+        }
+    }
+
+    private func groupHeaderLabel(icon: String, chevron: String?, name: String, count: Int, tint: Color) -> some View {
+        HStack(spacing: 8) {
+            if let chevron {
+                Image(systemName: chevron).font(.caption2.weight(.bold)).foregroundStyle(.secondary)
+            }
+            Image(systemName: icon).font(.caption.weight(.semibold)).foregroundStyle(tint)
+            Text(name).font(.system(.subheadline, design: .rounded).weight(.bold)).lineLimit(1)
+            Text("\(count)").font(.caption2.weight(.semibold)).foregroundStyle(.secondary).monospacedDigit()
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .contentShape(Rectangle())
     }
 
     private var sidebarBackdrop: some View {

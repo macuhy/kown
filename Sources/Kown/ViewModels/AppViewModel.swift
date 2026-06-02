@@ -10,6 +10,8 @@ final class AppViewModel {
     var webSearchConfig: WebSearchConfig
     /// 知识库资料夹(本地 RAG)。
     var knowledgeFolders: [KnowledgeFolder] = []
+    /// 会话分组文件夹(侧栏)。
+    var conversationFolders: [ConversationFolder] = []
 
     // MARK: - UI 选择 / 输入
     var selectedConversationID: UUID?
@@ -133,6 +135,7 @@ final class AppViewModel {
         self.conversations = ConversationStore.loadAll()
         self.webSearchConfig = WebSearchConfigStore.load()
         self.knowledgeFolders = KnowledgeStore.loadAll()
+        self.conversationFolders = ConversationFolderStore.load()
         self.systemPrompt = UserDefaults.standard.string(forKey: Self.systemPromptKey) ?? ""
         let storedAlwaysOn = UserDefaults.standard.bool(forKey: Self.alwaysEnableWebSearchKey)
         self.alwaysEnableWebSearch = storedAlwaysOn
@@ -491,6 +494,45 @@ final class AppViewModel {
         ConversationStore.save(conversations[idx])
     }
 
+    // MARK: - 会话文件夹 / 分组
+
+    /// 新建文件夹,返回 id。
+    @discardableResult
+    func createFolder(name: String) -> UUID? {
+        let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !n.isEmpty else { return nil }
+        let folder = ConversationFolder(name: n)
+        conversationFolders.append(folder)
+        ConversationFolderStore.save(conversationFolders)
+        return folder.id
+    }
+
+    func renameFolder(_ id: UUID, name: String) {
+        let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !n.isEmpty, let idx = conversationFolders.firstIndex(where: { $0.id == id }) else { return }
+        conversationFolders[idx].name = n
+        ConversationFolderStore.save(conversationFolders)
+    }
+
+    /// 删除文件夹:其下会话移出(folderID = nil),不删会话。
+    func deleteFolder(_ id: UUID) {
+        for i in conversations.indices where conversations[i].folderID == id {
+            conversations[i].folderID = nil
+            conversations[i].updatedAt = Date()
+            ConversationStore.save(conversations[i])
+        }
+        conversationFolders.removeAll { $0.id == id }
+        ConversationFolderStore.save(conversationFolders)
+    }
+
+    /// 把会话移动到某文件夹(nil = 移出到未分组)。
+    func setFolder(_ convID: UUID, folderID: UUID?) {
+        guard let idx = conversations.firstIndex(where: { $0.id == convID }) else { return }
+        conversations[idx].folderID = folderID
+        conversations[idx].updatedAt = Date()
+        ConversationStore.save(conversations[idx])
+    }
+
     /// 全部会话出现过的标签(按出现频率降序),用于侧栏过滤 chips。
     var allTags: [String] {
         var count: [String: Int] = [:]
@@ -612,6 +654,7 @@ final class AppViewModel {
             self.providers = ProviderConfigStore.load()
             self.webSearchConfig = WebSearchConfigStore.load()
             self.conversations = ConversationStore.loadAll()
+            self.conversationFolders = ConversationFolderStore.load()
             self.refreshHasWebSearchKey()
             // 用量也跟着同步刷新 — 其他设备的 usage-*.json 文件可能刚被 iCloud 拉到本地
             UsageStore.shared.reload()
@@ -635,6 +678,7 @@ final class AppViewModel {
             self.providers = ProviderConfigStore.load()
             self.webSearchConfig = WebSearchConfigStore.load()
             self.conversations = ConversationStore.loadAll()
+            self.conversationFolders = ConversationFolderStore.load()
             // Firecrawl key 存在 apikeys.json 里(随 iCloud 同步),但 UI/canEnableWebSearch 看的是
             // 缓存的 hasWebSearchKey 标志。拉到新 apikeys.json 后必须重算一次,否则另一端填的 key
             // 同步过来了却一直显示「未设置」(firecrawl key「同步失败」的真因)。
