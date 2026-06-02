@@ -498,6 +498,10 @@ final class AppViewModel {
             self.providers = ProviderConfigStore.load()
             self.webSearchConfig = WebSearchConfigStore.load()
             self.conversations = ConversationStore.loadAll()
+            // Firecrawl key 存在 apikeys.json 里(随 iCloud 同步),但 UI/canEnableWebSearch 看的是
+            // 缓存的 hasWebSearchKey 标志。拉到新 apikeys.json 后必须重算一次,否则另一端填的 key
+            // 同步过来了却一直显示「未设置」(firecrawl key「同步失败」的真因)。
+            self.refreshHasWebSearchKey()
             // 用量也要 reload — 别的设备的 usage-*.json 可能刚被 iCloud 拉下来。
             // 启动 2s 后会自动走到这里,所以多端用量累加在 app 启动后短延迟就能看到。
             UsageStore.shared.reload()
