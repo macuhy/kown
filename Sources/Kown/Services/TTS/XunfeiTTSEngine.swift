@@ -13,6 +13,10 @@ struct XunfeiTTSEngine {
 
     /// voice = 发音人 vcn(如 xiaoyan);ratePercent → 讯飞 speed(0~100,默认 50)。
     func synthesize(text: String, voice: String, ratePercent: Int) async throws -> Data {
+        // 粘贴凭证常带首尾空格 / 换行 —— 直接拿去做 HMAC 会导致签名对不上、握手 401。统一裁剪。
+        let appID = self.appID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let apiKey = self.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let apiSecret = self.apiSecret.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !appID.isEmpty, !apiKey.isEmpty, !apiSecret.isEmpty else {
             throw TTSError.notConfigured("讯飞需要 APPID / APIKey / APISecret(设置 ▸ 朗读)")
         }
@@ -28,36 +32,60 @@ struct XunfeiTTSEngine {
         ws.resume()
         defer { ws.cancel(with: .goingAway, reason: nil) }
 
-        // 发送一帧完整文本(status=2 表示一次性送完)
-        try await ws.send(.string(frame(text: text, voice: voice, ratePercent: ratePercent)))
+        do {
+            // 发送一帧完整文本(status=2 表示一次性送完)
+            try await ws.send(.string(frame(appID: appID, text: text, voice: voice, ratePercent: ratePercent)))
 
-        var audio = Data()
-        while true {
-            let message = try await ws.receive()
-            let json: [String: Any]
-            switch message {
-            case .string(let s):
-                json = (try? JSONSerialization.jsonObject(with: Data(s.utf8)) as? [String: Any]) ?? [:]
-            case .data(let d):
-                json = (try? JSONSerialization.jsonObject(with: d) as? [String: Any]) ?? [:]
-            @unknown default:
-                continue
-            }
-            if let code = json["code"] as? Int, code != 0 {
-                let msg = json["message"] as? String ?? "未知错误"
-                throw TTSError.network("讯飞错误 code=\(code) \(msg)")
-            }
-            if let data = json["data"] as? [String: Any] {
-                if let b64 = data["audio"] as? String, let chunk = Data(base64Encoded: b64) {
-                    audio.append(chunk)
+            var audio = Data()
+            while true {
+                let message = try await ws.receive()
+                let json: [String: Any]
+                switch message {
+                case .string(let s):
+                    json = (try? JSONSerialization.jsonObject(with: Data(s.utf8)) as? [String: Any]) ?? [:]
+                case .data(let d):
+                    json = (try? JSONSerialization.jsonObject(with: d) as? [String: Any]) ?? [:]
+                @unknown default:
+                    continue
                 }
-                if let status = data["status"] as? Int, status == 2 {
-                    break   // 最后一帧
+                if let code = json["code"] as? Int, code != 0 {
+                    let msg = json["message"] as? String ?? "未知错误"
+                    throw TTSError.network("讯飞错误 code=\(code) \(msg)")
+                }
+                if let data = json["data"] as? [String: Any] {
+                    if let b64 = data["audio"] as? String, let chunk = Data(base64Encoded: b64) {
+                        audio.append(chunk)
+                    }
+                    if let status = data["status"] as? Int, status == 2 {
+                        break   // 最后一帧
+                    }
                 }
             }
+            guard !audio.isEmpty else { throw TTSError.empty }
+            return audio
+        } catch let e as TTSError {
+            throw e
+        } catch {
+            // WebSocket 握手失败时 URLSession 只给「bad response from the server」,吞掉了 HTTP 错误体。
+            // 用同一个签名 URL 走 https 再打一次,把讯飞真正的鉴权错误(code/message)读出来。
+            if let detail = await Self.handshakeErrorDetail(url: url) {
+                throw TTSError.network(detail)
+            }
+            throw error
         }
-        guard !audio.isEmpty else { throw TTSError.empty }
-        return audio
+    }
+
+    /// 握手失败诊断:把 wss 换成 https 同参再请求,解析讯飞返回的错误体。仅在失败路径调用。
+    private static func handshakeErrorDetail(url: URL) async -> String? {
+        guard var comps = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
+        comps.scheme = "https"
+        guard let httpsURL = comps.url else { return nil }
+        guard let (data, _) = try? await URLSession.shared.data(from: httpsURL),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        let code = obj["code"].map { "\($0)" } ?? ""
+        let msg = (obj["message"] as? String) ?? (obj["desc"] as? String) ?? ""
+        guard !code.isEmpty || !msg.isEmpty else { return nil }
+        return "讯飞鉴权失败 code=\(code) \(msg)(检查 APPID/APIKey/APISecret 是否正确、是否开通「在线语音合成」、设备时间是否准确)"
     }
 
     // MARK: - 鉴权(静态纯函数,便于单测)
@@ -88,7 +116,7 @@ struct XunfeiTTSEngine {
         return comps.url
     }
 
-    private func frame(text: String, voice: String, ratePercent: Int) -> String {
+    private func frame(appID: String, text: String, voice: String, ratePercent: Int) -> String {
         let speed = max(0, min(100, 50 + ratePercent))
         let textB64 = Data(text.utf8).base64EncodedString()
         let payload: [String: Any] = [
