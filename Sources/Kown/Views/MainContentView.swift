@@ -259,6 +259,23 @@ struct MainContentView: View {
         #endif
     }
 
+    /// 「继续生成」按钮 — 让模型接着上一轮回答继续(回答被截断时尤其有用)。
+    private var continueButton: some View {
+        HStack {
+            Spacer()
+            Button { viewModel.continueGenerating() } label: {
+                Label("继续生成", systemImage: "arrow.down.circle")
+                    .font(.callout.weight(.semibold))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+            }
+            .buttonStyle(.bordered)
+            .clipShape(Capsule())
+            Spacer()
+        }
+        .padding(.vertical, 6)
+    }
+
     @ViewBuilder
     private var content: some View {
         let conv = viewModel.selectedConversation
@@ -355,6 +372,9 @@ struct MainContentView: View {
                                 onExportTurn: { exportTurnReport($0) },
                                 onShareTurn: { shareTurnImage($0) }
                             )
+                        }
+                        if hasTurns, !(viewModel.runningConvID == conv?.id && viewModel.isRunning) {
+                            continueButton
                         }
                     }
                     Color.clear.frame(height: 4).id("bottom")

@@ -266,6 +266,13 @@ final class AppViewModel {
         }
     }
 
+    /// 接续生成:让模型接着上一轮回答继续(上下文已随发送回放,故直接发「继续」指令)。
+    func continueGenerating() {
+        guard !isRunning, let conv = selectedConversation, !conv.turns.isEmpty else { return }
+        prompt = "继续"
+        send()
+    }
+
     /// 把当前输入暂存为当前会话的草稿(切换/新建前调用)。
     private func stashDraft() {
         guard let old = selectedConversationID else { return }
