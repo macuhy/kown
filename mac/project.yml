@@ -28,6 +28,10 @@ targets:
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         CFBundleDisplayName: Kown
+        # 深链:kown://ask?q=...&mode=... / kown://new?mode=... / kown://open?id=...
+        CFBundleURLTypes:
+          - CFBundleURLName: com.xiaobo.kown
+            CFBundleURLSchemes: [kown]
         LSMinimumSystemVersion: "14.0"
         LSApplicationCategoryType: public.app-category.productivity
         NSHumanReadableCopyright: "© 2026 bo xiao"

@@ -25,6 +25,10 @@ targets:
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         CFBundleDisplayName: Kown
+        # 深链:kown://ask?q=...&mode=... / kown://new?mode=... / kown://open?id=...
+        CFBundleURLTypes:
+          - CFBundleURLName: com.xiaobo.kown
+            CFBundleURLSchemes: [kown]
         LSRequiresIPhoneOS: true
         # 加密导出合规 — false 表示仅使用 HTTPS / 系统标准加密(免提交合规文档)。
         # TestFlight / App Store 上架不再每次询问 "is your app using non-exempt encryption"。

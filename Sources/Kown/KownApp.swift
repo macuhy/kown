@@ -97,6 +97,7 @@ struct KownApp: App {
             #if os(iOS)
             .dynamicTypeSize(.xSmall ... .medium)
             #endif
+            .onOpenURL { url in viewModel.handleDeepLink(url) }
         }
         .onChange(of: scenePhase) { _, newPhase in
             // app 进入后台 / 失焦时强制刷掉 conversation save 缓冲,

@@ -283,6 +283,53 @@ final class AppViewModel {
         send()
     }
 
+    /// 处理 kown:// 深链:
+    /// - `kown://ask?q=问题&mode=direct&send=1`:新建/复用空会话,填入问题(send=1 直接发)。
+    /// - `kown://new?mode=council`:新建该模式会话。
+    /// - `kown://open?id=<UUID>`:打开指定会话。
+    func handleDeepLink(_ url: URL) {
+        guard url.scheme?.lowercased() == "kown" else { return }
+        let comps = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        let host = (url.host ?? comps?.host ?? "").lowercased()
+        func q(_ name: String) -> String? { comps?.queryItems?.first(where: { $0.name == name })?.value }
+        func mode(_ s: String?) -> ConversationMode? {
+            switch s?.lowercased() {
+            case "direct": return .direct
+            case "compare": return .compare
+            case "council": return .council
+            case "debate": return .debate
+            default: return nil
+            }
+        }
+        switch host {
+        case "ask":
+            let m = mode(q("mode")) ?? activeMode
+            if let convID = selectedConversationID,
+               let idx = conversations.firstIndex(where: { $0.id == convID }),
+               conversations[idx].turns.isEmpty {
+                conversations[idx].mode = m
+                conversations[idx].updatedAt = Date()
+                ConversationStore.save(conversations[idx])
+                activeMode = m
+            } else {
+                newConversation(mode: m)
+            }
+            prompt = q("q") ?? ""
+            let send = (q("send") ?? "").lowercased()
+            if send == "1" || send == "true" { self.send() } else { focusInputRequest &+= 1 }
+        case "new":
+            newConversation(mode: mode(q("mode")) ?? activeMode)
+            focusInputRequest &+= 1
+        case "open":
+            if let idStr = q("id") ?? q("convId"), let uuid = UUID(uuidString: idStr),
+               conversations.contains(where: { $0.id == uuid && $0.deletedAt == nil }) {
+                selectConversation(uuid)
+            }
+        default:
+            break
+        }
+    }
+
     /// 用场景模板开聊:当前会话为空则就地套用(设模式 + 系统提示),否则新建一个。
     func startScenario(mode: ConversationMode, systemPrompt: String) {
         let sys = systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
