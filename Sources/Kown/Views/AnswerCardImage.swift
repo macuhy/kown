@@ -405,7 +405,14 @@ enum AnswerImageExporter {
     /// 把渲染结果写进系统剪贴板。
     @MainActor
     private static func copy<V: View>(_ renderer: ImageRenderer<V>) -> Bool {
-        renderer.scale = 2
+        // 先量一遍内容点尺寸,据此挑 scale。整会话长图很高,固定 scale=2 会让像素尺寸
+        // 超过 CoreGraphics / Metal 的位图上限(~16384px),ImageRenderer 会直接产出**空白图**
+        // (用户报「生成几轮对话时出空白图」即此)。把最长边的像素数压到安全预算内即可。
+        var contentSize: CGSize = .zero
+        renderer.render { size, _ in contentSize = size }
+        let maxPixels: CGFloat = 12000
+        let longest = max(contentSize.width, contentSize.height)
+        renderer.scale = longest > 0 ? min(2, maxPixels / longest) : 2
         #if os(macOS)
         guard let ns = renderer.nsImage else { return false }
         NSPasteboard.general.clearContents()
