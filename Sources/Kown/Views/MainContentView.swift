@@ -183,6 +183,12 @@ struct MainContentView: View {
                 Label("复制整会话为图片", systemImage: "photo.on.rectangle.angled")
             }
             Button {
+                if let conv { exportSessionPDF(conv) }
+            } label: {
+                Label("导出会话为 PDF", systemImage: "doc.richtext")
+            }
+            .disabled(conv?.turns.isEmpty != false)
+            Button {
                 if let conv { Platform.copyText(ConversationExporter.markdown(for: conv)) }
             } label: {
                 Label("复制为 Markdown", systemImage: "doc.on.doc")
@@ -205,6 +211,34 @@ struct MainContentView: View {
     private func export(_ conversation: Conversation, as format: ConversationExporter.Format) {
         saveText(ConversationExporter.text(for: conversation, format: format),
                  fileName: ConversationExporter.suggestedFileName(for: conversation, format: format))
+    }
+
+    /// 导出当前会话为多页 PDF(矢量、全文),复用 saveData 的存盘 / 分享管线。
+    private func exportSessionPDF(_ conversation: Conversation) {
+        guard let pdf = AnswerImageExporter.sessionPDF(conversation: conversation) else { return }
+        let safeTitle = conversation.title
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+        let name = safeTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Kown 会话" : safeTitle
+        saveData(pdf, fileName: "\(name).pdf")
+    }
+
+    /// 存二进制到文件:macOS 弹 NSSavePanel,iOS 落临时文件后系统分享(PDF / 图片等)。
+    private func saveData(_ data: Data, fileName: String) {
+        #if os(macOS)
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = fileName
+        panel.canCreateDirectories = true
+        panel.isExtensionHidden = false
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            try? data.write(to: url, options: .atomic)
+        }
+        #else
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+        try? data.write(to: url, options: .atomic)
+        shareSheet = ShareSheetPayload(url: url)
+        #endif
     }
 
     /// 存文本到文件:macOS 弹 NSSavePanel,iOS 落临时文件后系统分享。整会话 / 全部 / 单轮报告共用。

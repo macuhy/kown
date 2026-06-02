@@ -79,6 +79,8 @@ private struct ShareAnswerPanel: View {
     let text: String
     let error: String?
     var width: CGFloat = kSharePanelWidth
+    /// true=超长截断(图片用,防超大图);false=全文(PDF 用)。
+    var capText: Bool = true
 
     private var accent: Color { shareAccent(config.kind) }
 
@@ -130,7 +132,7 @@ private struct ShareAnswerPanel: View {
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else {
-            Markdown(MD.stylizeMath(shareCap(text)))
+            Markdown(MD.stylizeMath(capText ? shareCap(text) : text))
                 .markdownTheme(MD.exportTheme)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -143,6 +145,7 @@ private struct ShareChairBlock: View {
     let text: String
     let role: ChairSummaryCard.Role
     var width: CGFloat
+    var capText: Bool = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -163,7 +166,7 @@ private struct ShareChairBlock: View {
                 Spacer(minLength: 0)
             }
             Rectangle().fill(role.tint.opacity(0.18)).frame(height: 1)
-            Markdown(MD.stylizeMath(shareCap(text)))
+            Markdown(MD.stylizeMath(capText ? shareCap(text) : text))
                 .markdownTheme(MD.exportTheme)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -184,6 +187,8 @@ struct ShareTurnCard: View {
     let mode: ConversationMode
     /// 预加载好的用户附图(ImageRenderer 同步渲染,异步 .task 不会触发,必须预加载)。
     var preloadedImages: [PlatformImage] = []
+    /// true=超长截断(图片);false=全文(PDF)。
+    var capText: Bool = true
 
     /// 横向并排的 panel(compare 仅取前 2)。
     private var panels: [ProviderConfig] {
@@ -209,10 +214,10 @@ struct ShareTurnCard: View {
             promptHeader
             answersBody
             if let chair = turn.chairConfig, let t = turn.chairSummary, !t.isEmpty {
-                ShareChairBlock(config: chair, text: t, role: chairRole, width: rowWidth)
+                ShareChairBlock(config: chair, text: t, role: chairRole, width: rowWidth, capText: capText)
             }
             if let summary = turn.summaryConfig, let t = turn.summaryText, !t.isEmpty {
-                ShareChairBlock(config: summary, text: t, role: .summary, width: rowWidth)
+                ShareChairBlock(config: summary, text: t, role: .summary, width: rowWidth, capText: capText)
             }
         }
         .frame(width: rowWidth, alignment: .leading)
@@ -305,7 +310,7 @@ struct ShareTurnCard: View {
         HStack(alignment: .top, spacing: kShareGap) {
             ForEach(configs) { cfg in
                 let (text, err) = pick(cfg)
-                ShareAnswerPanel(config: cfg, text: text, error: err, width: panelWidth)
+                ShareAnswerPanel(config: cfg, text: text, error: err, width: panelWidth, capText: capText)
             }
         }
     }
@@ -316,6 +321,8 @@ struct ShareSessionCard: View {
     let conversation: Conversation
     /// turn.id → 预加载的附图。
     var preloaded: [UUID: [PlatformImage]] = [:]
+    /// true=超长截断(图片);false=全文(PDF)。
+    var capText: Bool = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
@@ -336,7 +343,7 @@ struct ShareSessionCard: View {
             }
             ForEach(conversation.turns) { turn in
                 ShareTurnCard(turn: turn, mode: conversation.mode,
-                              preloadedImages: preloaded[turn.id] ?? [])
+                              preloadedImages: preloaded[turn.id] ?? [], capText: capText)
             }
             Text("via Kown")
                 .font(.caption2).foregroundStyle(.secondary)
@@ -390,6 +397,51 @@ enum AnswerImageExporter {
         }
         let renderer = ImageRenderer(content: ShareSessionCard(conversation: conversation, preloaded: map))
         return copy(renderer)
+    }
+
+    /// 整会话 → 多页 PDF(矢量文字、全文不截断)。失败返回 nil。
+    /// 复用分享版式;用 ImageRenderer 把 SwiftUI 画进 CGContext 的 PDF 上下文,按页切片分页。
+    @MainActor
+    static func sessionPDF(conversation: Conversation) -> Data? {
+        var map: [UUID: [PlatformImage]] = [:]
+        for turn in conversation.turns {
+            let imgs = preloadImages(turn)
+            if !imgs.isEmpty { map[turn.id] = imgs }
+        }
+        let renderer = ImageRenderer(content:
+            ShareSessionCard(conversation: conversation, preloaded: map, capText: false))
+        var contentSize: CGSize = .zero
+        renderer.render { size, _ in contentSize = size }
+        guard contentSize.width > 1, contentSize.height > 1 else { return nil }
+
+        // US Letter 纵向;宽版(多列)按页宽缩小,窄的不放大。
+        let pageW: CGFloat = 612, pageH: CGFloat = 792
+        let scale = min(1, pageW / contentSize.width)
+        let scaledW = contentSize.width * scale
+        let scaledH = contentSize.height * scale
+        let pageCount = max(1, Int(ceil(scaledH / pageH)))
+        let tx = (pageW - scaledW) / 2   // 窄内容水平居中
+
+        let pdfData = NSMutableData()
+        guard let consumer = CGDataConsumer(data: pdfData as CFMutableData) else { return nil }
+        var mediaBox = CGRect(x: 0, y: 0, width: pageW, height: pageH)
+        guard let pdf = CGContext(consumer: consumer, mediaBox: &mediaBox, nil) else { return nil }
+
+        renderer.render { _, drawInContext in
+            for p in 0..<pageCount {
+                pdf.beginPDFPage(nil)
+                pdf.saveGState()
+                // 第 p 页露出内容的对应纵向切片:内容上沿对齐第 0 页页顶,逐页下移一页高。
+                let ty = CGFloat(p + 1) * pageH - scaledH
+                pdf.translateBy(x: tx, y: ty)
+                pdf.scaleBy(x: scale, y: scale)
+                drawInContext(pdf)
+                pdf.restoreGState()
+                pdf.endPDFPage()
+            }
+            pdf.closePDF()
+        }
+        return pdfData as Data
     }
 
     /// 同步预加载某轮的用户附图(ImageRenderer 同步渲染,不能依赖异步 .task)。
