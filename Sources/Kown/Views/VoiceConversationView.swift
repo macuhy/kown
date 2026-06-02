@@ -199,7 +199,7 @@ private struct VoiceError: Error {
     init(_ message: String) { self.message = message }
 }
 
-/// 语音对话全屏界面:状态动效 + 实时识别 + 回答文本 + 结束按钮。
+/// 语音对话全屏界面:顶部紧凑状态 + 可滚动的对话历史(渲染 markdown)+ 结束按钮。
 struct VoiceConversationView: View {
     let viewModel: AppViewModel
     @StateObject private var controller: VoiceLoopController
@@ -211,79 +211,168 @@ struct VoiceConversationView: View {
         _controller = StateObject(wrappedValue: VoiceLoopController(viewModel: viewModel))
     }
 
+    private var turns: [Turn] { viewModel.selectedConversation?.turns ?? [] }
+
     var body: some View {
         ZStack {
-            LinearGradient(colors: [tint.opacity(0.18), Color.platformWindowBackground],
+            LinearGradient(colors: [tint.opacity(0.12), Color.platformWindowBackground],
                            startPoint: .top, endPoint: .bottom)
                 .ignoresSafeArea()
 
-            VStack(spacing: 22) {
-                Spacer(minLength: 12)
-                Text(statusTitle)
-                    .font(.system(.title3, design: .rounded).weight(.bold))
-                    .foregroundStyle(tint)
-                orb
-                detail
-                Spacer(minLength: 12)
+            VStack(spacing: 0) {
+                statusHeader
+                Rectangle().fill(Color.primary.opacity(0.06)).frame(height: 1)
+                transcriptScroll
                 controls
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 12)
             }
-            .padding(24)
-            .frame(maxWidth: 560)
         }
         #if os(macOS)
-        .frame(minWidth: 420, minHeight: 560)
+        .frame(minWidth: 460, minHeight: 600)
         #endif
         .onAppear { pulse = true; controller.start() }
         .onDisappear { controller.stop() }
     }
 
-    // MARK: - 子视图
+    // MARK: - 顶部状态
 
-    private var orb: some View {
-        ZStack {
-            Circle()
-                .fill(tint.opacity(0.18))
-                .frame(width: 180, height: 180)
-                .scaleEffect(animating ? 1.12 : 0.92)
-                .animation(animating ? .easeInOut(duration: 0.9).repeatForever(autoreverses: true) : .default,
-                           value: pulse)
-            Circle()
-                .fill(tint.opacity(0.30))
-                .frame(width: 120, height: 120)
-            if case .thinking = controller.phase {
-                ProgressView().controlSize(.large).tint(.white)
-            } else {
-                Image(systemName: orbIcon)
-                    .font(.system(size: 44, weight: .bold))
-                    .foregroundStyle(.white)
+    private var statusHeader: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(tint.opacity(0.16))
+                    .frame(width: 54, height: 54)
+                    .scaleEffect(animating ? 1.12 : 0.9)
+                    .animation(animating ? .easeInOut(duration: 0.9).repeatForever(autoreverses: true) : .default,
+                               value: pulse)
+                if case .thinking = controller.phase {
+                    ProgressView().tint(tint)
+                } else {
+                    Image(systemName: orbIcon)
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(tint)
+                }
             }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(statusTitle)
+                    .font(.system(.headline, design: .rounded).weight(.bold))
+                    .foregroundStyle(tint)
+                if controller.phase == .listening {
+                    Text(controller.transcript.isEmpty ? "请开始说话" : controller.transcript)
+                        .font(.subheadline)
+                        .foregroundStyle(controller.transcript.isEmpty ? .secondary : .primary)
+                        .lineLimit(2)
+                } else if case .error(let msg) = controller.phase {
+                    Text(msg).font(.caption).foregroundStyle(.red).lineLimit(2)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+    }
+
+    // MARK: - 对话历史(可滚动)
+
+    private var transcriptScroll: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 14) {
+                    ForEach(turns) { turn in
+                        userBubble(turn.prompt)
+                        let answer = displayAnswer(turn)
+                        if !answer.isEmpty { assistantBubble(answer) }
+                    }
+                    if viewModel.isRunning {
+                        if let lp = viewModel.liveTurnPrompt, !lp.isEmpty { userBubble(lp) }
+                        thinkingBubble
+                    } else if controller.phase == .listening, !controller.transcript.isEmpty {
+                        userBubble(controller.transcript, pending: true)
+                    }
+                    Color.clear.frame(height: 1).id("voiceBottom")
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .frame(maxWidth: 720, alignment: .leading)
+                .frame(maxWidth: .infinity)
+            }
+            .onAppear { scrollToBottom(proxy) }
+            .onChange(of: turns.count) { _, _ in scrollToBottom(proxy) }
+            .onChange(of: controller.phase) { _, _ in scrollToBottom(proxy) }
+            .onChange(of: controller.transcript) { _, _ in scrollToBottom(proxy) }
+            .onChange(of: viewModel.isRunning) { _, _ in scrollToBottom(proxy) }
         }
     }
 
-    @ViewBuilder
-    private var detail: some View {
-        switch controller.phase {
-        case .error(let msg):
-            Text(msg)
-                .font(.callout)
-                .foregroundStyle(.red)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
-        case .speaking:
-            ScrollView {
-                Text(controller.replyText)
-                    .font(.body)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .textSelection(.enabled)
+    private func scrollToBottom(_ proxy: ScrollViewProxy) {
+        withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("voiceBottom", anchor: .bottom) }
+    }
+
+    private func userBubble(_ text: String, pending: Bool = false) -> some View {
+        HStack {
+            Spacer(minLength: 40)
+            Text(text)
+                .font(.body)
+                .textSelection(.enabled)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(Color.accentColor.opacity(pending ? 0.10 : 0.18),
+                            in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay {
+                    if pending {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .strokeBorder(Color.accentColor.opacity(0.45), style: StrokeStyle(lineWidth: 1, dash: [4]))
+                    }
+                }
+        }
+    }
+
+    private func assistantBubble(_ text: String) -> some View {
+        HStack(alignment: .top) {
+            MarkdownText(text: text)
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.platformControlBackground.opacity(0.5),
+                            in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
+                }
+            Spacer(minLength: 40)
+        }
+    }
+
+    private var thinkingBubble: some View {
+        HStack(spacing: 8) {
+            ProgressView().controlSize(.small)
+            Text("思考中…").font(.callout).foregroundStyle(.secondary)
+            Spacer(minLength: 40)
+        }
+        .padding(14)
+        .background(Color.platformControlBackground.opacity(0.4),
+                    in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    /// 该轮要展示 / 朗读的「主回答」(与 VoiceLoopController.spokenReply 一致)。
+    private func displayAnswer(_ turn: Turn) -> String {
+        func firstResponse() -> String {
+            for cfg in turn.orderedPanelConfigs {
+                if let t = turn.responses[cfg.id.uuidString], !t.isEmpty { return t }
             }
-            .frame(maxHeight: 220)
-        default:
-            Text(controller.transcript.isEmpty ? placeholder : controller.transcript)
-                .font(.title3)
-                .foregroundStyle(controller.transcript.isEmpty ? .secondary : .primary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
-                .frame(minHeight: 60)
+            return turn.responses.values.first { !$0.isEmpty } ?? ""
+        }
+        func nonEmpty(_ s: String?) -> String? {
+            guard let s, !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+            return s
+        }
+        switch viewModel.currentMode {
+        case .direct:  return firstResponse()
+        case .council: return nonEmpty(turn.chairSummary) ?? nonEmpty(turn.summaryText) ?? firstResponse()
+        case .compare: return nonEmpty(turn.chairSummary) ?? firstResponse()
+        case .debate:
+            let last = turn.debateRounds?.sorted { $0.index < $1.index }.last?.responses.values.first { !$0.isEmpty }
+            return nonEmpty(turn.chairSummary) ?? last ?? firstResponse()
         }
     }
 
@@ -333,14 +422,6 @@ struct VoiceConversationView: View {
         case .thinking:  return "思考中…"
         case .speaking:  return "回答中…"
         case .error:     return "出错了"
-        }
-    }
-
-    private var placeholder: String {
-        switch controller.phase {
-        case .listening: return "请开始说话"
-        case .thinking:  return "正在生成回答"
-        default:         return ""
         }
     }
 
