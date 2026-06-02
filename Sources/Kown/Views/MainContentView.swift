@@ -338,7 +338,11 @@ struct MainContentView: View {
                 EmptyStateCard(
                     mode: viewModel.currentMode,
                     providers: viewModel.providers,
-                    onOpenSettings: { showSettings = true }
+                    onOpenSettings: { showSettings = true },
+                    onUseScenario: { s in
+                        viewModel.startScenario(mode: s.mode, systemPrompt: s.systemPrompt)
+                        inputFocused = true
+                    }
                 )
             }
             #if os(iOS)

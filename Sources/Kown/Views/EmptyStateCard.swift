@@ -1,11 +1,37 @@
 import SwiftUI
 
+/// 预设「场景」:一键用某个模式 + 系统提示开聊(代码审查 / 写作 / 头脑风暴等)。
+struct ScenarioTemplate: Identifiable, Hashable {
+    let id: String
+    let name: String
+    let icon: String
+    let mode: ConversationMode
+    let systemPrompt: String
+
+    static let builtIn: [ScenarioTemplate] = [
+        .init(id: "code-review", name: "代码审查", icon: "checkmark.shield.fill", mode: .direct,
+              systemPrompt: "你是资深软件工程师。审查我贴出的代码:指出 bug、安全与性能风险、可读性问题,并给出改进后的完整代码与简要理由。"),
+        .init(id: "writing", name: "写作润色", icon: "pencil.line", mode: .direct,
+              systemPrompt: "你是专业的中文写作编辑。润色我给的文字,使其更清晰、流畅、专业,保留原意与语气;先给修改版,再用要点说明改了什么。"),
+        .init(id: "brainstorm", name: "头脑风暴", icon: "lightbulb.fill", mode: .council,
+              systemPrompt: "你是富有创造力的头脑风暴伙伴。围绕我的主题尽量发散出多样、具体、可执行的点子,并对每个点子用一句话点评优劣。"),
+        .init(id: "tutor", name: "学习讲解", icon: "graduationcap.fill", mode: .direct,
+              systemPrompt: "你是耐心的老师。用通俗的例子由浅入深讲解我问的概念,适当类比,最后出一道小练习帮我检验理解。"),
+        .init(id: "decision", name: "决策分析", icon: "scalemass.fill", mode: .council,
+              systemPrompt: "帮我做决策。先澄清目标与约束,列出可选方案及各自利弊与关键权衡,最后给出有明确理由的建议。"),
+        .init(id: "translate", name: "翻译", icon: "character.book.closed.fill", mode: .direct,
+              systemPrompt: "你是专业译者。在中英之间准确、自然地翻译我给的内容,保留语气、格式与专业术语;只输出译文,必要处可加简短注释。"),
+    ]
+}
+
 struct EmptyStateCard: View {
     let mode: ConversationMode
     let providers: [ProviderConfig]
     let onOpenSettings: () -> Void
     /// 点击示例提问时回调,调用方负责新建会话并填入/发送(默认空实现,老调用方无需改动)
     var onUseSamplePrompt: (String) -> Void = { _ in }
+    /// 点击场景模板时回调(默认空实现)。
+    var onUseScenario: (ScenarioTemplate) -> Void = { _ in }
 
     private var enabledProviders: [ProviderConfig] { providers.filter(\.enabled) }
     private var modeTint: Color { mode.workspaceTint }
@@ -56,6 +82,9 @@ struct EmptyStateCard: View {
             heroCard
                 .frame(maxWidth: 760)
 
+            scenarioCard
+                .frame(maxWidth: 920)
+
             samplePromptCard
                 .frame(maxWidth: 920)
 
@@ -74,6 +103,7 @@ struct EmptyStateCard: View {
     private var mobileBody: some View {
         VStack(spacing: 10) {
             mobileHeroCard
+            scenarioCard
             samplePromptCard
             mobileQuickStartCard
             mobileProviderSummaryCard
@@ -470,6 +500,47 @@ struct EmptyStateCard: View {
             FlowLayout(spacing: 8, lineSpacing: 8) {
                 ForEach(samplePrompts, id: \.self) { prompt in
                     samplePromptChip(prompt)
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardBackground(tint: modeTint.opacity(0.9), cornerRadius: 22))
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+        }
+    }
+
+    private var scenarioCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionHeader(
+                title: "场景模板",
+                subtitle: "一键用预设系统提示开聊",
+                icon: "square.grid.2x2.fill",
+                tint: modeTint
+            )
+            FlowLayout(spacing: 8, lineSpacing: 8) {
+                ForEach(ScenarioTemplate.builtIn) { s in
+                    Button { onUseScenario(s) } label: {
+                        HStack(spacing: 7) {
+                            Image(systemName: s.icon)
+                                .font(.system(size: 11, weight: .black))
+                                .foregroundStyle(modeTint)
+                            Text(s.name)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(modeTint.opacity(0.10), in: Capsule())
+                        .overlay { Capsule().strokeBorder(modeTint.opacity(0.20), lineWidth: 1) }
+                    }
+                    .buttonStyle(.plain)
+                    #if os(iOS)
+                    .contentShape(Capsule())
+                    #endif
                 }
             }
         }

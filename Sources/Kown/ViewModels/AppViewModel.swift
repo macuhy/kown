@@ -280,6 +280,23 @@ final class AppViewModel {
         send()
     }
 
+    /// 用场景模板开聊:当前会话为空则就地套用(设模式 + 系统提示),否则新建一个。
+    func startScenario(mode: ConversationMode, systemPrompt: String) {
+        let sys = systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let convID = selectedConversationID,
+           let idx = conversations.firstIndex(where: { $0.id == convID }),
+           conversations[idx].turns.isEmpty {
+            conversations[idx].mode = mode
+            conversations[idx].systemPrompt = sys.isEmpty ? nil : sys
+            conversations[idx].updatedAt = Date()
+            ConversationStore.save(conversations[idx])
+            activeMode = mode
+        } else {
+            newConversation(mode: mode)
+            if let id = selectedConversationID { setConversationSystemPrompt(id, prompt: sys) }
+        }
+    }
+
     /// 按需生成 3 条追问建议(基于最近一轮问答),用便宜的小调用。
     func suggestFollowUps() {
         guard !suggestingFollowUps, !isRunning,
