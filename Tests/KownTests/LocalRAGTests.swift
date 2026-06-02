@@ -31,6 +31,24 @@ final class LocalRAGTests: XCTestCase {
         XCTAssertTrue(tokens.contains("2026"))
     }
 
+    func testChunkDedup() {
+        let text = "第一段。\n第二段。\n第一段。"
+        let chunks = LocalRAG.chunk(text, size: 50, overlap: 10)
+        XCTAssertEqual(Set(chunks).count, chunks.count, "重复块应去重")
+    }
+
+    func testRRFFuse() {
+        // idx 2 在两个列表都排第一 → 融合分最高(无歧义)。
+        let fused = LocalRAG.rrfFuse([[2, 1, 0], [2, 0, 1]])
+        XCTAssertEqual(fused.max { $0.value < $1.value }!.key, 2)
+    }
+
+    func testDot() {
+        XCTAssertEqual(LocalRAG.dot([1, 0, 0], [1, 0, 0]), 1, accuracy: 1e-5)
+        XCTAssertEqual(LocalRAG.dot([1, 0], [0, 1]), 0, accuracy: 1e-5)
+    }
+
+    @MainActor
     func testRetrieveRanksRelevantChunkFirst() throws {
         let folder = KnowledgeFolder(name: "测试", docs: [
             KnowledgeDoc(name: "A", text: "猫是一种常见的家养宠物,喜欢睡觉和抓老鼠。"),
@@ -41,6 +59,7 @@ final class LocalRAGTests: XCTestCase {
         XCTAssertTrue(first.contains("光合作用"))
     }
 
+    @MainActor
     func testRetrieveEmptyOnNoMatchTokens() {
         let folder = KnowledgeFolder(name: "空", docs: [])
         XCTAssertTrue(LocalRAG.retrieve(query: "任何", folder: folder, topK: 3).isEmpty)

@@ -1,7 +1,9 @@
 import Foundation
+import NaturalLanguage
 
-/// 纯本地检索:把文档切块,用 BM25(关键词)对 query 打分,返回最相关的 top-K 片段。
-/// 不依赖 embedding API,零成本、可离线。中文按「单字 + 相邻二元组」切词,英文按词。
+/// 纯本地检索:文档切块,**BM25(关键词)+ 向量(语义)混合**(RRF 融合)取 top-K 片段。
+/// 向量用 Apple `NLEmbedding`(句向量,完全离线、零成本);拿不到向量时自动退回纯 BM25。
+/// 中文按「单字 + 相邻二元组」切词;英文按词。
 enum LocalRAG {
     /// 单块目标字符数 + 重叠。
     static let chunkSize = 500
@@ -14,12 +16,40 @@ enum LocalRAG {
         let text: String
     }
 
-    /// 把文档切成带重叠的块(按段落优先,过长再硬切)。
+    /// 把文档切块:优先按换行的自然段聚合到 ~size,过长的段再带重叠硬切,最后去重。
     static func chunk(_ text: String, size: Int = chunkSize, overlap: Int = chunkOverlap) -> [String] {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
-        let chars = Array(trimmed)
-        guard chars.count > size else { return [trimmed] }
+
+        let paragraphs = trimmed
+            .components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+
+        var out: [String] = []
+        var buf = ""
+        func flush() {
+            let t = buf.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !t.isEmpty { out.append(t) }
+            buf = ""
+        }
+        for p in paragraphs {
+            if p.count > size {
+                flush()
+                out.append(contentsOf: hardSplit(p, size: size, overlap: overlap))
+                continue
+            }
+            if buf.count + p.count + 1 > size { flush() }
+            buf += (buf.isEmpty ? "" : "\n") + p
+        }
+        flush()
+        var seen = Set<String>()
+        return out.filter { seen.insert($0).inserted }
+    }
+
+    private static func hardSplit(_ text: String, size: Int, overlap: Int) -> [String] {
+        let chars = Array(text)
+        guard chars.count > size else { return [text] }
         var out: [String] = []
         var start = 0
         let step = max(1, size - overlap)
@@ -32,30 +62,55 @@ enum LocalRAG {
         return out
     }
 
-    /// 检索:在 folder 的所有文档块里,按 BM25 对 query 打分,返回 top-K 片段文本(带文档名)。
+    /// 检索:BM25 + 向量混合(RRF),返回 top-K 片段文本(带文档名)。
+    @MainActor
     static func retrieve(query: String, folder: KnowledgeFolder, topK: Int = 4) -> [String] {
+        var seen = Set<String>()
         var chunks: [Chunk] = []
         for doc in folder.docs {
-            for c in chunk(doc.text) {
+            for c in chunk(doc.text) where seen.insert(c).inserted {
                 chunks.append(Chunk(docName: doc.name, text: c))
             }
         }
         guard !chunks.isEmpty else { return [] }
 
+        // --- BM25 排名 ---
         let queryTerms = tokenize(query)
-        guard !queryTerms.isEmpty else { return [] }
+        var bmOrder: [Int] = []
+        if !queryTerms.isEmpty {
+            let scores = bm25Scores(query: queryTerms, docs: chunks.map { tokenize($0.text) })
+            bmOrder = scores.enumerated().filter { $0.element > 0 }
+                .sorted { $0.element > $1.element }.map { $0.offset }
+        }
 
-        let docTokens = chunks.map { tokenize($0.text) }
-        let scores = bm25Scores(query: queryTerms, docs: docTokens)
+        // --- 向量排名(语义)---
+        var vecOrder: [Int] = []
+        let cache = RAGVectorCache.shared
+        if let (model, lang) = cache.model(forQuery: query),
+           let qv = cache.queryVector(query, model: model) {
+            var sims: [(Int, Float)] = []
+            for (i, c) in chunks.enumerated() {
+                if let v = cache.vector(for: c.text, lang: lang, model: model), v.count == qv.count {
+                    let s = dot(qv, v)
+                    if s > 0 { sims.append((i, s)) }
+                }
+            }
+            vecOrder = sims.sorted { $0.1 > $1.1 }.map { $0.0 }
+            cache.persistIfDirty()
+        }
 
-        let ranked = scores.enumerated()
-            .filter { $0.element > 0 }
-            .sorted { $0.element > $1.element }
-            .prefix(topK)
+        // --- RRF 融合;某一信号缺失时退回另一信号 ---
+        let fused = rrfFuse([bmOrder, vecOrder])
+        let rankedIdx: [Int]
+        if fused.isEmpty {
+            rankedIdx = Array((bmOrder.isEmpty ? vecOrder : bmOrder).prefix(topK))
+        } else {
+            rankedIdx = fused.sorted { $0.value > $1.value }.prefix(topK).map { $0.key }
+        }
 
         var out: [String] = []
         var used = 0
-        for (idx, _) in ranked {
+        for idx in rankedIdx {
             let c = chunks[idx]
             let block = "【\(c.docName)】\n\(c.text)"
             if used + block.count > maxInjectChars { break }
@@ -65,6 +120,23 @@ enum LocalRAG {
         return out
     }
 
+    /// Reciprocal Rank Fusion:每个排名列表 score += 1/(k + rank)。
+    static func rrfFuse(_ lists: [[Int]], k: Double = 60) -> [Int: Double] {
+        var fused: [Int: Double] = [:]
+        for list in lists {
+            for (rank, idx) in list.enumerated() {
+                fused[idx, default: 0] += 1.0 / (k + Double(rank))
+            }
+        }
+        return fused
+    }
+
+    static func dot(_ a: [Float], _ b: [Float]) -> Float {
+        var s: Float = 0
+        for i in 0..<min(a.count, b.count) { s += a[i] * b[i] }
+        return s
+    }
+
     // MARK: - BM25
 
     static func bm25Scores(query: [String], docs: [[String]], k1: Double = 1.5, b: Double = 0.75) -> [Double] {
@@ -72,12 +144,10 @@ enum LocalRAG {
         guard n > 0 else { return [] }
         let avgdl = Double(docs.reduce(0) { $0 + $1.count }) / Double(n)
 
-        // 文档频率
         var df: [String: Int] = [:]
         for doc in docs {
             for term in Set(doc) { df[term, default: 0] += 1 }
         }
-        // 每文档词频
         let tfs: [[String: Int]] = docs.map { doc in
             var m: [String: Int] = [:]
             for t in doc { m[t, default: 0] += 1 }
@@ -138,7 +208,7 @@ enum LocalRAG {
         return tokens
     }
 
-    private static func isCJK(_ s: Unicode.Scalar) -> Bool {
+    static func isCJK(_ s: Unicode.Scalar) -> Bool {
         switch s.value {
         case 0x4E00...0x9FFF,   // CJK 统一表意
              0x3400...0x4DBF,   // 扩展 A
@@ -148,5 +218,104 @@ enum LocalRAG {
         default:
             return false
         }
+    }
+
+    /// 文本是否以 CJK 为主(决定句向量用中文还是英文模型)。
+    static func isCJKHeavy(_ text: String) -> Bool {
+        var cjk = 0, alpha = 0
+        for s in text.unicodeScalars {
+            if isCJK(s) { cjk += 1 } else if s.properties.isAlphabetic { alpha += 1 }
+        }
+        return cjk > alpha
+    }
+}
+
+/// 句向量缓存:NLEmbedding 模型按需加载;向量按「语言:内容哈希」缓存,
+/// 单位化 + Float16 量化后存内存,二进制 plist 落本地目录(不进 iCloud)。
+@MainActor
+final class RAGVectorCache {
+    static let shared = RAGVectorCache()
+
+    private var memory: [String: [Float]] = [:]
+    private var dirty = false
+    private var loaded = false
+
+    private var zhTried = false
+    private var enTried = false
+    private var zhModel: NLEmbedding?
+    private var enModel: NLEmbedding?
+
+    private var fileURL: URL { Platform.localDataDir.appendingPathComponent("rag-vectors.plist") }
+
+    /// 按查询语言选句向量模型;返回 (模型, 语言标签)。中英都拿不到则 nil(退回纯 BM25)。
+    func model(forQuery query: String) -> (NLEmbedding, String)? {
+        if LocalRAG.isCJKHeavy(query) {
+            if let m = zh() { return (m, "zh") }
+            if let m = en() { return (m, "en") }
+        } else {
+            if let m = en() { return (m, "en") }
+            if let m = zh() { return (m, "zh") }
+        }
+        return nil
+    }
+
+    private func zh() -> NLEmbedding? {
+        if !zhTried { zhTried = true; zhModel = NLEmbedding.sentenceEmbedding(for: .simplifiedChinese) }
+        return zhModel
+    }
+    private func en() -> NLEmbedding? {
+        if !enTried { enTried = true; enModel = NLEmbedding.sentenceEmbedding(for: .english) }
+        return enModel
+    }
+
+    func queryVector(_ query: String, model: NLEmbedding) -> [Float]? {
+        guard let v = model.vector(for: query) else { return nil }
+        return normalizeQuantize(v)
+    }
+
+    /// 取(或计算并缓存)某块的句向量。
+    func vector(for text: String, lang: String, model: NLEmbedding) -> [Float]? {
+        load()
+        let key = lang + ":" + String(Self.stableHash(text))
+        if let cached = memory[key] { return cached }
+        guard let v = model.vector(for: text) else { return nil }
+        let q = normalizeQuantize(v)
+        memory[key] = q
+        dirty = true
+        return q
+    }
+
+    /// 单位化 + Float16 量化(余弦即点积)。
+    private func normalizeQuantize(_ v: [Double]) -> [Float] {
+        var norm = 0.0
+        for x in v { norm += x * x }
+        norm = norm.squareRoot()
+        let inv = norm > 0 ? 1.0 / norm : 1.0
+        return v.map { Float(Float16($0 * inv)) }
+    }
+
+    private func load() {
+        guard !loaded else { return }
+        loaded = true
+        guard let data = try? Data(contentsOf: fileURL),
+              let dict = try? PropertyListDecoder().decode([String: [Float]].self, from: data) else { return }
+        memory = dict
+    }
+
+    func persistIfDirty() {
+        guard dirty else { return }
+        let enc = PropertyListEncoder()
+        enc.outputFormat = .binary
+        if let data = try? enc.encode(memory) {
+            try? data.write(to: fileURL, options: .atomic)
+            dirty = false
+        }
+    }
+
+    /// FNV-1a 64-bit 稳定哈希(跨进程稳定,用作缓存键)。
+    static func stableHash(_ s: String) -> UInt64 {
+        var h: UInt64 = 0xcbf29ce484222325
+        for b in s.utf8 { h = (h ^ UInt64(b)) &* 0x100000001b3 }
+        return h
     }
 }
