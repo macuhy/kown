@@ -80,6 +80,7 @@
 		AC07A20F016EA19138DCB1DF /* CompareTurnsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B0DA510C06622816A4DCB83 /* CompareTurnsView.swift */; };
 		AE45CA69BB323D198B59A254 /* SpeechRecognizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F76C7D4696CC94423AF396D7 /* SpeechRecognizer.swift */; };
 		AF791BFAB16028DB5B5C5679 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6BBFEBEFE06B752D3EBC48F5 /* Assets.xcassets */; };
+		B065092D931DC5DBF4453BA9 /* WrappingHStack.swift in Sources */ = {isa = PBXBuildFile; fileRef = D025C7805F828C5A7D33766C /* WrappingHStack.swift */; };
 		B1C3734602EA607CCB60A9EF /* AskKownIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFDDC6E57D56E5FE87D2E871 /* AskKownIntent.swift */; };
 		B87C0DB982B6A3F9F2C4E9EB /* ReasoningDisclosure.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B277A0EF8E90BFCABD0584E /* ReasoningDisclosure.swift */; };
 		BAB89506C06D863220F3662B /* UsageStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C7B12B5A033AA11149DE807 /* UsageStore.swift */; };
@@ -180,6 +181,7 @@
 		CE5C4405041E203FC52EA1BA /* DebateTurnsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebateTurnsView.swift; sourceTree = "<group>"; };
 		CE6EDBB6EE19B3E06EB8BA46 /* BackgroundCompanion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundCompanion.swift; sourceTree = "<group>"; };
 		CFDDC6E57D56E5FE87D2E871 /* AskKownIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskKownIntent.swift; sourceTree = "<group>"; };
+		D025C7805F828C5A7D33766C /* WrappingHStack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WrappingHStack.swift; sourceTree = "<group>"; };
 		D543C2F2DA02ECE5F5FAE137 /* CouncilTurnsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CouncilTurnsView.swift; sourceTree = "<group>"; };
 		D670400A46606C585819F2CC /* Provider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Provider.swift; sourceTree = "<group>"; };
 		D76436AAFFE48E40E499C438 /* ProviderRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderRowView.swift; sourceTree = "<group>"; };
@@ -264,6 +266,7 @@
 				C7667D7656095A4C06D33EDC /* UsageSettingsView.swift */,
 				98E7319E6BE7F6B2EC8EA43A /* VoteResultsCard.swift */,
 				8DEFC40E9873DEDC8D163DAF /* WebSearchSettingsView.swift */,
+				D025C7805F828C5A7D33766C /* WrappingHStack.swift */,
 				5DFC0ABA6C11D5872102C8AF /* Mac */,
 				F185D29EB0960E338B4F7A5A /* Modes */,
 				1170A3BA7EB1DE2AF25ECE5F /* Sidebar */,
@@ -597,6 +600,7 @@
 				6772477AA987E55FBAEF8C7D /* WebSearch.swift in Sources */,
 				9660B6092B9E1F719FA98A61 /* WebSearchSettingsView.swift in Sources */,
 				885C193991424F3917955116 /* WorkspaceManager.swift in Sources */,
+				B065092D931DC5DBF4453BA9 /* WrappingHStack.swift in Sources */,
 				3ADE5E91AB659407BD4C82C3 /* XunfeiTTSEngine.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -741,7 +745,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.10.7;
+				MARKETING_VERSION = 0.10.8;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown;
 				SDKROOT = macosx;
 				SWIFT_UPCOMING_FEATURE_STRICT_CONCURRENCY = YES;
@@ -767,7 +771,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.10.7;
+				MARKETING_VERSION = 0.10.8;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown;
 				SDKROOT = macosx;
 				SWIFT_UPCOMING_FEATURE_STRICT_CONCURRENCY = YES;

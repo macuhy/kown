@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Compare 模式:每个 turn = 用户问题 + 2 列回答并排 + 可选的裁判结论。
-/// iPhone compact 宽度下两列改成 TabView 横向滑动(swipe between models)。
+/// iPhone compact 宽度下两列改成垂直堆叠,避免固定高度 pager 裁切长回答。
 struct CompareTurnsView: View {
     @Bindable var viewModel: AppViewModel
     let conversation: Conversation
@@ -21,7 +21,7 @@ struct CompareTurnsView: View {
     @State private var collapsedTurns: Set<UUID> = []
     @Environment(\.horizontalSizeClass) private var hSizeClass
 
-    private var pages: Bool {
+    private var stacksVertically: Bool {
         #if os(iOS)
         return hSizeClass == .compact
         #else
@@ -29,8 +29,12 @@ struct CompareTurnsView: View {
         #endif
     }
 
+    private var turnSpacing: CGFloat { stacksVertically ? 16 : 22 }
+    private var horizontalPadding: CGFloat { stacksVertically ? 10 : 18 }
+    private var verticalPadding: CGFloat { stacksVertically ? 12 : 18 }
+
     var body: some View {
-        LazyVStack(alignment: .leading, spacing: 22) {
+        LazyVStack(alignment: .leading, spacing: turnSpacing) {
             ForEach(conversation.turns) { turn in
                 historicalTurn(turn)
             }
@@ -38,8 +42,8 @@ struct CompareTurnsView: View {
                 liveTurn(prompt: livePrompt)
             }
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 18)
+        .padding(.horizontal, horizontalPadding)
+        .padding(.vertical, verticalPadding)
     }
 
     private func historicalTurn(_ turn: Turn) -> some View {
@@ -133,21 +137,13 @@ struct CompareTurnsView: View {
         }
     }
 
-    /// iPhone(pages=true)用 TabView 滑动;其他用 HStack 并排。
+    /// iPhone 用 VStack;其他按可用宽度自动换列。
     @ViewBuilder
     private func comparePanels<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        if pages {
-            #if os(iOS)
-            TabView {
-                content()
-            }
-            .tabViewStyle(.page(indexDisplayMode: .always))
-            .frame(minHeight: 440)
-            #else
-            AdaptivePanelGrid(minColumnWidth: 420) { content() }
-            #endif
+        if stacksVertically {
+            VStack(alignment: .leading, spacing: 14) { content() }
         } else {
-            AdaptivePanelGrid(minColumnWidth: 420) { content() }
+            AdaptivePanelGrid(minColumnWidth: 520) { content() }
         }
     }
 

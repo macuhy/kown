@@ -14,32 +14,43 @@ struct AnswerFooterBar: View {
     @ObservedObject private var speech = SpeechService.shared
 
     var body: some View {
-        HStack(spacing: 8) {
-            if !sources.isEmpty { SourcesChip(sources: sources) }
-            Spacer(minLength: 6)
-            let reading = speech.speakingText == text
-            Button { speech.toggle(text) } label: {
-                chip(reading ? "停止" : "朗读", systemImage: reading ? "stop.fill" : "speaker.wave.2",
-                     color: reading ? tint : .secondary)
-            }.buttonStyle(.borderless)
-            Button {
-                if AnswerImageExporter.copyToClipboard(providerName: providerName, model: model, text: text) {
-                    withAnimation { imageCopied = true }
-                    Task { @MainActor in try? await Task.sleep(for: .seconds(1.4)); withAnimation { imageCopied = false } }
-                }
-            } label: {
-                chip(imageCopied ? "已复制" : "图片", systemImage: imageCopied ? "checkmark" : "photo",
-                     color: imageCopied ? .green : .secondary)
-            }.buttonStyle(.borderless)
-            Button {
-                Platform.copyText(text)
-                withAnimation { copied = true }
-                Task { @MainActor in try? await Task.sleep(for: .seconds(1.4)); withAnimation { copied = false } }
-            } label: {
-                chip(copied ? "已复制" : "复制", systemImage: copied ? "checkmark" : "doc.on.doc",
-                     color: copied ? .green : .secondary)
-            }.buttonStyle(.borderless)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                if !sources.isEmpty { SourcesChip(sources: sources) }
+                Spacer(minLength: 6)
+                footerActions
+            }
+            WrappingHStack(horizontalSpacing: 8, verticalSpacing: 7) {
+                if !sources.isEmpty { SourcesChip(sources: sources) }
+                footerActions
+            }
         }
+    }
+
+    @ViewBuilder
+    private var footerActions: some View {
+        let reading = speech.speakingText == text
+        Button { speech.toggle(text) } label: {
+            chip(reading ? "停止" : "朗读", systemImage: reading ? "stop.fill" : "speaker.wave.2",
+                 color: reading ? tint : .secondary)
+        }.buttonStyle(.borderless)
+        Button {
+            if AnswerImageExporter.copyToClipboard(providerName: providerName, model: model, text: text) {
+                withAnimation { imageCopied = true }
+                Task { @MainActor in try? await Task.sleep(for: .seconds(1.4)); withAnimation { imageCopied = false } }
+            }
+        } label: {
+            chip(imageCopied ? "已复制" : "图片", systemImage: imageCopied ? "checkmark" : "photo",
+                 color: imageCopied ? .green : .secondary)
+        }.buttonStyle(.borderless)
+        Button {
+            Platform.copyText(text)
+            withAnimation { copied = true }
+            Task { @MainActor in try? await Task.sleep(for: .seconds(1.4)); withAnimation { copied = false } }
+        } label: {
+            chip(copied ? "已复制" : "复制", systemImage: copied ? "checkmark" : "doc.on.doc",
+                 color: copied ? .green : .secondary)
+        }.buttonStyle(.borderless)
     }
 
     private func chip(_ title: String, systemImage: String, color: Color) -> some View {
@@ -78,12 +89,22 @@ struct PromptBubble: View {
     /// 历史 turn 才传:把该轮(并排各模型回答)复制成图片到剪贴板。
     var onShareImage: (() -> Void)? = nil
 
+    @Environment(\.horizontalSizeClass) private var hSizeClass
+
+    private var isCompact: Bool {
+        #if os(iOS)
+        return hSizeClass == .compact
+        #else
+        return false
+        #endif
+    }
+
     private var hasMenu: Bool {
         onFork != nil || onEdit != nil || onFollowUp != nil || onExportReport != nil || onShareImage != nil
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: isCompact ? 10 : 12) {
             ZStack {
                 RoundedRectangle(cornerRadius: 13, style: .continuous)
                     .fill(
@@ -94,10 +115,10 @@ struct PromptBubble: View {
                         )
                     )
                 Image(systemName: "person.fill")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.system(size: isCompact ? 13 : 14, weight: .bold))
                     .foregroundStyle(.white)
             }
-            .frame(width: 34, height: 34)
+            .frame(width: isCompact ? 30 : 34, height: isCompact ? 30 : 34)
             .shadow(color: Color.accentColor.opacity(0.18), radius: 10, x: 0, y: 5)
 
             VStack(alignment: .leading, spacing: 7) {
@@ -153,12 +174,12 @@ struct PromptBubble: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(16)
+        .padding(isCompact ? 12 : 16)
         .background(
             ZStack {
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                RoundedRectangle(cornerRadius: isCompact ? 17 : 20, style: .continuous)
                     .fill(.regularMaterial)
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                RoundedRectangle(cornerRadius: isCompact ? 17 : 20, style: .continuous)
                     .fill(
                         LinearGradient(
                             colors: [Color.accentColor.opacity(0.09), Color.clear],
@@ -169,7 +190,7 @@ struct PromptBubble: View {
             }
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
+            RoundedRectangle(cornerRadius: isCompact ? 17 : 20, style: .continuous)
                 .strokeBorder(Color.accentColor.opacity(0.16), lineWidth: 1)
         }
     }
@@ -203,12 +224,18 @@ struct HistoricalResponseCard: View {
     @Environment(\.horizontalSizeClass) private var hSizeClass
     /// iOS 紧凑宽度:footer 动作按钮只显示图标,避免窄卡片里文字被逐字竖排。
     private var compactFooter: Bool {
+        isCompact
+    }
+
+    private var isCompact: Bool {
         #if os(iOS)
         return hSizeClass == .compact
         #else
         return false
         #endif
     }
+
+    private var cardCorner: CGFloat { isCompact ? 18 : 20 }
     /// 超过此长度的回答默认折叠(底部渐隐 + 展开全部),防超长回答撑爆布局。
     private static let collapseThreshold = 4000
 
@@ -218,9 +245,9 @@ struct HistoricalResponseCard: View {
                 .fill(accentGradient)
                 .frame(height: 4)
             header
-                .padding(.horizontal, 16)
-                .padding(.top, 13)
-                .padding(.bottom, 11)
+                .padding(.horizontal, isCompact ? 12 : 16)
+                .padding(.top, isCompact ? 11 : 13)
+                .padding(.bottom, isCompact ? 10 : 11)
             if !bodyCollapsed {
                 softDivider
                 VStack(alignment: .leading, spacing: 10) {
@@ -229,19 +256,20 @@ struct HistoricalResponseCard: View {
                     }
                     body_
                 }
-                .padding(16)
+                .padding(isCompact ? 12 : 16)
                 .background(bodyBackground)
                 softDivider
                 footer
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
+                    .padding(.horizontal, isCompact ? 12 : 16)
+                    .padding(.vertical, isCompact ? 8 : 10)
             }
         }
+        .frame(minWidth: 0, maxWidth: .infinity, alignment: .topLeading)
         .background(
             ZStack {
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                RoundedRectangle(cornerRadius: cardCorner, style: .continuous)
                     .fill(.regularMaterial)
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                RoundedRectangle(cornerRadius: cardCorner, style: .continuous)
                     .fill(
                         LinearGradient(
                             colors: [accentColor.opacity(0.08), Color.platformControlBackground.opacity(0.34), Color.clear],
@@ -251,65 +279,107 @@ struct HistoricalResponseCard: View {
                     )
             }
         )
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: cardCorner, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
+            RoundedRectangle(cornerRadius: cardCorner, style: .continuous)
                 .strokeBorder(accentColor.opacity(error == nil ? 0.20 : 0.42), lineWidth: 1)
         }
         .shadow(color: accentColor.opacity(0.06), radius: 18, x: 0, y: 10)
     }
 
     private var header: some View {
-        HStack(spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [accentColor.opacity(0.88), accentColor.opacity(0.42)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                Image(systemName: providerSymbol)
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(.white)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: isCompact ? 10 : 12) {
+                providerIdentity
+                Spacer(minLength: 8)
+                statusControls
             }
-            .frame(width: 34, height: 34)
-            .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.28), lineWidth: 1)
-            }
-
-            VStack(alignment: .leading, spacing: 5) {
-                Text(config.displayName)
-                    .font(.system(.subheadline, design: .rounded).weight(.bold))
-                    .lineLimit(1)
-                HStack(spacing: 6) {
-                    providerKindBadge
-                    Text(config.model)
-                        .font(.system(.caption2, design: .monospaced).weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+            VStack(alignment: .leading, spacing: 9) {
+                HStack(spacing: isCompact ? 10 : 12) {
+                    providerIcon
+                    providerTitleBlock
+                    Spacer(minLength: 4)
+                    collapseButton
+                }
+                if error != nil {
+                    statusBadge("失败", icon: "xmark.octagon.fill", color: .red)
+                } else {
+                    statusBadge("已完成", icon: "checkmark.seal.fill", color: .green)
                 }
             }
-            Spacer()
+        }
+    }
+
+    private var providerIdentity: some View {
+        HStack(spacing: isCompact ? 10 : 12) {
+            providerIcon
+            providerTitleBlock
+        }
+        .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var providerIcon: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: isCompact ? 11 : 12, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [accentColor.opacity(0.88), accentColor.opacity(0.42)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+            Image(systemName: providerSymbol)
+                .font(.system(size: isCompact ? 13 : 14, weight: .bold))
+                .foregroundStyle(.white)
+        }
+        .frame(width: isCompact ? 31 : 34, height: isCompact ? 31 : 34)
+        .overlay {
+            RoundedRectangle(cornerRadius: isCompact ? 11 : 12, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.28), lineWidth: 1)
+        }
+    }
+
+    private var providerTitleBlock: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(config.displayName)
+                .font(.system(.subheadline, design: .rounded).weight(.bold))
+                .lineLimit(1)
+            HStack(spacing: 6) {
+                providerKindBadge
+                Text(config.model)
+                    .font(.system(.caption2, design: .monospaced).weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+        }
+        .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var statusControls: some View {
+        HStack(spacing: 8) {
             if error != nil {
                 statusBadge("失败", icon: "xmark.octagon.fill", color: .red)
             } else {
                 statusBadge("已完成", icon: "checkmark.seal.fill", color: .green)
             }
-            Button {
-                withAnimation(.easeInOut(duration: 0.18)) { bodyCollapsed.toggle() }
-            } label: {
-                Image(systemName: bodyCollapsed ? "chevron.down" : "chevron.up")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 22, height: 22)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help(bodyCollapsed ? "展开这条回答" : "折叠这条回答")
+            collapseButton
         }
+        .fixedSize()
+    }
+
+    private var collapseButton: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.18)) { bodyCollapsed.toggle() }
+        } label: {
+            Image(systemName: bodyCollapsed ? "chevron.down" : "chevron.up")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.secondary)
+                .frame(width: 22, height: 22)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(bodyCollapsed ? "展开这条回答" : "折叠这条回答")
     }
 
     @ViewBuilder
@@ -390,67 +460,83 @@ struct HistoricalResponseCard: View {
     }
 
     private var footer: some View {
-        HStack(spacing: 8) {
-            if !text.isEmpty {
-                metricPill("\(text.count) 字", icon: "text.alignleft")
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                footerMetrics
+                Spacer(minLength: 6)
+                footerActions
             }
-            if let tokenUsage, tokenUsage.input > 0 || tokenUsage.output > 0 {
-                TokenCostPill(usage: tokenUsage, model: config.model, providerKind: config.kind)
+            WrappingHStack(horizontalSpacing: 8, verticalSpacing: 7) {
+                footerMetrics
+                footerActions
             }
-            Spacer(minLength: 6)
-            if !sources.isEmpty {
-                SourcesChip(sources: sources)
-            }
-            if let onRegenerate, !regenerateProviders.isEmpty {
-                Menu {
-                    ForEach(regenerateProviders) { p in
-                        Button("\(p.displayName) · \(p.model)") { onRegenerate(p.id) }
-                    }
-                } label: {
-                    chipLabel("换模型", systemImage: "arrow.triangle.2.circlepath", tint: .secondary)
-                }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .fixedSize()
-            }
-            if !text.isEmpty {
-                Button {
-                    if AnswerImageExporter.copyToClipboard(providerName: config.displayName, model: config.model, text: text) {
-                        withAnimation { imageCopied = true }
-                        Task { @MainActor in try? await Task.sleep(for: .seconds(1.4)); withAnimation { imageCopied = false } }
-                    }
-                } label: {
-                    chipLabel(imageCopied ? "已复制" : "图片", systemImage: imageCopied ? "checkmark" : "photo",
-                              tint: imageCopied ? .green : .secondary)
-                }
-                .buttonStyle(.borderless)
-            }
-            if !text.isEmpty {
-                let reading = speech.speakingText == text
-                Button {
-                    speech.toggle(text)
-                } label: {
-                    chipLabel(reading ? "停止" : "朗读",
-                              systemImage: reading ? "stop.fill" : "speaker.wave.2",
-                              tint: reading ? Color.accentColor : .secondary)
-                }
-                .buttonStyle(.borderless)
-            }
-            Button {
-                Platform.copyText(text)
-                withAnimation { copied = true }
-                Task { @MainActor in
-                    try? await Task.sleep(for: .seconds(1.4))
-                    withAnimation { copied = false }
+        }
+    }
+
+    @ViewBuilder
+    private var footerMetrics: some View {
+        if !text.isEmpty {
+            metricPill("\(text.count) 字", icon: "text.alignleft")
+        }
+        if let tokenUsage, tokenUsage.input > 0 || tokenUsage.output > 0 {
+            TokenCostPill(usage: tokenUsage, model: config.model, providerKind: config.kind)
+        }
+    }
+
+    @ViewBuilder
+    private var footerActions: some View {
+        if !sources.isEmpty {
+            SourcesChip(sources: sources)
+        }
+        if let onRegenerate, !regenerateProviders.isEmpty {
+            Menu {
+                ForEach(regenerateProviders) { p in
+                    Button("\(p.displayName) · \(p.model)") { onRegenerate(p.id) }
                 }
             } label: {
-                chipLabel(copied ? "已复制" : "复制",
-                          systemImage: copied ? "checkmark" : "doc.on.doc",
-                          tint: copied ? .green : .secondary)
+                chipLabel("换模型", systemImage: "arrow.triangle.2.circlepath", tint: .secondary)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+        }
+        if !text.isEmpty {
+            Button {
+                if AnswerImageExporter.copyToClipboard(providerName: config.displayName, model: config.model, text: text) {
+                    withAnimation { imageCopied = true }
+                    Task { @MainActor in try? await Task.sleep(for: .seconds(1.4)); withAnimation { imageCopied = false } }
+                }
+            } label: {
+                chipLabel(imageCopied ? "已复制" : "图片", systemImage: imageCopied ? "checkmark" : "photo",
+                          tint: imageCopied ? .green : .secondary)
             }
             .buttonStyle(.borderless)
-            .disabled(text.isEmpty)
         }
+        if !text.isEmpty {
+            let reading = speech.speakingText == text
+            Button {
+                speech.toggle(text)
+            } label: {
+                chipLabel(reading ? "停止" : "朗读",
+                          systemImage: reading ? "stop.fill" : "speaker.wave.2",
+                          tint: reading ? Color.accentColor : .secondary)
+            }
+            .buttonStyle(.borderless)
+        }
+        Button {
+            Platform.copyText(text)
+            withAnimation { copied = true }
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(1.4))
+                withAnimation { copied = false }
+            }
+        } label: {
+            chipLabel(copied ? "已复制" : "复制",
+                      systemImage: copied ? "checkmark" : "doc.on.doc",
+                      tint: copied ? .green : .secondary)
+        }
+        .buttonStyle(.borderless)
+        .disabled(text.isEmpty)
     }
 
     /// footer 动作按钮的统一外观:单行不换行 + 固定尺寸;iOS 紧凑宽度只显示图标。
@@ -867,9 +953,20 @@ struct ChairSummaryCard: View {
     @State private var copied = false
     @State private var imageCopied = false
     @ObservedObject private var speech = SpeechService.shared
+    @Environment(\.horizontalSizeClass) private var hSizeClass
 
     /// 最终可朗读 / 复制的文本(历史 text 或流式 liveText)。
     private var shownText: String { (text ?? liveText) ?? "" }
+
+    private var isCompact: Bool {
+        #if os(iOS)
+        return hSizeClass == .compact
+        #else
+        return false
+        #endif
+    }
+
+    private var cardCorner: CGFloat { isCompact ? 18 : 20 }
 
     enum Role {
         case chair, judge, summary, moderator
@@ -915,10 +1012,10 @@ struct ChairSummaryCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 11) {
+        VStack(alignment: .leading, spacing: isCompact ? 10 : 12) {
+            HStack(spacing: isCompact ? 10 : 11) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    RoundedRectangle(cornerRadius: isCompact ? 12 : 14, style: .continuous)
                         .fill(
                             LinearGradient(
                                 colors: [role.tint.opacity(0.92), role.tint.opacity(0.48)],
@@ -928,15 +1025,16 @@ struct ChairSummaryCard: View {
                         )
                     Image(systemName: role.icon)
                         .foregroundStyle(.white)
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.system(size: isCompact ? 14 : 15, weight: .bold))
                 }
-                .frame(width: 38, height: 38)
+                .frame(width: isCompact ? 34 : 38, height: isCompact ? 34 : 38)
                 .shadow(color: role.tint.opacity(0.18), radius: 12, x: 0, y: 6)
 
                 VStack(alignment: .leading, spacing: 5) {
                     HStack(spacing: 6) {
                         Text("\(role.prefix) · \(config.displayName)")
                             .font(.system(.subheadline, design: .rounded).weight(.bold))
+                            .lineLimit(1)
                         Text(role.badge)
                             .font(.caption2.weight(.bold))
                             .foregroundStyle(role.tint)
@@ -951,7 +1049,9 @@ struct ChairSummaryCard: View {
                         .font(.system(.caption2, design: .monospaced))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                        .truncationMode(.middle)
                 }
+                .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
                 Spacer()
                 if let tokenUsage, tokenUsage.input > 0 || tokenUsage.output > 0 {
                     TokenCostPill(usage: tokenUsage, model: config.model, providerKind: config.kind)
@@ -987,12 +1087,13 @@ struct ChairSummaryCard: View {
                 chairFooter
             }
         }
-        .padding(16)
+        .padding(isCompact ? 12 : 16)
+        .frame(minWidth: 0, maxWidth: .infinity, alignment: .topLeading)
         .background(
             ZStack {
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                RoundedRectangle(cornerRadius: cardCorner, style: .continuous)
                     .fill(.regularMaterial)
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                RoundedRectangle(cornerRadius: cardCorner, style: .continuous)
                     .fill(
                         LinearGradient(
                             colors: [role.tint.opacity(0.12), Color.platformControlBackground.opacity(0.28), Color.clear],
@@ -1003,7 +1104,7 @@ struct ChairSummaryCard: View {
             }
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
+            RoundedRectangle(cornerRadius: cardCorner, style: .continuous)
                 .strokeBorder(role.tint.opacity(0.30), lineWidth: 1)
         }
         .shadow(color: role.tint.opacity(0.08), radius: 20, x: 0, y: 10)
@@ -1011,35 +1112,46 @@ struct ChairSummaryCard: View {
 
     /// 综合 / 总结 卡的操作栏:朗读 / 图片(复制) / 复制 + Sources。
     private var chairFooter: some View {
-        HStack(spacing: 8) {
-            if !sources.isEmpty { SourcesChip(sources: sources) }
-            Spacer(minLength: 6)
-            let reading = speech.speakingText == shownText
-            Button { speech.toggle(shownText) } label: {
-                footerChip(reading ? "停止" : "朗读", systemImage: reading ? "stop.fill" : "speaker.wave.2",
-                           tint: reading ? role.tint : .secondary)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                if !sources.isEmpty { SourcesChip(sources: sources) }
+                Spacer(minLength: 6)
+                chairFooterActions
             }
-            .buttonStyle(.borderless)
-            Button {
-                if AnswerImageExporter.copyToClipboard(providerName: "\(role.prefix) · \(config.displayName)", model: config.model, text: shownText) {
-                    withAnimation { imageCopied = true }
-                    Task { @MainActor in try? await Task.sleep(for: .seconds(1.4)); withAnimation { imageCopied = false } }
-                }
-            } label: {
-                footerChip(imageCopied ? "已复制" : "图片", systemImage: imageCopied ? "checkmark" : "photo",
-                           tint: imageCopied ? .green : .secondary)
+            WrappingHStack(horizontalSpacing: 8, verticalSpacing: 7) {
+                if !sources.isEmpty { SourcesChip(sources: sources) }
+                chairFooterActions
             }
-            .buttonStyle(.borderless)
-            Button {
-                Platform.copyText(shownText)
-                withAnimation { copied = true }
-                Task { @MainActor in try? await Task.sleep(for: .seconds(1.4)); withAnimation { copied = false } }
-            } label: {
-                footerChip(copied ? "已复制" : "复制", systemImage: copied ? "checkmark" : "doc.on.doc",
-                           tint: copied ? .green : .secondary)
-            }
-            .buttonStyle(.borderless)
         }
+    }
+
+    @ViewBuilder
+    private var chairFooterActions: some View {
+        let reading = speech.speakingText == shownText
+        Button { speech.toggle(shownText) } label: {
+            footerChip(reading ? "停止" : "朗读", systemImage: reading ? "stop.fill" : "speaker.wave.2",
+                       tint: reading ? role.tint : .secondary)
+        }
+        .buttonStyle(.borderless)
+        Button {
+            if AnswerImageExporter.copyToClipboard(providerName: "\(role.prefix) · \(config.displayName)", model: config.model, text: shownText) {
+                withAnimation { imageCopied = true }
+                Task { @MainActor in try? await Task.sleep(for: .seconds(1.4)); withAnimation { imageCopied = false } }
+            }
+        } label: {
+            footerChip(imageCopied ? "已复制" : "图片", systemImage: imageCopied ? "checkmark" : "photo",
+                       tint: imageCopied ? .green : .secondary)
+        }
+        .buttonStyle(.borderless)
+        Button {
+            Platform.copyText(shownText)
+            withAnimation { copied = true }
+            Task { @MainActor in try? await Task.sleep(for: .seconds(1.4)); withAnimation { copied = false } }
+        } label: {
+            footerChip(copied ? "已复制" : "复制", systemImage: copied ? "checkmark" : "doc.on.doc",
+                       tint: copied ? .green : .secondary)
+        }
+        .buttonStyle(.borderless)
     }
 
     private func footerChip(_ title: String, systemImage: String, tint: Color) -> some View {
@@ -1115,6 +1227,17 @@ struct ModeTurnCard<Content: View>: View {
     var collapsed: Bool = false
     var onToggleCollapse: (() -> Void)? = nil
     private let content: Content
+    @Environment(\.horizontalSizeClass) private var hSizeClass
+
+    private var isCompact: Bool {
+        #if os(iOS)
+        return hSizeClass == .compact
+        #else
+        return false
+        #endif
+    }
+
+    private var cardCorner: CGFloat { isCompact ? 22 : 26 }
 
     init(
         title: String,
@@ -1137,8 +1260,8 @@ struct ModeTurnCard<Content: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 11) {
+        VStack(alignment: .leading, spacing: isCompact ? 12 : 14) {
+            HStack(spacing: isCompact ? 9 : 11) {
                 if let onToggleCollapse {
                     Button { onToggleCollapse() } label: {
                         Image(systemName: collapsed ? "chevron.right" : "chevron.down")
@@ -1150,7 +1273,7 @@ struct ModeTurnCard<Content: View>: View {
                     .buttonStyle(.plain)
                 }
                 ZStack {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    RoundedRectangle(cornerRadius: isCompact ? 12 : 14, style: .continuous)
                         .fill(
                             LinearGradient(
                                 colors: [tint.opacity(0.86), tint.opacity(0.44)],
@@ -1159,10 +1282,10 @@ struct ModeTurnCard<Content: View>: View {
                             )
                         )
                     Image(systemName: icon)
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.system(size: isCompact ? 14 : 15, weight: .bold))
                         .foregroundStyle(.white)
                 }
-                .frame(width: 38, height: 38)
+                .frame(width: isCompact ? 34 : 38, height: isCompact ? 34 : 38)
                 .shadow(color: tint.opacity(0.16), radius: 12, x: 0, y: 6)
 
                 VStack(alignment: .leading, spacing: 3) {
@@ -1201,13 +1324,13 @@ struct ModeTurnCard<Content: View>: View {
                 content
             }
         }
-        .padding(16)
+        .padding(isCompact ? 12 : 16)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .background(
             ZStack {
-                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                RoundedRectangle(cornerRadius: cardCorner, style: .continuous)
                     .fill(.regularMaterial)
-                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                RoundedRectangle(cornerRadius: cardCorner, style: .continuous)
                     .fill(
                         LinearGradient(
                             colors: [tint.opacity(isLive ? 0.13 : 0.08), Color.platformControlBackground.opacity(0.30), Color.clear],
@@ -1218,7 +1341,7 @@ struct ModeTurnCard<Content: View>: View {
             }
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
+            RoundedRectangle(cornerRadius: cardCorner, style: .continuous)
                 .strokeBorder(tint.opacity(isLive ? 0.30 : 0.15), lineWidth: 1)
         }
         .shadow(color: tint.opacity(isLive ? 0.11 : 0.06), radius: 24, x: 0, y: 12)
@@ -1227,12 +1350,12 @@ struct ModeTurnCard<Content: View>: View {
 
 /// Multi-model panels should fill available width, then wrap instead of overflowing horizontally.
 struct AdaptivePanelGrid<Content: View>: View {
-    var minColumnWidth: CGFloat = 380
+    var minColumnWidth: CGFloat = 540
     var spacing: CGFloat = 14
     private let content: Content
 
     init(
-        minColumnWidth: CGFloat = 380,
+        minColumnWidth: CGFloat = 540,
         spacing: CGFloat = 14,
         @ViewBuilder content: () -> Content
     ) {

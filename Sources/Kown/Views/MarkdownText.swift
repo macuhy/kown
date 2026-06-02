@@ -64,6 +64,7 @@ enum MD {
         Text(s)
             .font(.body)
             .lineSpacing(5)
+            .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -73,6 +74,8 @@ enum MD {
             Markdown(src)
                 .textSelectable(selectable)
                 .markdownTheme(kownTheme)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
         } else if let attr = try? AttributedString(markdown: linkify(src), options: .init(
             allowsExtendedAttributes: true,
             interpretedSyntax: .inlineOnlyPreservingWhitespace,
@@ -82,11 +85,14 @@ enum MD {
                 .textSelectable(selectable)
                 .font(.body)
                 .lineSpacing(5)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             Markdown(src)
                 .textSelectable(selectable)
                 .markdownTheme(kownTheme)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 

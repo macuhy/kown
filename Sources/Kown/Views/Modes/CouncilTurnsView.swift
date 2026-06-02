@@ -34,8 +34,12 @@ struct CouncilTurnsView: View {
         #endif
     }
 
+    private var turnSpacing: CGFloat { stacksVertically ? 16 : 22 }
+    private var horizontalPadding: CGFloat { stacksVertically ? 10 : 18 }
+    private var verticalPadding: CGFloat { stacksVertically ? 12 : 18 }
+
     var body: some View {
-        LazyVStack(alignment: .leading, spacing: 22) {
+        LazyVStack(alignment: .leading, spacing: turnSpacing) {
             ForEach(conversation.turns) { turn in
                 historicalTurn(turn)
             }
@@ -43,8 +47,8 @@ struct CouncilTurnsView: View {
                 liveTurn(prompt: livePrompt)
             }
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 18)
+        .padding(.horizontal, horizontalPadding)
+        .padding(.vertical, verticalPadding)
     }
 
     private func historicalTurn(_ turn: Turn) -> some View {

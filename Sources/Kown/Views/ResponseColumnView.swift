@@ -7,11 +7,22 @@ struct ResponseColumnView: View {
     // 折叠/展开:超长「已完成」回答默认折叠,点按展开。
     // 仅作用于 finished 阶段的纯展示;streaming 期间不折叠,保证自动滚动正常。
     @State private var expanded = false
+    @Environment(\.horizontalSizeClass) private var hSizeClass
 
     /// 超过该字符数的已完成回答默认折叠。
     private let collapseThreshold = 1_400
     /// 折叠态最多显示的行数。
     private let collapsedLineLimit = 14
+
+    private var isCompact: Bool {
+        #if os(iOS)
+        return hSizeClass == .compact
+        #else
+        return false
+        #endif
+    }
+
+    private var cardCorner: CGFloat { isCompact ? 19 : 22 }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -20,22 +31,23 @@ struct ResponseColumnView: View {
                 .frame(height: 4)
 
             header
-                .padding(.horizontal, 18)
-                .padding(.top, 15)
-                .padding(.bottom, 12)
+                .padding(.horizontal, isCompact ? 14 : 18)
+                .padding(.top, isCompact ? 12 : 15)
+                .padding(.bottom, isCompact ? 10 : 12)
 
             separator
             textBody
             separator
             footer
-                .padding(.horizontal, 18)
-                .padding(.vertical, 10)
+                .padding(.horizontal, isCompact ? 14 : 18)
+                .padding(.vertical, isCompact ? 8 : 10)
         }
+        .frame(minWidth: 0, maxWidth: .infinity, alignment: .topLeading)
         .background(
             ZStack {
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                RoundedRectangle(cornerRadius: cardCorner, style: .continuous)
                     .fill(.regularMaterial)
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                RoundedRectangle(cornerRadius: cardCorner, style: .continuous)
                     .fill(
                         LinearGradient(
                             colors: [accentColor.opacity(0.10), Color.platformControlBackground.opacity(0.34), Color.clear],
@@ -45,9 +57,9 @@ struct ResponseColumnView: View {
                     )
             }
         )
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: cardCorner, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
+            RoundedRectangle(cornerRadius: cardCorner, style: .continuous)
                 .strokeBorder(accentColor.opacity(0.24), lineWidth: 1)
         }
         .shadow(color: accentColor.opacity(0.08), radius: 22, x: 0, y: 12)
@@ -272,7 +284,7 @@ struct ResponseColumnView: View {
                     bodyContent
                     Color.clear.frame(height: 1).id("bottom")
                 }
-                .padding(18)
+                .padding(isCompact ? 14 : 18)
             }
             .background(
                 ZStack {
@@ -284,7 +296,7 @@ struct ResponseColumnView: View {
                     )
                 }
             )
-            .frame(minHeight: 280)
+            .frame(minHeight: isCompact ? 220 : 280)
             .onChange(of: state.text) { _, _ in
                 guard case .streaming = state.phase else { return }
                 proxy.scrollTo("bottom")
@@ -457,40 +469,56 @@ struct ResponseColumnView: View {
     // MARK: - Footer
 
     private var footer: some View {
-        HStack(spacing: 12) {
-            if let s = state.elapsedSeconds {
-                footerPill(String(format: "%.1fs", s), icon: "clock")
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                footerMetrics
+                Spacer()
+                copyButton
             }
-            if !state.text.isEmpty, case .finished = state.phase {
-                footerPill("\(state.text.count) 字", icon: "text.alignleft")
+            WrappingHStack(horizontalSpacing: 8, verticalSpacing: 7) {
+                footerMetrics
+                copyButton
             }
-            if state.inputTokens > 0 || state.outputTokens > 0 {
-                TokenCostPill(
-                    usage: TurnTokenUsage(input: state.inputTokens, output: state.outputTokens),
-                    model: config.model, providerKind: config.kind
-                )
-            }
-            Spacer()
-
-            Button {
-                Platform.copyText(state.text)
-                withAnimation(.easeInOut(duration: 0.15)) { copied = true }
-                Task { @MainActor in
-                    try? await Task.sleep(for: .seconds(1.5))
-                    withAnimation(.easeInOut(duration: 0.15)) { copied = false }
-                }
-            } label: {
-                Label(copied ? "已复制" : "复制", systemImage: copied ? "checkmark" : "doc.on.doc")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(copied ? .green : .secondary)
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 5)
-                    .background((copied ? Color.green : Color.secondary).opacity(0.10), in: Capsule())
-            }
-            .buttonStyle(.borderless)
-            .disabled(state.text.isEmpty)
-            .help("复制本列回答")
         }
+    }
+
+    @ViewBuilder
+    private var footerMetrics: some View {
+        if let s = state.elapsedSeconds {
+            footerPill(String(format: "%.1fs", s), icon: "clock")
+        }
+        if !state.text.isEmpty, case .finished = state.phase {
+            footerPill("\(state.text.count) 字", icon: "text.alignleft")
+        }
+        if state.inputTokens > 0 || state.outputTokens > 0 {
+            TokenCostPill(
+                usage: TurnTokenUsage(input: state.inputTokens, output: state.outputTokens),
+                model: config.model, providerKind: config.kind
+            )
+        }
+    }
+
+    private var copyButton: some View {
+        Button {
+            Platform.copyText(state.text)
+            withAnimation(.easeInOut(duration: 0.15)) { copied = true }
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(1.5))
+                withAnimation(.easeInOut(duration: 0.15)) { copied = false }
+            }
+        } label: {
+            Label(copied ? "已复制" : "复制", systemImage: copied ? "checkmark" : "doc.on.doc")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(copied ? .green : .secondary)
+                .lineLimit(1)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 5)
+                .background((copied ? Color.green : Color.secondary).opacity(0.10), in: Capsule())
+                .fixedSize()
+        }
+        .buttonStyle(.borderless)
+        .disabled(state.text.isEmpty)
+        .help("复制本列回答")
     }
 
     private func footerPill(_ text: String, icon: String) -> some View {
@@ -498,9 +526,11 @@ struct ResponseColumnView: View {
             .font(.caption.weight(.semibold))
             .foregroundStyle(.secondary)
             .monospacedDigit()
+            .lineLimit(1)
             .padding(.horizontal, 9)
             .padding(.vertical, 5)
             .background(Color.secondary.opacity(0.08), in: Capsule())
+            .fixedSize()
     }
 
     // MARK: - Colors
