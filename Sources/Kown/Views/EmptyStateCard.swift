@@ -619,6 +619,24 @@ struct EmptyStateCard: View {
         .background(Color.platformControlBackground.opacity(0.34), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
+    private var councilCardTitle: String {
+        switch mode {
+        case .direct: return "对话模型"
+        case .compare: return "对比模型"
+        case .council: return "Your council"
+        case .debate: return "Your debaters"
+        }
+    }
+
+    private var councilCardIcon: String {
+        switch mode {
+        case .direct: return "bubble.left.fill"
+        case .compare: return "rectangle.split.2x1.fill"
+        case .council: return "person.3.fill"
+        case .debate: return "quote.bubble.fill"
+        }
+    }
+
     private var councilCard: some View {
         let enabled = enabledProviders
         let chair = enabled.first { $0.isChair }
@@ -626,9 +644,9 @@ struct EmptyStateCard: View {
         return VStack(spacing: 0) {
             HStack(spacing: 12) {
                 sectionHeader(
-                    title: mode == .debate ? "Your debaters" : "Your council",
+                    title: councilCardTitle,
                     subtitle: enabled.isEmpty ? "Enable providers before sending" : "Ready for the next message",
-                    icon: mode == .debate ? "quote.bubble.fill" : "person.3.fill",
+                    icon: councilCardIcon,
                     tint: .orange
                 )
                 Spacer(minLength: 8)
