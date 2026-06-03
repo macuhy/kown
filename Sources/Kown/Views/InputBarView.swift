@@ -205,7 +205,18 @@ struct InputBarView: View {
     }
 
     private var promptField: some View {
-        TextField(placeholder, text: $viewModel.prompt, axis: .vertical)
+        // 注意:title 必须是空常量。给多行 TextField(axis:.vertical) 传非空 placeholder,
+        // 在 macOS 聚焦态下会触发 setPlaceholderString → _restartEditingWithTextView →
+        // endEditing → textDidEndEditing → 再布局 的重入死循环(整核 100% CPU)。
+        // 占位文字改用 SwiftUI Text 叠层手动渲染,绕开 AppKit 的占位路径。
+        TextField("", text: $viewModel.prompt, axis: .vertical)
+            .overlay(alignment: .topLeading) {
+                if viewModel.prompt.isEmpty {
+                    Text(placeholder)
+                        .foregroundStyle(.secondary)
+                        .allowsHitTesting(false)
+                }
+            }
             .textFieldStyle(.plain)
             .font(.body)
             .lineLimit(1...5)
