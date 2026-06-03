@@ -109,7 +109,11 @@ struct KownApp: App {
             #if os(iOS)
             // 分享扩展 / 快捷指令送来的文字:取出预填到输入框并聚焦。
             if let shared = SharedInbox.takePending() {
-                if viewModel.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                // 「用指定模式问」会带模式 → 新建该模式会话再预填;否则预填到当前输入框。
+                if let raw = SharedInbox.takePendingMode(), let mode = ConversationMode(rawValue: raw) {
+                    viewModel.newConversation(mode: mode)
+                    viewModel.prompt = shared
+                } else if viewModel.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     viewModel.prompt = shared
                 } else {
                     viewModel.prompt += "\n\n" + shared

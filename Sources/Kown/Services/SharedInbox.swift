@@ -5,6 +5,7 @@ import Foundation
 enum SharedInbox {
     static let appGroup = "group.com.xiaobo.kown"
     static let pendingKey = "kown.share.pendingText.v1"
+    static let pendingModeKey = "kown.share.pendingMode.v1"
 
     /// 取出并清空待处理文本(没有则 nil)。
     static func takePending() -> String? {
@@ -22,6 +23,19 @@ enum SharedInbox {
         if !existing.isEmpty { existing += "\n\n" }
         existing += text
         d?.set(existing, forKey: pendingKey)
+    }
+
+    /// 指定本次预填使用的模式(App Intents「用某模式问」用)。
+    static func depositMode(_ rawMode: String) {
+        UserDefaults(suiteName: appGroup)?.set(rawMode, forKey: pendingModeKey)
+    }
+
+    /// 取出并清空待处理模式。
+    static func takePendingMode() -> String? {
+        let d = UserDefaults(suiteName: appGroup)
+        let m = d?.string(forKey: pendingModeKey)
+        d?.removeObject(forKey: pendingModeKey)
+        return m
     }
 }
 #endif
