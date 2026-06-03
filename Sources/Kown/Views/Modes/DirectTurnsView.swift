@@ -64,6 +64,9 @@ struct DirectTurnsView: View {
                     onRegenerate: onRegenerate.map { f in { pid in f(turn.id, pid) } }
                 )
             }
+            if let gen = turn.generatedImages, !gen.isEmpty {
+                ConversationImagesRow(images: gen)
+            }
             if let writes = turn.appliedWrites, !writes.isEmpty {
                 AppliedWritesStrip(writes: writes, onUndo: onUndoWrite.map { cb in { cb(turn.id, $0) } })
             }

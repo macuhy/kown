@@ -174,6 +174,8 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
     /// 各 panel provider 各自 web_search 命中的来源,key = providerID(uuidString)。
     /// 旧会话没有,保持 optional;与全轮合并的 `sources` 并存。
     var sourcesByProvider: [String: [SourceRef]]?
+    /// 本轮由图像生成产出的图片(引用,字节单独存盘)。旧会话没有,保持 optional。
+    var generatedImages: [TurnImage]?
 
     init(id: UUID = UUID(),
          timestamp: Date = Date(),
@@ -196,7 +198,8 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
          reasoningByProvider: [String: String]? = nil,
          tokenUsage: [String: TurnTokenUsage]? = nil,
          councilVotes: CouncilVote? = nil,
-         sourcesByProvider: [String: [SourceRef]]? = nil) {
+         sourcesByProvider: [String: [SourceRef]]? = nil,
+         generatedImages: [TurnImage]? = nil) {
         self.id = id
         self.timestamp = timestamp
         self.prompt = prompt
@@ -219,6 +222,7 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
         self.tokenUsage = tokenUsage
         self.councilVotes = councilVotes
         self.sourcesByProvider = sourcesByProvider
+        self.generatedImages = generatedImages
     }
 
     // 兼容旧 JSON(缺新字段时 sources 等以 decodeIfPresent 解码,默认 nil),不破坏现有存档/同步。
@@ -228,6 +232,7 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
         case summaryProviderID, summaryText, summaryError
         case providerSnapshot, panelOrder, debateRounds, appliedWrites, images, sources
         case reasoningByProvider, tokenUsage, councilVotes, sourcesByProvider
+        case generatedImages
     }
 
     init(from decoder: Decoder) throws {
@@ -254,6 +259,7 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
         self.tokenUsage = try c.decodeIfPresent([String: TurnTokenUsage].self, forKey: .tokenUsage)
         self.councilVotes = try c.decodeIfPresent(CouncilVote.self, forKey: .councilVotes)
         self.sourcesByProvider = try c.decodeIfPresent([String: [SourceRef]].self, forKey: .sourcesByProvider)
+        self.generatedImages = try c.decodeIfPresent([TurnImage].self, forKey: .generatedImages)
     }
 
     /// 取顺序化的 panel 配置（按发送顺序，Chair 不在内）

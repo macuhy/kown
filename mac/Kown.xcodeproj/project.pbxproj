@@ -30,6 +30,7 @@
 		2FCB0E06ECBE8BA942DAF954 /* QuestionRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2E90577A55CCD1403A79417 /* QuestionRouter.swift */; };
 		305331BB82329E7463DF6EB4 /* ProviderRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B7F9872024209C57342066E /* ProviderRegistry.swift */; };
 		308FCC8017B037FE8825B9B3 /* ChangelogService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 533F50E542CD7B7960E479B7 /* ChangelogService.swift */; };
+		3117F3E8F0A591978E32DF91 /* ImageGenerationClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED9F055252B0E1B2F621C0E9 /* ImageGenerationClient.swift */; };
 		325088DA3CFBDA98AEE22F3B /* ConversationImageStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C96EADA0BB6C979EC985AA8 /* ConversationImageStore.swift */; };
 		366777024F1727D90B2400B5 /* CHANGELOG.md in Resources */ = {isa = PBXBuildFile; fileRef = 388EA7D29142973723D271A4 /* CHANGELOG.md */; };
 		36EF31E0B33DFE7AFEC1DB71 /* KnowledgeFolder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 671D479F29E08EBEC1F1B685 /* KnowledgeFolder.swift */; };
@@ -202,6 +203,7 @@
 		EA814C2E69E49C2CE4217231 /* SSELineStream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSELineStream.swift; sourceTree = "<group>"; };
 		EB64A12EBE235CC880ADEBA4 /* WebSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSearch.swift; sourceTree = "<group>"; };
 		ED3B4692DB0791298A87B40E /* Attachment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Attachment.swift; sourceTree = "<group>"; };
+		ED9F055252B0E1B2F621C0E9 /* ImageGenerationClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageGenerationClient.swift; sourceTree = "<group>"; };
 		F4592A4913C32C4F72D9FF27 /* AppViewModel+Send.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppViewModel+Send.swift"; sourceTree = "<group>"; };
 		F66270B7AD94FD820AABAF62 /* LLMClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMClient.swift; sourceTree = "<group>"; };
 		F6FD94D467DED20B51080333 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
@@ -372,6 +374,7 @@
 				09F9C0C72C5E6B8BE0912EC5 /* FirecrawlClient.swift */,
 				34C72CDAE2197001F9B3E4B0 /* GeminiClient.swift */,
 				6E83E1B5507154C0CF88A953 /* ICloudSync.swift */,
+				ED9F055252B0E1B2F621C0E9 /* ImageGenerationClient.swift */,
 				750A73703E624AF5DF0F7396 /* KeychainStore.swift */,
 				F66270B7AD94FD820AABAF62 /* LLMClient.swift */,
 				79D93DCE4450889A1414E77A /* LocalRAG.swift */,
@@ -558,6 +561,7 @@
 				C0166D275D0C24361F06DDBD /* GeminiClient.swift in Sources */,
 				73D45F8D0D192C2EA9D752AB /* ICloudSync.swift in Sources */,
 				375CA7A62E1D320E3AD58CE7 /* ICloudSyncSettingsView.swift in Sources */,
+				3117F3E8F0A591978E32DF91 /* ImageGenerationClient.swift in Sources */,
 				E5E2A454A6F97E841940F174 /* InputBarView.swift in Sources */,
 				A05DF5060E1EF06ED0463D98 /* KeychainStore.swift in Sources */,
 				36EF31E0B33DFE7AFEC1DB71 /* KnowledgeFolder.swift in Sources */,

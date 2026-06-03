@@ -276,6 +276,56 @@ final class AppViewModel {
         }
     }
 
+    /// 正在生成图片(用于按钮 loading 态)。
+    var isGeneratingImage = false
+
+    /// 图像生成:用当前 Direct provider/model 调 /images/generations,出图作为一轮追加。
+    /// 注意:需选用支持出图的 model(如 gpt-image-2 / dall-e-3 / 硅基流动图像模型)。
+    func generateImage() {
+        let p = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !p.isEmpty, !isGeneratingImage, !isRunning else { return }
+        guard let cfg = providersForCurrentSend().panel.first, !cfg.kind.isCLI else { return }
+        if selectedConversationID == nil { newConversation(mode: currentMode) }
+        guard let convID = selectedConversationID else { return }
+        prompt = ""
+        followUpSuggestions = []
+        isGeneratingImage = true
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.isGeneratingImage = false }
+            let key = cfg.kind.isCLI ? "" : ((try? KeychainStore.load(id: cfg.id)) ?? "")
+            let turn: Turn
+            do {
+                let datas = try await ImageGenerationClient.generate(
+                    baseURL: cfg.baseURL, apiKey: key, model: cfg.model, prompt: p)
+                var imgs: [TurnImage] = []
+                for d in datas {
+                    let fileName = "\(UUID().uuidString).png"
+                    if ConversationImageStore.save(d, fileName: fileName) {
+                        imgs.append(TurnImage(fileName: fileName, mimeType: "image/png",
+                                              pixelWidth: 1024, pixelHeight: 1024))
+                    }
+                }
+                turn = Turn(prompt: p, systemPrompt: "",
+                            responses: [cfg.id.uuidString: ""],
+                            providerSnapshot: [cfg.id.uuidString: cfg],
+                            panelOrder: [cfg.id.uuidString],
+                            generatedImages: imgs)
+            } catch {
+                turn = Turn(prompt: p, systemPrompt: "",
+                            responses: [:],
+                            errors: [cfg.id.uuidString: error.localizedDescription],
+                            providerSnapshot: [cfg.id.uuidString: cfg],
+                            panelOrder: [cfg.id.uuidString])
+            }
+            if let idx = self.conversations.firstIndex(where: { $0.id == convID }) {
+                self.conversations[idx].turns.append(turn)
+                self.conversations[idx].updatedAt = Date()
+                ConversationStore.save(self.conversations[idx])
+            }
+        }
+    }
+
     /// 接续生成:让模型接着上一轮回答继续(上下文已随发送回放,故直接发「继续」指令)。
     func continueGenerating() {
         guard !isRunning, let conv = selectedConversation, !conv.turns.isEmpty else { return }

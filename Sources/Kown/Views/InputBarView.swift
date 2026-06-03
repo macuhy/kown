@@ -323,6 +323,13 @@ struct InputBarView: View {
             .disabled(viewModel.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             micButton
             voiceButton
+            if viewModel.currentMode == .direct {
+                iconButton(viewModel.isGeneratingImage ? "hourglass" : "photo.badge.plus",
+                           help: "生成图片(用当前模型,需选支持出图的模型)") {
+                    viewModel.generateImage()
+                }
+                .disabled(viewModel.isGeneratingImage || viewModel.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
             #if os(macOS)
             workspaceButton
             #endif
