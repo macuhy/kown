@@ -306,7 +306,7 @@ extension AppViewModel {
                 if let s = self.liveStates[cfg.id] {
                     if !s.reasoning.isEmpty { reasoningByProvider[cfg.id.uuidString] = s.reasoning }
                     if s.inputTokens > 0 || s.outputTokens > 0 {
-                        tokenUsage[cfg.id.uuidString] = TurnTokenUsage(input: s.inputTokens, output: s.outputTokens)
+                        tokenUsage[cfg.id.uuidString] = TurnTokenUsage(input: s.inputTokens, output: s.outputTokens, cachedInput: s.cachedInputTokens)
                     }
                     if !s.sources.isEmpty { sourcesByProvider[cfg.id.uuidString] = s.sources }
                 }
@@ -359,7 +359,7 @@ extension AppViewModel {
                     if let s = self.liveChairState {
                         if !s.reasoning.isEmpty { reasoningByProvider[chair.id.uuidString] = s.reasoning }
                         if s.inputTokens > 0 || s.outputTokens > 0 {
-                            tokenUsage[chair.id.uuidString] = TurnTokenUsage(input: s.inputTokens, output: s.outputTokens)
+                            tokenUsage[chair.id.uuidString] = TurnTokenUsage(input: s.inputTokens, output: s.outputTokens, cachedInput: s.cachedInputTokens)
                         }
                     }
                 }
@@ -395,7 +395,7 @@ extension AppViewModel {
                     if let s = self.liveSummaryState {
                         if !s.reasoning.isEmpty { reasoningByProvider[summary.id.uuidString] = s.reasoning }
                         if s.inputTokens > 0 || s.outputTokens > 0 {
-                            tokenUsage[summary.id.uuidString] = TurnTokenUsage(input: s.inputTokens, output: s.outputTokens)
+                            tokenUsage[summary.id.uuidString] = TurnTokenUsage(input: s.inputTokens, output: s.outputTokens, cachedInput: s.cachedInputTokens)
                         }
                     }
                 }
@@ -422,8 +422,8 @@ extension AppViewModel {
                                 if Task.isCancelled { break }
                                 switch chunk {
                                 case .text(let t): collected += t
-                                case .usage(let i, let o):
-                                    UsageStore.shared.record(providerKind: voter.kind, model: voter.model, inputTokens: i, outputTokens: o)
+                                case .usage(let i, let o, let cached):
+                                    UsageStore.shared.record(providerKind: voter.kind, model: voter.model, inputTokens: i, outputTokens: o, cachedTokens: cached)
                                 default: break
                                 }
                             }
@@ -854,13 +854,14 @@ extension AppViewModel {
                     case .reasoning(let r): collectedReasoning += r
                     case .toolEvent: break
                     case .sources: break
-                    case .usage(let input, let output):
-                        usage = TurnTokenUsage(input: input, output: output)
+                    case .usage(let input, let output, let cached):
+                        usage = TurnTokenUsage(input: input, output: output, cachedInput: cached)
                         UsageStore.shared.record(
                             providerKind: cfg.kind,
                             model: cfg.model,
                             inputTokens: input,
-                            outputTokens: output
+                            outputTokens: output,
+                            cachedTokens: cached
                         )
                     }
                 }
@@ -1055,13 +1056,14 @@ extension AppViewModel {
                     case .reasoning(let r): collectedReasoning += r
                     case .toolEvent: break
                     case .sources: break
-                    case .usage(let input, let output):
-                        usage = TurnTokenUsage(input: input, output: output)
+                    case .usage(let input, let output, let cached):
+                        usage = TurnTokenUsage(input: input, output: output, cachedInput: cached)
                         UsageStore.shared.record(
                             providerKind: cfg.kind,
                             model: cfg.model,
                             inputTokens: input,
-                            outputTokens: output
+                            outputTokens: output,
+                            cachedTokens: cached
                         )
                     }
                 }
@@ -1228,15 +1230,17 @@ extension AppViewModel {
                     self.liveSources.append(contentsOf: refs.filter { !known.contains($0.url) })
                     let stateKnown = Set(state.sources.map(\.url))
                     state.sources.append(contentsOf: refs.filter { !stateKnown.contains($0.url) })
-                case .usage(let input, let output):
+                case .usage(let input, let output, let cached):
                     // 存进 state(回填进 Turn.tokenUsage 算成本)+ 记一笔到 UsageStore(按天分桶)
                     state.inputTokens = input
                     state.outputTokens = output
+                    state.cachedInputTokens = cached
                     UsageStore.shared.record(
                         providerKind: config.kind,
                         model: config.model,
                         inputTokens: input,
-                        outputTokens: output
+                        outputTokens: output,
+                        cachedTokens: cached
                     )
                 }
             }
@@ -1269,10 +1273,11 @@ extension AppViewModel {
                     if Task.isCancelled { break }
                     if case .text(let t) = chunk { state.append(t) }
                     else if case .reasoning(let r) = chunk { state.appendReasoning(r) }
-                    else if case .usage(let i, let o) = chunk {
+                    else if case .usage(let i, let o, let cached) = chunk {
                         state.inputTokens = i
                         state.outputTokens = o
-                        UsageStore.shared.record(providerKind: alt.kind, model: alt.model, inputTokens: i, outputTokens: o)
+                        state.cachedInputTokens = cached
+                        UsageStore.shared.record(providerKind: alt.kind, model: alt.model, inputTokens: i, outputTokens: o, cachedTokens: cached)
                     }
                 }
                 if !Task.isCancelled { state.finish(); failure = nil }

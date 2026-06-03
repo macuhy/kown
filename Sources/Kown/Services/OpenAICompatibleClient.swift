@@ -30,6 +30,7 @@ struct OpenAICompatibleClient: LLMClient {
 
                     var cumulativeInput = 0
                     var cumulativeOutput = 0
+                    var cumulativeCached = 0
 
                     for round in 0..<Self.maxToolRounds {
                         let isLast = round == Self.maxToolRounds - 1
@@ -56,6 +57,7 @@ struct OpenAICompatibleClient: LLMClient {
                         // 累计 token 用量(tool use loop 里每轮都是独立计费的 API call)
                         cumulativeInput += result.inputTokens
                         cumulativeOutput += result.outputTokens
+                        cumulativeCached += result.cachedTokens
 
                         if Task.isCancelled { break }
 
@@ -101,7 +103,8 @@ struct OpenAICompatibleClient: LLMClient {
 
                     if cumulativeInput > 0 || cumulativeOutput > 0 {
                         continuation.yield(.usage(inputTokens: cumulativeInput,
-                                                  outputTokens: cumulativeOutput))
+                                                  outputTokens: cumulativeOutput,
+                                                  cachedInputTokens: cumulativeCached))
                     }
                     continuation.finish()
                 } catch {
@@ -144,9 +147,11 @@ struct OpenAICompatibleClient: LLMClient {
         /// 这种模型要求下轮 assistant message 必须把它原样带回去,否则 400。
         var reasoningContent: String = ""
         var toolCalls: [ToolCall] = []
-        /// 末尾 usage chunk 里的 prompt / completion tokens(若 server 没回则为 0)
+        /// 末尾 usage chunk 里的 prompt / completion tokens(若 server 没回则为 0)。
+        /// prompt_tokens 本就含缓存;cachedTokens = 命中缓存的部分。
         var inputTokens: Int = 0
         var outputTokens: Int = 0
+        var cachedTokens: Int = 0
     }
 
     /// 跑一次 /chat/completions 流式请求。返回收集到的文本和(可能为空的)工具调用列表。
@@ -206,6 +211,13 @@ struct OpenAICompatibleClient: LLMClient {
             if let usage = json["usage"] as? [String: Any] {
                 if let prompt = usage["prompt_tokens"] as? Int { result.inputTokens = prompt }
                 if let completion = usage["completion_tokens"] as? Int { result.outputTokens = completion }
+                // 缓存命中:OpenAI 用 prompt_tokens_details.cached_tokens;DeepSeek 用 prompt_cache_hit_tokens。
+                if let details = usage["prompt_tokens_details"] as? [String: Any],
+                   let cached = details["cached_tokens"] as? Int {
+                    result.cachedTokens = cached
+                } else if let hit = usage["prompt_cache_hit_tokens"] as? Int {
+                    result.cachedTokens = hit
+                }
             }
             guard let choices = json["choices"] as? [[String: Any]], let first = choices.first else { continue }
 

@@ -17,5 +17,7 @@ enum LLMStreamChunk: Sendable {
     /// `input` 是 prompt tokens,`output` 是 completion tokens。
     /// 部分 model 中途也会先发 input(message_start),后发 output(message_delta),
     /// AppViewModel 累加同一 round 的 max(input) 和 sum(output) 即可。
-    case usage(inputTokens: Int, outputTokens: Int)
+    /// `cachedInputTokens` = 命中提示缓存的输入 token 数(读取缓存);`inputTokens` 已归一为
+    /// 「含缓存在内的 prompt 总 token」,故缓存比 = cached / input 跨厂商一致。
+    case usage(inputTokens: Int, outputTokens: Int, cachedInputTokens: Int)
 }

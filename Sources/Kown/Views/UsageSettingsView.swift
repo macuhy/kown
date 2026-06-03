@@ -45,7 +45,7 @@ struct UsageSettingsView: View {
         for day in days {
             for e in store.entries(for: day, scope: scope) {
                 var g = grouped[e.key] ?? UsageEntry()
-                g.input += e.value.input; g.output += e.value.output; g.callCount += e.value.callCount
+                g.input += e.value.input; g.output += e.value.output; g.callCount += e.value.callCount; g.cached += e.value.cached
                 grouped[e.key] = g
             }
         }
@@ -394,6 +394,9 @@ struct UsageSettingsView: View {
             HStack(spacing: 7) {
                 tokenBadge(label: "in", value: entry.input, color: .blue)
                 tokenBadge(label: "out", value: entry.output, color: .orange)
+                if entry.cached > 0 {
+                    tokenBadge(label: "缓存\(Int((Double(entry.cached) * 100 / Double(max(entry.input, 1))).rounded()))%", value: entry.cached, color: .green)
+                }
                 Spacer(minLength: 0)
             }
         }
@@ -418,6 +421,9 @@ struct UsageSettingsView: View {
             Spacer(minLength: 8)
             tokenBadge(label: "in", value: entry.input, color: .blue)
             tokenBadge(label: "out", value: entry.output, color: .orange)
+            if entry.cached > 0 {
+                tokenBadge(label: "缓存\(Int((Double(entry.cached) * 100 / Double(max(entry.input, 1))).rounded()))%", value: entry.cached, color: .green)
+            }
             Text("\(formatTokens(entry.total))")
                 .font(.callout.weight(.semibold))
                 .monospacedDigit()

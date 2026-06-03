@@ -87,13 +87,25 @@ struct TokenCostPill: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .background(Color.secondary.opacity(0.08), in: Capsule())
-            .help("输入 \(usage.input) · 输出 \(usage.output) token\(cost != nil ? "(估算成本,实际以账单为准)" : "(该模型无内置单价)")")
+            .help(helpText(cost: cost))
     }
 
     private func label(total: Int, cost: Double?) -> String {
-        let tok = Self.formatTokens(total)
-        guard let cost else { return tok }
-        return "\(Self.formatCost(cost)) · \(tok)"
+        var s = Self.formatTokens(total)
+        if let cost { s = "\(Self.formatCost(cost)) · \(s)" }
+        if usage.cachedInput > 0 {
+            let pct = usage.input > 0 ? Int((Double(usage.cachedInput) * 100 / Double(usage.input)).rounded()) : 0
+            let n = usage.cachedInput >= 1000 ? String(format: "%.1fk", Double(usage.cachedInput) / 1000) : "\(usage.cachedInput)"
+            s += " · 缓存 \(n)(\(pct)%)"
+        }
+        return s
+    }
+
+    private func helpText(cost: Double?) -> String {
+        var t = "输入 \(usage.input) · 输出 \(usage.output) token"
+        if usage.cachedInput > 0 { t += " · 命中缓存 \(usage.cachedInput)(输入里已含)" }
+        t += cost != nil ? "(估算成本,实际以账单为准)" : "(该模型无内置单价)"
+        return t
     }
 
     static func formatTokens(_ n: Int) -> String {

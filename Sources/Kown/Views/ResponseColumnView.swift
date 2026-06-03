@@ -492,7 +492,7 @@ struct ResponseColumnView: View {
         }
         if state.inputTokens > 0 || state.outputTokens > 0 {
             TokenCostPill(
-                usage: TurnTokenUsage(input: state.inputTokens, output: state.outputTokens),
+                usage: TurnTokenUsage(input: state.inputTokens, output: state.outputTokens, cachedInput: state.cachedInputTokens),
                 model: config.model, providerKind: config.kind
             )
         }

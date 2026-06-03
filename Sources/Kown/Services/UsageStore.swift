@@ -60,7 +60,7 @@ final class UsageStore {
     }
 
     /// 记一条用量(发生在 LLM client 流末尾)。只写到本机文件。
-    func record(providerKind: ProviderKind, model: String, inputTokens: Int, outputTokens: Int) {
+    func record(providerKind: ProviderKind, model: String, inputTokens: Int, outputTokens: Int, cachedTokens: Int = 0) {
         guard inputTokens > 0 || outputTokens > 0 else { return }
         let day = Self.dateFormatter.string(from: Date())
         let key = "\(providerKind.rawValue)::\(model)"
@@ -68,6 +68,7 @@ final class UsageStore {
         var modelEntry = dayBucket[key] ?? UsageEntry()
         modelEntry.input += inputTokens
         modelEntry.output += outputTokens
+        modelEntry.cached += cachedTokens
         modelEntry.callCount += 1
         dayBucket[key] = modelEntry
         mineSnapshot.days[day] = dayBucket
@@ -290,6 +291,7 @@ struct UsageSnapshot: Codable {
                 var e = outBucket[key] ?? UsageEntry()
                 e.input += bEntry.input
                 e.output += bEntry.output
+                e.cached += bEntry.cached
                 e.callCount += bEntry.callCount
                 outBucket[key] = e
             }
@@ -303,8 +305,26 @@ struct UsageEntry: Codable, Hashable, Sendable {
     var input: Int = 0
     var output: Int = 0
     var callCount: Int = 0
+    /// 命中提示缓存的输入 token 数(input 已含缓存)。
+    var cached: Int = 0
 
     var total: Int { input + output }
+
+    init(input: Int = 0, output: Int = 0, callCount: Int = 0, cached: Int = 0) {
+        self.input = input
+        self.output = output
+        self.callCount = callCount
+        self.cached = cached
+    }
+
+    // 旧 usage JSON 缺新键时容错(否则整份 snapshot 解码失败被清空)。
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.input = try c.decodeIfPresent(Int.self, forKey: .input) ?? 0
+        self.output = try c.decodeIfPresent(Int.self, forKey: .output) ?? 0
+        self.callCount = try c.decodeIfPresent(Int.self, forKey: .callCount) ?? 0
+        self.cached = try c.decodeIfPresent(Int.self, forKey: .cached) ?? 0
+    }
 }
 
 /// 成本聚合结果(纯读侧派生,不落盘)。

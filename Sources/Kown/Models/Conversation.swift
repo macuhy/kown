@@ -94,6 +94,23 @@ struct TurnImage: Identifiable, Codable, Hashable, Sendable {
 struct TurnTokenUsage: Codable, Hashable, Sendable {
     var input: Int
     var output: Int
+    /// 命中提示缓存的输入 token 数(input 已含缓存)。旧存档无此键 → 容错为 0。
+    var cachedInput: Int
+
+    init(input: Int, output: Int, cachedInput: Int = 0) {
+        self.input = input
+        self.output = output
+        self.cachedInput = cachedInput
+    }
+
+    // 旧 JSON 缺 cachedInput 时,合成 Decodable 会抛 keyNotFound → 整轮/会话解码失败丢数据。
+    // 故自定义 init(from:) 用 decodeIfPresent 容错。
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.input = try c.decodeIfPresent(Int.self, forKey: .input) ?? 0
+        self.output = try c.decodeIfPresent(Int.self, forKey: .output) ?? 0
+        self.cachedInput = try c.decodeIfPresent(Int.self, forKey: .cachedInput) ?? 0
+    }
 }
 
 /// Council 投票结果:由 chair 对各家答案按维度打分(0-10),外加一句总评。

@@ -46,10 +46,17 @@ struct AnthropicClient: LLMClient {
                             messages.append(["role": "assistant", "content": turn.assistantText])
                         }
                     }
+                    // 在最后一条历史消息上打缓存断点 → 缓存覆盖 system + 全部历史,新问题是未缓存增量。
+                    if var last = messages.last, let textContent = last["content"] as? String {
+                        last["content"] = [["type": "text", "text": textContent,
+                                            "cache_control": ["type": "ephemeral"]]]
+                        messages[messages.count - 1] = last
+                    }
                     messages.append(Self.makeUserMessage(prompt: prompt, images: options.images))
 
                     var cumulativeInput = 0
                     var cumulativeOutput = 0
+                    var cumulativeCached = 0
                     // 扩展思考:仅在本轮不带工具时开(避免 thinking 块跨工具轮 echo 的复杂度)。
                     let thinkingOn = Self.claudeThinkingEnabled && options.tools.isEmpty
 
@@ -82,6 +89,7 @@ struct AnthropicClient: LLMClient {
 
                         cumulativeInput += result.inputTokens
                         cumulativeOutput += result.outputTokens
+                        cumulativeCached += result.cachedInputTokens
 
                         if Task.isCancelled { break }
 
@@ -133,7 +141,8 @@ struct AnthropicClient: LLMClient {
 
                     if cumulativeInput > 0 || cumulativeOutput > 0 {
                         continuation.yield(.usage(inputTokens: cumulativeInput,
-                                                  outputTokens: cumulativeOutput))
+                                                  outputTokens: cumulativeOutput,
+                                                  cachedInputTokens: cumulativeCached))
                     }
                     continuation.finish()
                 } catch {
@@ -157,9 +166,11 @@ struct AnthropicClient: LLMClient {
     private struct RoundResult {
         var text: String = ""
         var toolCalls: [ToolCall] = []
-        /// message_start 给的 input_tokens(prompt) + message_delta 最后的 output_tokens(completion)
+        /// inputTokens 已归一为「含缓存的 prompt 总数」= input_tokens + cache_read + cache_creation;
+        /// cachedInputTokens = cache_read(命中缓存读取)。
         var inputTokens: Int = 0
         var outputTokens: Int = 0
+        var cachedInputTokens: Int = 0
     }
 
     private static func streamOnce(
@@ -189,7 +200,8 @@ struct AnthropicClient: LLMClient {
             "messages": messages
         ]
         if let sys = systemPrompt, !sys.isEmpty {
-            body["system"] = sys
+            // system 作为 block 数组并打缓存断点 → 命中提示缓存(否则 Anthropic 不缓存)。
+            body["system"] = [["type": "text", "text": sys, "cache_control": ["type": "ephemeral"]]]
         }
         if thinkingEnabled {
             // 扩展思考:max_tokens 必须 > budget;temperature 必须为 1(故不传 temperature)。
@@ -228,7 +240,12 @@ struct AnthropicClient: LLMClient {
                 // message.usage.input_tokens 是 prompt 用量
                 if let msg = json["message"] as? [String: Any],
                    let usage = msg["usage"] as? [String: Any] {
-                    if let input = usage["input_tokens"] as? Int { result.inputTokens = input }
+                    let input = usage["input_tokens"] as? Int ?? 0
+                    let cacheRead = usage["cache_read_input_tokens"] as? Int ?? 0
+                    let cacheCreate = usage["cache_creation_input_tokens"] as? Int ?? 0
+                    // 归一:input 含缓存读取 + 缓存写入,缓存比 = cacheRead / input。
+                    result.inputTokens = input + cacheRead + cacheCreate
+                    result.cachedInputTokens = cacheRead
                     if let output = usage["output_tokens"] as? Int { result.outputTokens = output }
                 }
             case "message_delta":

@@ -23,6 +23,8 @@ final class ResponseState: Identifiable {
     /// 本轮 token 用量(流末尾的 usage chunk 填充)。用于回答卡的成本角标 + 落盘进 Turn。
     var inputTokens: Int = 0
     var outputTokens: Int = 0
+    /// 命中提示缓存的输入 token 数(input 已含缓存,缓存比 = cached/input)。
+    var cachedInputTokens: Int = 0
     /// 本卡(provider)自己 web_search 命中的来源(按 url 去重)。用于 panel 小卡显示各自引用。
     var sources: [SourceRef] = []
 
@@ -62,6 +64,7 @@ final class ResponseState: Identifiable {
         events = []
         inputTokens = 0
         outputTokens = 0
+        cachedInputTokens = 0
         sources = []
         phase = .streaming
         startedAt = Date()

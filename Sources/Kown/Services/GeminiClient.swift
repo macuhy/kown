@@ -42,6 +42,7 @@ struct GeminiClient: LLMClient {
 
                     var cumulativeInput = 0
                     var cumulativeOutput = 0
+                    var cumulativeCached = 0
 
                     for round in 0..<Self.maxToolRounds {
                         let isLast = round == Self.maxToolRounds - 1
@@ -72,6 +73,7 @@ struct GeminiClient: LLMClient {
 
                         cumulativeInput += result.inputTokens
                         cumulativeOutput += result.outputTokens
+                        cumulativeCached += result.cachedTokens
 
                         if Task.isCancelled { break }
 
@@ -134,7 +136,8 @@ struct GeminiClient: LLMClient {
 
                     if cumulativeInput > 0 || cumulativeOutput > 0 {
                         continuation.yield(.usage(inputTokens: cumulativeInput,
-                                                  outputTokens: cumulativeOutput))
+                                                  outputTokens: cumulativeOutput,
+                                                  cachedInputTokens: cumulativeCached))
                     }
                     continuation.finish()
                 } catch {
@@ -160,6 +163,8 @@ struct GeminiClient: LLMClient {
         var standaloneThoughtSignature: String?
         var inputTokens: Int = 0
         var outputTokens: Int = 0
+        /// promptTokenCount 本就含缓存;cachedTokens = cachedContentTokenCount。
+        var cachedTokens: Int = 0
     }
 
     private static func streamOnce(
@@ -220,6 +225,7 @@ struct GeminiClient: LLMClient {
             if let usage = json["usageMetadata"] as? [String: Any] {
                 if let pt = usage["promptTokenCount"] as? Int { result.inputTokens = pt }
                 if let ct = usage["candidatesTokenCount"] as? Int { result.outputTokens = ct }
+                if let cached = usage["cachedContentTokenCount"] as? Int { result.cachedTokens = cached }
             }
             guard let candidates = json["candidates"] as? [[String: Any]],
                   let first = candidates.first,
