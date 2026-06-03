@@ -19,12 +19,13 @@ struct OpenAICompatibleClient: LLMClient {
                     ) {
                         messages.append(["role": "system", "content": sys])
                     }
-                    // 真正的多轮历史(user / assistant 交替)
-                    for turn in options.priorTurns {
+                    // 真正的多轮历史(user / assistant 交替)。
+                    // 关键:assistant 为空的轮(失败/未作答)必须整轮跳过 —— 否则会出现连续两条
+                    // user 消息,DeepSeek 等严格要求 user/assistant 交替的 API 会直接 400。
+                    // 「继续生成」要回放整段历史,最易踩中。
+                    for turn in options.priorTurns where !turn.assistantText.isEmpty {
                         messages.append(["role": "user", "content": turn.userText])
-                        if !turn.assistantText.isEmpty {
-                            messages.append(["role": "assistant", "content": turn.assistantText])
-                        }
+                        messages.append(["role": "assistant", "content": turn.assistantText])
                     }
                     messages.append(Self.makeUserMessage(prompt: prompt, images: options.images))
 
