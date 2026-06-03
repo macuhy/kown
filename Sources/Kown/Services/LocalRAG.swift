@@ -286,12 +286,23 @@ final class RAGVectorCache {
     }
 
     /// 单位化 + Float16 量化(余弦即点积)。
+    /// Float16 的带参初始化器在 x86_64 上不可用(只有 arm64 支持),而 mac 发版是
+    /// arm64+x86_64 的 universal 构建 —— x86_64 那一刀会编译失败(0.12.0 起 mac Release
+    /// 一直挂在这)。故用 arch 守卫:arm64 走 Float16 量化,x86_64 退化为 Float(存储
+    /// 类型同为 [Float],数值上几乎一致,不影响索引文件格式与跨架构读取)。
     private func normalizeQuantize(_ v: [Double]) -> [Float] {
         var norm = 0.0
         for x in v { norm += x * x }
         norm = norm.squareRoot()
         let inv = norm > 0 ? 1.0 / norm : 1.0
-        return v.map { Float(Float16($0 * inv)) }
+        return v.map { d in
+            let scaled = Float(d * inv)
+            #if arch(arm64)
+            return Float(Float16(scaled))
+            #else
+            return scaled
+            #endif
+        }
     }
 
     private func load() {
