@@ -42,17 +42,12 @@ struct OpenAICompatibleClient: LLMClient {
                             ])
                         }
                         let toolsForThisRound: [LLMTool] = isLast ? [] : options.tools
-                        // 用户点亮 🌐 (=注入了工具) 时,第一轮强制至少搜一次:
-                        // tool_choice:required。当前唯一工具就是 web_search,强制即必搜。
-                        // 后续轮转回 auto,让模型自行决定继续搜还是直接作答。
-                        let forceToolUse = round == 0 && !toolsForThisRound.isEmpty
                         let result = try await Self.streamOnce(
                             url: try Self.makeURL(config: config),
                             apiKey: apiKey,
                             model: config.model,
                             messages: messages,
                             tools: toolsForThisRound,
-                            forceToolUse: forceToolUse,
                             temperature: options.temperature,
                             maxTokens: options.maxTokens,
                             yieldText: { continuation.yield(.text($0)) },
@@ -166,7 +161,6 @@ struct OpenAICompatibleClient: LLMClient {
         model: String,
         messages: [[String: Any]],
         tools: [LLMTool],
-        forceToolUse: Bool = false,
         temperature: Double?,
         maxTokens: Int?,
         yieldText: (String) -> Void,
@@ -191,9 +185,7 @@ struct OpenAICompatibleClient: LLMClient {
         if let maxTokens { body["max_tokens"] = maxTokens }
         if !tools.isEmpty {
             body["tools"] = tools.map(serializeTool)
-            // forceToolUse: required → 模型本轮必须调用工具(唯一工具是 web_search,即必搜)。
-            // OpenAI / DeepSeek / Qwen / Moonshot / Zhipu / OpenRouter 等主流厂商均支持 "required"。
-            body["tool_choice"] = forceToolUse ? "required" : "auto"
+            body["tool_choice"] = "auto"
         }
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
 
