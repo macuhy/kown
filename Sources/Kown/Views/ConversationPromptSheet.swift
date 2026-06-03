@@ -12,6 +12,11 @@ struct ConversationPromptSheet: View {
     /// 与 SettingsView 一致:本地实例化,init 时从磁盘载入模板。
     @State private var library = PromptLibraryStore()
 
+    // 会话级生成参数覆盖
+    @State private var overrideTemp: Bool = false
+    @State private var temp: Double = 0.7
+    @State private var maxTokensText: String = ""
+
     var body: some View {
         NavigationStack {
             Form {
@@ -37,9 +42,28 @@ struct ConversationPromptSheet: View {
                         Button("清空", role: .destructive) { draft = "" }
                     }
                 }
+
+                Section {
+                    Toggle("自定义温度", isOn: $overrideTemp)
+                    if overrideTemp {
+                        VStack(alignment: .leading) {
+                            Text("温度 \(temp, specifier: "%.2f")")
+                                .font(.callout).monospacedDigit()
+                            Slider(value: $temp, in: 0...2, step: 0.05)
+                        }
+                    }
+                    TextField("最大 tokens(留空 = 模型默认)", text: $maxTokensText)
+                        #if os(iOS)
+                        .keyboardType(.numberPad)
+                        #endif
+                } header: {
+                    Text("生成参数(仅本会话)")
+                } footer: {
+                    Text("覆盖所选模型的默认温度 / 最大 tokens;关闭温度或留空 tokens 则用模型默认。")
+                }
             }
             .formStyle(.grouped)
-            .navigationTitle("会话系统提示")
+            .navigationTitle("会话设置")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -50,11 +74,19 @@ struct ConversationPromptSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存") {
                         viewModel.setConversationSystemPrompt(conversationID, prompt: draft)
+                        let t: Double? = overrideTemp ? temp : nil
+                        let m = Int(maxTokensText.trimmingCharacters(in: .whitespaces))
+                        viewModel.setConversationGenerationParams(conversationID, temperature: t, maxTokens: m)
                         dismiss()
                     }
                 }
             }
-            .onAppear { draft = viewModel.conversationSystemPrompt(conversationID) }
+            .onAppear {
+                draft = viewModel.conversationSystemPrompt(conversationID)
+                let conv = viewModel.conversations.first { $0.id == conversationID }
+                if let t = conv?.conversationTemperature { overrideTemp = true; temp = t }
+                if let m = conv?.conversationMaxTokens { maxTokensText = String(m) }
+            }
         }
         #if os(macOS)
         .frame(minWidth: 520, minHeight: 420)

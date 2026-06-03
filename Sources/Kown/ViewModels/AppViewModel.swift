@@ -587,6 +587,15 @@ final class AppViewModel {
         conversations.first(where: { $0.id == id })?.systemPrompt ?? ""
     }
 
+    /// 设置某会话的生成参数覆盖(nil = 清除,回退 provider 默认)。
+    func setConversationGenerationParams(_ id: UUID, temperature: Double?, maxTokens: Int?) {
+        guard let idx = conversations.firstIndex(where: { $0.id == id }) else { return }
+        conversations[idx].conversationTemperature = temperature
+        conversations[idx].conversationMaxTokens = maxTokens
+        conversations[idx].updatedAt = Date()
+        ConversationStore.save(conversations[idx])
+    }
+
     /// 置顶/取消置顶会话(侧栏排序时置顶优先)。
     func togglePinned(_ id: UUID) {
         guard let idx = conversations.firstIndex(where: { $0.id == id }) else { return }

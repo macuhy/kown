@@ -1338,10 +1338,12 @@ extension AppViewModel {
 
     private func optionsFor(config: ProviderConfig, systemPromptOverride: String) -> ChatOptions {
         let sys = systemPromptOverride.trimmingCharacters(in: .whitespacesAndNewlines)
+        // 会话级生成参数覆盖优先(设置入口:会话参数面板);未设则回退 provider 配置。
+        let conv = selectedConversation
         return ChatOptions(
             systemPrompt: sys.isEmpty ? nil : sys,
-            temperature: config.temperature,
-            maxTokens: config.maxTokens
+            temperature: conv?.conversationTemperature ?? config.temperature,
+            maxTokens: conv?.conversationMaxTokens ?? config.maxTokens
         )
     }
 }

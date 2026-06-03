@@ -325,6 +325,9 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
     var workspaceDisplayPath: String?
     /// 本会话的系统提示覆盖。非 nil 且非空时取代全局 `AppViewModel.systemPrompt`;nil/空则回退全局。
     var systemPrompt: String?
+    /// 本会话的生成参数覆盖。非 nil 时取代 provider 上的同名设置;nil 回退 provider/全局默认。
+    var conversationTemperature: Double?
+    var conversationMaxTokens: Int?
     /// 置顶 — 侧栏排序时优先于普通会话。
     var pinned: Bool
     /// 标签 — 侧栏可按标签过滤分组。
@@ -348,6 +351,8 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
          workspaceBookmark: Data? = nil,
          workspaceDisplayPath: String? = nil,
          systemPrompt: String? = nil,
+         conversationTemperature: Double? = nil,
+         conversationMaxTokens: Int? = nil,
          pinned: Bool = false,
          tags: [String] = [],
          knowledgeFolderID: UUID? = nil,
@@ -366,6 +371,8 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
         self.workspaceBookmark = workspaceBookmark
         self.workspaceDisplayPath = workspaceDisplayPath
         self.systemPrompt = systemPrompt
+        self.conversationTemperature = conversationTemperature
+        self.conversationMaxTokens = conversationMaxTokens
         self.pinned = pinned
         self.tags = tags
         self.knowledgeFolderID = knowledgeFolderID
@@ -389,6 +396,8 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
         self.workspaceBookmark = try c.decodeIfPresent(Data.self, forKey: .workspaceBookmark)
         self.workspaceDisplayPath = try c.decodeIfPresent(String.self, forKey: .workspaceDisplayPath)
         self.systemPrompt = try c.decodeIfPresent(String.self, forKey: .systemPrompt)
+        self.conversationTemperature = try c.decodeIfPresent(Double.self, forKey: .conversationTemperature)
+        self.conversationMaxTokens = try c.decodeIfPresent(Int.self, forKey: .conversationMaxTokens)
         self.pinned = try c.decodeIfPresent(Bool.self, forKey: .pinned) ?? false
         self.tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []
         self.knowledgeFolderID = try c.decodeIfPresent(UUID.self, forKey: .knowledgeFolderID)

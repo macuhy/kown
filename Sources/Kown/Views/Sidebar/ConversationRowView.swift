@@ -157,7 +157,7 @@ struct ConversationRowView: View {
                 Button(conversation.pinned ? "取消置顶" : "置顶") { onTogglePin() }
                 Button("编辑标签…") { onEditTags() }
                 Button("重命名") { onStartRename() }
-                Button("会话系统提示…") { onEditSystemPrompt() }
+                Button("会话设置(提示 / 参数)…") { onEditSystemPrompt() }
                 if !folders.isEmpty {
                     Menu("移动到文件夹") {
                         ForEach(folders) { f in
