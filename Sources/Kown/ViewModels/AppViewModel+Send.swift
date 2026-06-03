@@ -556,6 +556,45 @@ extension AppViewModel {
         retryProvider(turnID: turnID, configID: newProviderID)
     }
 
+    /// Direct 模式「换模型」:用新模型**替换**这轮的单条回答并重答(不像多列模式那样并列追加)。
+    func regenerateDirectWithModel(turnID: UUID, newProviderID: UUID) {
+        guard !isRunning,
+              let convID = selectedConversationID,
+              let convIdx = conversations.firstIndex(where: { $0.id == convID }),
+              let turnIdx = conversations[convIdx].turns.firstIndex(where: { $0.id == turnID }),
+              let newCfg = providers.first(where: { $0.id == newProviderID }) else { return }
+        let key = newProviderID.uuidString
+        conversations[convIdx].turns[turnIdx].providerSnapshot[key] = newCfg
+        conversations[convIdx].turns[turnIdx].panelOrder = [key]   // 单列:替换
+        conversations[convIdx].turns[turnIdx].responses[key] = ""
+        conversations[convIdx].turns[turnIdx].errors[key] = nil
+        ConversationStore.save(conversations[convIdx])
+        retryProvider(turnID: turnID, configID: newProviderID)
+    }
+
+    /// 综合 / 总结 / 裁判 / 主持「换模型」:把该角色换成新模型并重跑。
+    func regenerateChairWithModel(turnID: UUID, target: ChairRetryTarget, newProviderID: UUID) {
+        guard !isRunning,
+              let convID = selectedConversationID,
+              let convIdx = conversations.firstIndex(where: { $0.id == convID }),
+              let turnIdx = conversations[convIdx].turns.firstIndex(where: { $0.id == turnID }),
+              let newCfg = providers.first(where: { $0.id == newProviderID }) else { return }
+        let key = newProviderID.uuidString
+        conversations[convIdx].turns[turnIdx].providerSnapshot[key] = newCfg
+        switch target {
+        case .chair:
+            conversations[convIdx].turns[turnIdx].chairProviderID = key
+            conversations[convIdx].turns[turnIdx].chairSummary = nil
+            conversations[convIdx].turns[turnIdx].chairError = nil
+        case .summary:
+            conversations[convIdx].turns[turnIdx].summaryProviderID = key
+            conversations[convIdx].turns[turnIdx].summaryText = nil
+            conversations[convIdx].turns[turnIdx].summaryError = nil
+        }
+        ConversationStore.save(conversations[convIdx])
+        retryChair(turnID: turnID, target: target)
+    }
+
     /// 「换模型重答」候选:已启用、非 CLI 的 provider(供回答卡菜单)。
     var regenerateCandidates: [ProviderConfig] {
         providers.filter { $0.enabled && !$0.kind.isCLI }

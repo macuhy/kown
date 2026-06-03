@@ -8,6 +8,10 @@ struct AnswerFooterBar: View {
     let model: String
     var sources: [SourceRef] = []
     var tint: Color = .secondary
+    /// 「换模型重答」候选(空 = 不显示该入口)。
+    var regenerateProviders: [ProviderConfig] = []
+    /// 选了某个 provider 换答(传入新 provider id)。
+    var onRegenerate: ((UUID) -> Void)? = nil
 
     @State private var copied = false
     @State private var imageCopied = false
@@ -29,6 +33,18 @@ struct AnswerFooterBar: View {
 
     @ViewBuilder
     private var footerActions: some View {
+        if let onRegenerate, !regenerateProviders.isEmpty {
+            Menu {
+                ForEach(regenerateProviders) { p in
+                    Button("\(p.displayName) · \(p.model)") { onRegenerate(p.id) }
+                }
+            } label: {
+                chip("换模型", systemImage: "arrow.triangle.2.circlepath", color: .secondary)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+        }
         let reading = speech.speakingText == text
         Button { speech.toggle(text) } label: {
             chip(reading ? "停止" : "朗读", systemImage: reading ? "stop.fill" : "speaker.wave.2",
@@ -949,6 +965,9 @@ struct ChairSummaryCard: View {
     var tokenUsage: TurnTokenUsage? = nil
     /// 本轮引用来源(footer Sources 小药丸)。
     var sources: [SourceRef] = []
+    /// 「换模型」候选 + 回调(空 / nil = 不显示)。
+    var regenerateProviders: [ProviderConfig] = []
+    var onRegenerate: ((UUID) -> Void)? = nil
 
     @State private var copied = false
     @State private var imageCopied = false
@@ -1127,6 +1146,18 @@ struct ChairSummaryCard: View {
 
     @ViewBuilder
     private var chairFooterActions: some View {
+        if let onRegenerate, !regenerateProviders.isEmpty {
+            Menu {
+                ForEach(regenerateProviders) { p in
+                    Button("\(p.displayName) · \(p.model)") { onRegenerate(p.id) }
+                }
+            } label: {
+                footerChip("换模型", systemImage: "arrow.triangle.2.circlepath", tint: .secondary)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+        }
         let reading = speech.speakingText == shownText
         Button { speech.toggle(shownText) } label: {
             footerChip(reading ? "停止" : "朗读", systemImage: reading ? "stop.fill" : "speaker.wave.2",

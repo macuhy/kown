@@ -394,6 +394,8 @@ struct MainContentView: View {
                                 onFollowUpTurn: { requestFollowUp($0) },
                                 onExportTurn: { exportTurnReport($0) },
                                 onShareTurn: { shareTurnImage($0) },
+                                regenerateProviders: viewModel.regenerateCandidates,
+                                onRegenerate: { viewModel.regenerateDirectWithModel(turnID: $0, newProviderID: $1) },
                                 onUndoWrite: { viewModel.undoWrite(turnID: $0, write: $1) }
                             )
                         case .compare:

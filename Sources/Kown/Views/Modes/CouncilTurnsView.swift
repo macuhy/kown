@@ -100,7 +100,9 @@ struct CouncilTurnsView: View {
                     isRetrying: viewModel.isRetryingChair(turnID: turn.id, target: .chair),
                     reasoning: turn.reasoningByProvider?[chair.id.uuidString],
                     tokenUsage: turn.tokenUsage?[chair.id.uuidString],
-                    sources: turn.sources ?? []
+                    sources: turn.sources ?? [],
+                    regenerateProviders: viewModel.regenerateCandidates,
+                    onRegenerate: { viewModel.regenerateChairWithModel(turnID: turn.id, target: .chair, newProviderID: $0) }
                 )
             }
             if let summary = turn.summaryConfig {
@@ -117,7 +119,9 @@ struct CouncilTurnsView: View {
                     isRetrying: viewModel.isRetryingChair(turnID: turn.id, target: .summary),
                     reasoning: turn.reasoningByProvider?[summary.id.uuidString],
                     tokenUsage: turn.tokenUsage?[summary.id.uuidString],
-                    sources: turn.sources ?? []
+                    sources: turn.sources ?? [],
+                    regenerateProviders: viewModel.regenerateCandidates,
+                    onRegenerate: { viewModel.regenerateChairWithModel(turnID: turn.id, target: .summary, newProviderID: $0) }
                 )
             }
             if let votes = turn.councilVotes, !votes.scores.isEmpty {

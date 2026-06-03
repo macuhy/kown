@@ -13,6 +13,9 @@ struct DirectTurnsView: View {
     var onFollowUpTurn: ((UUID) -> Void)? = nil
     var onExportTurn: ((UUID) -> Void)? = nil
     var onShareTurn: ((UUID) -> Void)? = nil
+    /// 「换模型重答」候选 + 回调(turnID, 新 providerID)。
+    var regenerateProviders: [ProviderConfig] = []
+    var onRegenerate: ((UUID, UUID) -> Void)? = nil
     /// 撤销某轮的 workspace 写入(turnID, write)。
     var onUndoWrite: ((UUID, AppliedWrite) -> Void)? = nil
 
@@ -57,7 +60,8 @@ struct DirectTurnsView: View {
                     reasoning: turn.reasoningByProvider?[key],
                     tokenUsage: turn.tokenUsage?[key],
                     showActions: true,
-                    sources: turn.sourcesByProvider?[key] ?? (turn.sources ?? [])
+                    sources: turn.sourcesByProvider?[key] ?? (turn.sources ?? []),
+                    onRegenerate: onRegenerate.map { f in { pid in f(turn.id, pid) } }
                 )
             }
             if let writes = turn.appliedWrites, !writes.isEmpty {
@@ -217,7 +221,8 @@ struct DirectTurnsView: View {
 
     private func assistantBubble(config: ProviderConfig, text: String, error: String?, streaming: Bool,
                                  reasoning: String? = nil, tokenUsage: TurnTokenUsage? = nil,
-                                 showActions: Bool = false, sources: [SourceRef] = []) -> some View {
+                                 showActions: Bool = false, sources: [SourceRef] = [],
+                                 onRegenerate: ((UUID) -> Void)? = nil) -> some View {
         HStack(alignment: .top, spacing: assistantSpacing) {
             ZStack {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -285,7 +290,9 @@ struct DirectTurnsView: View {
                 }
                 if showActions, error == nil, !text.isEmpty {
                     AnswerFooterBar(text: text, providerName: config.displayName, model: config.model,
-                                    sources: sources, tint: accentColor(config))
+                                    sources: sources, tint: accentColor(config),
+                                    regenerateProviders: onRegenerate == nil ? [] : regenerateProviders,
+                                    onRegenerate: onRegenerate)
                         .padding(.top, 2)
                 }
             }

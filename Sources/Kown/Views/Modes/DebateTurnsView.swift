@@ -105,7 +105,9 @@ struct DebateTurnsView: View {
                     isRetrying: viewModel.isRetryingChair(turnID: turn.id, target: .chair),
                     reasoning: turn.reasoningByProvider?[moderator.id.uuidString],
                     tokenUsage: turn.tokenUsage?[moderator.id.uuidString],
-                    sources: turn.sources ?? []
+                    sources: turn.sources ?? [],
+                    regenerateProviders: viewModel.regenerateCandidates,
+                    onRegenerate: { viewModel.regenerateChairWithModel(turnID: turn.id, target: .chair, newProviderID: $0) }
                 )
             }
             if let writes = turn.appliedWrites, !writes.isEmpty {
