@@ -400,7 +400,8 @@ enum AnswerImageExporter {
     }
 
     /// 整会话 → 多页 PDF(矢量文字、全文不截断)。失败返回 nil。
-    /// 复用分享版式;用 ImageRenderer 把 SwiftUI 画进 CGContext 的 PDF 上下文,按页切片分页。
+    /// **按块分页**:会话头 + 每轮卡片 + 页脚各为一块,分页只发生在块之间(不切到行),
+    /// 只有单块本身比整页还高时才按页切。块用 ImageRenderer 矢量画进 PDF 上下文。
     @MainActor
     static func sessionPDF(conversation: Conversation) -> Data? {
         var map: [UUID: [PlatformImage]] = [:]
@@ -408,40 +409,105 @@ enum AnswerImageExporter {
             let imgs = preloadImages(turn)
             if !imgs.isEmpty { map[turn.id] = imgs }
         }
-        let renderer = ImageRenderer(content:
-            ShareSessionCard(conversation: conversation, preloaded: map, capText: false))
-        var contentSize: CGSize = .zero
-        renderer.render { size, _ in contentSize = size }
-        guard contentSize.width > 1, contentSize.height > 1 else { return nil }
 
-        // US Letter 纵向;宽版(多列)按页宽缩小,窄的不放大。
-        let pageW: CGFloat = 612, pageH: CGFloat = 792
-        let scale = min(1, pageW / contentSize.width)
-        let scaledW = contentSize.width * scale
-        let scaledH = contentSize.height * scale
-        let pageCount = max(1, Int(ceil(scaledH / pageH)))
-        let tx = (pageW - scaledW) / 2   // 窄内容水平居中
+        var blocks: [AnyView] = [AnyView(pdfHeaderBlock(conversation))]
+        for turn in conversation.turns {
+            blocks.append(AnyView(ShareTurnCard(turn: turn, mode: conversation.mode,
+                                                preloadedImages: map[turn.id] ?? [], capText: false)))
+        }
+        blocks.append(AnyView(pdfFooterBlock()))
+
+        let pageW: CGFloat = 612, pageH: CGFloat = 792, margin: CGFloat = 28
+        let contentW = pageW - margin * 2
+        let contentH = pageH - margin * 2
+        let gap: CGFloat = 10
 
         let pdfData = NSMutableData()
         guard let consumer = CGDataConsumer(data: pdfData as CFMutableData) else { return nil }
         var mediaBox = CGRect(x: 0, y: 0, width: pageW, height: pageH)
-        guard let pdf = CGContext(consumer: consumer, mediaBox: &mediaBox, nil) else { return nil }
+        guard let ctx = CGContext(consumer: consumer, mediaBox: &mediaBox, nil) else { return nil }
+        let canvas = CGColor(gray: 0.97, alpha: 1)
 
-        renderer.render { _, drawInContext in
-            for p in 0..<pageCount {
-                pdf.beginPDFPage(nil)
-                pdf.saveGState()
-                // 第 p 页露出内容的对应纵向切片:内容上沿对齐第 0 页页顶,逐页下移一页高。
-                let ty = CGFloat(p + 1) * pageH - scaledH
-                pdf.translateBy(x: tx, y: ty)
-                pdf.scaleBy(x: scale, y: scale)
-                drawInContext(pdf)
-                pdf.restoreGState()
-                pdf.endPDFPage()
-            }
-            pdf.closePDF()
+        func beginPage() {
+            ctx.beginPDFPage(nil)
+            ctx.setFillColor(canvas)
+            ctx.fill(mediaBox)
         }
+
+        beginPage()
+        var top = margin   // 当前块顶距页顶的偏移
+
+        for block in blocks {
+            let renderer = ImageRenderer(content: block)
+            var size: CGSize = .zero
+            renderer.render { s, _ in size = s }
+            guard size.width > 1, size.height > 1 else { continue }
+            let s = min(1, contentW / size.width)
+            let dispH = size.height * s
+
+            if dispH <= contentH {
+                if top + dispH > pageH - margin {   // 放不下 → 翻页(块不被切)
+                    ctx.endPDFPage(); beginPage(); top = margin
+                }
+                let ty = pageH - top - dispH
+                renderer.render { _, draw in
+                    ctx.saveGState()
+                    ctx.translateBy(x: margin, y: ty)
+                    ctx.scaleBy(x: s, y: s)
+                    draw(ctx)
+                    ctx.restoreGState()
+                }
+                top += dispH + gap
+            } else {
+                // 单块比整页还高 → 从新页起,按页切(仅此情况会切到行)。
+                if top > margin { ctx.endPDFPage(); beginPage(); top = margin }
+                let pages = Int(ceil(dispH / contentH))
+                for i in 0..<pages {
+                    if i > 0 { ctx.endPDFPage(); beginPage() }
+                    let ty = (pageH - margin) + CGFloat(i) * contentH - dispH
+                    renderer.render { _, draw in
+                        ctx.saveGState()
+                        ctx.clip(to: CGRect(x: margin, y: margin, width: contentW, height: contentH))
+                        ctx.translateBy(x: margin, y: ty)
+                        ctx.scaleBy(x: s, y: s)
+                        draw(ctx)
+                        ctx.restoreGState()
+                    }
+                }
+                top = margin + (dispH - CGFloat(pages - 1) * contentH) + gap
+            }
+        }
+        ctx.endPDFPage()
+        ctx.closePDF()
         return pdfData as Data
+    }
+
+    /// PDF 首块:会话标题 + 模式 + 轮数。
+    @MainActor
+    private static func pdfHeaderBlock(_ conv: Conversation) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: conv.mode.symbol)
+                .font(.system(size: 16, weight: .bold)).foregroundStyle(.white)
+                .frame(width: 38, height: 38)
+                .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(conv.title.isEmpty ? "Kown 会话" : conv.title)
+                    .font(.system(.title3, design: .rounded).weight(.bold)).lineLimit(2)
+                Text("\(conv.mode.displayName) · \(conv.turns.count) 轮")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(16)
+        .frame(width: 520, alignment: .leading)
+    }
+
+    @MainActor
+    private static func pdfFooterBlock() -> some View {
+        Text("via Kown")
+            .font(.caption2).foregroundStyle(.secondary)
+            .padding(12)
+            .frame(width: 520, alignment: .leading)
     }
 
     /// 同步预加载某轮的用户附图(ImageRenderer 同步渲染,不能依赖异步 .task)。
