@@ -67,7 +67,7 @@ struct CouncilTurnsView: View {
                          onFollowUp: onFollowUpTurn.map { f in { f(turn.id) } },
                          onExportReport: onExportTurn.map { f in { f(turn.id) } },
                          onShareImage: onShareTurn.map { f in { f(turn.id) } })
-            panelStack {
+            panelStack(count: turn.orderedPanelConfigs.count) {
                 ForEach(turn.orderedPanelConfigs) { cfg in
                     let key = cfg.id.uuidString
                     HistoricalResponseCard(
@@ -143,7 +143,7 @@ struct CouncilTurnsView: View {
             isLive: isRunning
         ) {
             PromptBubble(prompt: prompt, timestamp: Date(), images: liveImages)
-            panelStack {
+            panelStack(count: livePanel.count) {
                 ForEach(livePanel) { cfg in
                     if let state = liveStates[cfg.id] {
                         ResponseColumnView(config: cfg, state: state)
@@ -177,11 +177,11 @@ struct CouncilTurnsView: View {
 
     /// 紧凑(iPhone)用 VStack,常规(iPad / Mac)按可用宽度自动换列。
     @ViewBuilder
-    private func panelStack<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+    private func panelStack<Content: View>(count: Int, @ViewBuilder content: () -> Content) -> some View {
         if stacksVertically {
             VStack(alignment: .leading, spacing: 14) { content() }
         } else {
-            AdaptivePanelGrid { content() }
+            AdaptivePanelGrid(count: count) { content() }
         }
     }
 

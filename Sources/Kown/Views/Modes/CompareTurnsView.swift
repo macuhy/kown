@@ -62,7 +62,7 @@ struct CompareTurnsView: View {
                          onFollowUp: onFollowUpTurn.map { f in { f(turn.id) } },
                          onExportReport: onExportTurn.map { f in { f(turn.id) } },
                          onShareImage: onShareTurn.map { f in { f(turn.id) } })
-            comparePanels {
+            comparePanels(count: min(2, turn.orderedPanelConfigs.count)) {
                 ForEach(Array(turn.orderedPanelConfigs.prefix(2))) { cfg in
                     let key = cfg.id.uuidString
                     HistoricalResponseCard(
@@ -117,7 +117,7 @@ struct CompareTurnsView: View {
             isLive: true
         ) {
             PromptBubble(prompt: prompt, timestamp: Date(), images: liveImages)
-            comparePanels {
+            comparePanels(count: min(2, livePanel.count)) {
                 ForEach(Array(livePanel.prefix(2))) { cfg in
                     if let state = liveStates[cfg.id] {
                         ResponseColumnView(config: cfg, state: state)
@@ -141,11 +141,11 @@ struct CompareTurnsView: View {
 
     /// iPhone 用 VStack;其他按可用宽度自动换列。
     @ViewBuilder
-    private func comparePanels<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+    private func comparePanels<Content: View>(count: Int, @ViewBuilder content: () -> Content) -> some View {
         if stacksVertically {
             VStack(alignment: .leading, spacing: 14) { content() }
         } else {
-            AdaptivePanelGrid(minColumnWidth: 520) { content() }
+            AdaptivePanelGrid(minColumnWidth: 520, count: count) { content() }
         }
     }
 

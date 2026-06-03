@@ -15,6 +15,8 @@ struct PerformanceSettingsView: View {
     @AppStorage("kown.autoRoute.v1") private var autoRoute: Bool = false
     /// 与 AnthropicClient.claudeThinkingEnabled 同一 key。
     @AppStorage("kown.claudeThinking.v1") private var claudeThinking: Bool = false
+    /// 与 AdaptivePanelGrid.panelsPerRowKey 同一 key。0 = 自动按宽度;1~4 = 固定每行面板数。
+    @AppStorage("kown.panelsPerRow.v1") private var panelsPerRow: Int = 0
 
     private let tint = Color(red: 0.88, green: 0.35, blue: 0.22)
     private let secondaryTint = Color(red: 0.91, green: 0.55, blue: 0.20)
@@ -36,6 +38,7 @@ struct PerformanceSettingsView: View {
             LazyVStack(alignment: .leading, spacing: 12) {
                 heroCard
                 settingCard
+                panelsPerRowCard
                 autoFailoverCard
                 councilVotingCard
                 autoRouteCard
@@ -53,6 +56,7 @@ struct PerformanceSettingsView: View {
             VStack(alignment: .leading, spacing: 18) {
                 heroCard
                 settingCard
+                panelsPerRowCard
                 autoFailoverCard
                 councilVotingCard
                 autoRouteCard
@@ -297,6 +301,40 @@ struct PerformanceSettingsView: View {
                 picker
                 messageBanner(footerText, icon: "info.circle.fill", color: performanceColor)
             }
+        }
+    }
+
+    // MARK: - 每行面板数
+
+    private var panelsPerRowCard: some View {
+        card(tint: secondaryTint) {
+            VStack(alignment: .leading, spacing: 14) {
+                sectionHeader("每行显示面板数",
+                              subtitle: "Council / Compare / Debate 这类多面板模式,一行并排显示几个回答卡。「自动」按窗口宽度铺(原行为)。即时生效。",
+                              icon: "rectangle.split.3x1",
+                              color: secondaryTint)
+                Picker("每行面板数", selection: $panelsPerRow) {
+                    Text("自动").tag(0)
+                    Text("1 个").tag(1)
+                    Text("2 个").tag(2)
+                    Text("3 个").tag(3)
+                    Text("4 个").tag(4)
+                }
+                #if os(iOS)
+                .pickerStyle(.menu)
+                #else
+                .pickerStyle(.segmented)
+                #endif
+                messageBanner(panelsPerRowFooter, icon: "info.circle.fill", color: secondaryTint)
+            }
+        }
+    }
+
+    private var panelsPerRowFooter: String {
+        switch panelsPerRow {
+        case 0:  return "自动 — 按窗口宽度决定一行放几个(窗口越宽越多),面板太挤会自动换行。"
+        case 1:  return "每行 1 个 — 回答卡纵向逐个排列,单卡最宽,适合细读。"
+        default: return "每行固定 \(panelsPerRow) 个 — 超出的回答卡换到下一行;窗口过窄时单卡会偏挤。"
         }
     }
 

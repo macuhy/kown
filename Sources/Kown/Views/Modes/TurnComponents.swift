@@ -1407,30 +1407,75 @@ struct ModeTurnCard<Content: View>: View {
 
 /// Multi-model panels should fill available width, then wrap instead of overflowing horizontally.
 struct AdaptivePanelGrid<Content: View>: View {
+    /// 「每行显示几个面板」设置 key(设置 ▸ 性能)。0 = 自动按宽度;>=1 = 固定列数。
+    static var panelsPerRowKey: String { "kown.panelsPerRow.v1" }
+
     var minColumnWidth: CGFloat = 540
     var spacing: CGFloat = 14
+    /// 实际面板数。自动模式下用它给列数封顶 —— 否则宽屏会算出比面板还多的列,
+    /// 多出来的空列让面板「占不满整宽」(Compare 永远 2 张时尤其明显)。
+    var count: Int? = nil
     private let content: Content
+
+    /// 用户在设置里选的每行面板数。0(默认)= 自动按宽度铺(历史行为)。
+    @AppStorage("kown.panelsPerRow.v1") private var panelsPerRow: Int = 0
+    /// 测得的可用宽度(经 background GeometryReader 上报),用于自动模式算列数。
+    @State private var measuredWidth: CGFloat = 0
 
     init(
         minColumnWidth: CGFloat = 540,
         spacing: CGFloat = 14,
+        count: Int? = nil,
         @ViewBuilder content: () -> Content
     ) {
         self.minColumnWidth = minColumnWidth
         self.spacing = spacing
+        self.count = count
         self.content = content()
+    }
+
+    /// 解析出的实际列数。固定档直接用;自动档按宽度算能放几列、再封顶到面板数。
+    private var resolvedColumnCount: Int {
+        if panelsPerRow >= 1 { return panelsPerRow }
+        let byWidth: Int
+        if measuredWidth > 0 {
+            byWidth = max(1, Int((measuredWidth + spacing) / (minColumnWidth + spacing)))
+        } else {
+            byWidth = 1   // 首帧还没测到宽度,先单列,测到后立刻回流
+        }
+        if let count, count > 0 { return min(byWidth, count) }
+        return byWidth
+    }
+
+    /// flexible 均分填满整宽;minimum 给下限,窗口太窄时面板会偏挤而非压没。
+    private var columns: [GridItem] {
+        Array(
+            repeating: GridItem(.flexible(minimum: 220), spacing: spacing, alignment: .top),
+            count: max(1, resolvedColumnCount)
+        )
     }
 
     var body: some View {
         LazyVGrid(
-            columns: [
-                GridItem(.adaptive(minimum: minColumnWidth), spacing: spacing, alignment: .top)
-            ],
+            columns: columns,
             alignment: .leading,
             spacing: spacing
         ) {
             content
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(
+            GeometryReader { geo in
+                Color.clear.preference(key: PanelGridWidthKey.self, value: geo.size.width)
+            }
+        )
+        .onPreferenceChange(PanelGridWidthKey.self) { measuredWidth = $0 }
+    }
+}
+
+private struct PanelGridWidthKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }

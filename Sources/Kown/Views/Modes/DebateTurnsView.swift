@@ -67,7 +67,7 @@ struct DebateTurnsView: View {
             let rounds = (turn.debateRounds ?? []).sorted { $0.index < $1.index }
             if rounds.isEmpty {
                 // 兼容极早期/异常数据：没有 debateRounds 时展示最终 panel 结果。
-                panelStack {
+                panelStack(count: turn.orderedPanelConfigs.count) {
                     ForEach(turn.orderedPanelConfigs) { cfg in
                         let key = cfg.id.uuidString
                         HistoricalResponseCard(
@@ -120,7 +120,7 @@ struct DebateTurnsView: View {
     private func historicalRound(_ round: DebateRound, turn: Turn) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             roundHeader(index: round.index, title: round.title, live: false)
-            panelStack {
+            panelStack(count: configs(for: round, snapshot: turn.providerSnapshot, fallbackOrder: turn.panelOrder).count) {
                 ForEach(configs(for: round, snapshot: turn.providerSnapshot, fallbackOrder: turn.panelOrder)) { cfg in
                     let key = cfg.id.uuidString
                     HistoricalResponseCard(
@@ -165,7 +165,7 @@ struct DebateTurnsView: View {
                         title: liveDebateRounds.isEmpty ? "立论" : "反驳 / 修正",
                         live: isRunning
                     )
-                    panelStack {
+                    panelStack(count: livePanel.count) {
                         ForEach(livePanel) { cfg in
                             if let state = liveStates[cfg.id] {
                                 ResponseColumnView(config: cfg, state: state)
@@ -199,7 +199,7 @@ struct DebateTurnsView: View {
     private func liveCompletedRound(_ round: DebateRound) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             roundHeader(index: round.index, title: round.title, live: false)
-            panelStack {
+            panelStack(count: configs(for: round, snapshot: liveSnapshot, fallbackOrder: livePanel.map { $0.id.uuidString }).count) {
                 ForEach(configs(for: round, snapshot: liveSnapshot, fallbackOrder: livePanel.map { $0.id.uuidString })) { cfg in
                     let key = cfg.id.uuidString
                     HistoricalResponseCard(
@@ -241,11 +241,11 @@ struct DebateTurnsView: View {
     }
 
     @ViewBuilder
-    private func panelStack<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+    private func panelStack<Content: View>(count: Int, @ViewBuilder content: () -> Content) -> some View {
         if stacksVertically {
             VStack(alignment: .leading, spacing: 14) { content() }
         } else {
-            AdaptivePanelGrid { content() }
+            AdaptivePanelGrid(count: count) { content() }
         }
     }
 
