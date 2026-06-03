@@ -15,6 +15,7 @@ struct SettingsView: View {
         case sync
         case backup
         case usage
+        case favorites
         case performance
         case updates
         case changelog
@@ -29,6 +30,7 @@ struct SettingsView: View {
             case .sync:        return "iCloud 同步"
             case .backup:      return "导入/导出"
             case .usage:       return "Token 用量"
+            case .favorites:   return "收藏"
             case .performance: return "性能"
             case .updates:     return "软件更新"
             case .changelog:   return "更新日志"
@@ -43,6 +45,7 @@ struct SettingsView: View {
             case .sync:        return "icloud"
             case .backup:      return "square.and.arrow.up.on.square"
             case .usage:       return "chart.bar.xaxis"
+            case .favorites:   return "star"
             case .performance: return "speedometer"
             case .updates:     return "arrow.down.circle"
             case .changelog:   return "sparkles"
@@ -57,6 +60,7 @@ struct SettingsView: View {
             case .sync:        return Color(red: 0.18, green: 0.58, blue: 0.92)
             case .backup:      return Color(red: 0.91, green: 0.55, blue: 0.20)
             case .usage:       return Color(red: 0.24, green: 0.63, blue: 0.36)
+            case .favorites:   return Color(red: 0.92, green: 0.70, blue: 0.18)
             case .performance: return Color(red: 0.88, green: 0.35, blue: 0.22)
             case .updates:     return Color(red: 0.57, green: 0.42, blue: 0.82)
             case .changelog:   return Color(red: 0.95, green: 0.57, blue: 0.16)
@@ -138,6 +142,8 @@ struct SettingsView: View {
                         BackupSettingsView(viewModel: viewModel)
                     case .usage:
                         UsageSettingsView()
+                    case .favorites:
+                        FavoritesSettingsView()
                     case .performance:
                         PerformanceSettingsView()
                     case .updates:
@@ -651,6 +657,8 @@ struct SettingsView: View {
                 BackupSettingsView(viewModel: viewModel)
             case .usage:
                 UsageSettingsView()
+            case .favorites:
+                FavoritesSettingsView()
             case .performance:
                 PerformanceSettingsView()
             case .updates:
@@ -899,6 +907,7 @@ struct SettingsView: View {
         case .sync:        return "iCloud 同步 会话、Provider 配置、Web Search 配置 与 API Key。容器对 Files app 隐藏。"
         case .backup:      return "把当前配置(不含会话)导出成 JSON 文件,或从备份恢复。可作为多设备同步的离线备选。"
         case .usage:       return "按天 + 模型查看 token 用量。input / output 分别计,辅助估算成本。"
+        case .favorites:   return "收藏过的回答片段,点星可在回答卡上收藏 / 取消。"
         case .performance: return "流式响应的渲染节奏。机器卡可以拉长刷新间隔降 CPU。"
         case .updates:     return "通过 Sparkle 检查、下载并自动安装最新版本。"
         case .changelog:   return "查看每个版本的新功能、修复和改进。"

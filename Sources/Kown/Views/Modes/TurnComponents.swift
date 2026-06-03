@@ -16,6 +16,7 @@ struct AnswerFooterBar: View {
     @State private var copied = false
     @State private var imageCopied = false
     @ObservedObject private var speech = SpeechService.shared
+    @ObservedObject private var favorites = FavoritesStore.shared
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
@@ -49,6 +50,11 @@ struct AnswerFooterBar: View {
         Button { speech.toggle(text) } label: {
             chip(reading ? "停止" : "朗读", systemImage: reading ? "stop.fill" : "speaker.wave.2",
                  color: reading ? tint : .secondary)
+        }.buttonStyle(.borderless)
+        let faved = favorites.contains(text)
+        Button { favorites.toggle(text: text, providerName: providerName, model: model) } label: {
+            chip(faved ? "已收藏" : "收藏", systemImage: faved ? "star.fill" : "star",
+                 color: faved ? .yellow : .secondary)
         }.buttonStyle(.borderless)
         Button {
             if AnswerImageExporter.copyToClipboard(providerName: providerName, model: model, text: text) {
@@ -237,6 +243,7 @@ struct HistoricalResponseCard: View {
     @State private var expanded = false
     @State private var bodyCollapsed = false
     @ObservedObject private var speech = SpeechService.shared
+    @ObservedObject private var favorites = FavoritesStore.shared
     @Environment(\.horizontalSizeClass) private var hSizeClass
     /// iOS 紧凑宽度:footer 动作按钮只显示图标,避免窄卡片里文字被逐字竖排。
     private var compactFooter: Bool {
@@ -536,6 +543,16 @@ struct HistoricalResponseCard: View {
                 chipLabel(reading ? "停止" : "朗读",
                           systemImage: reading ? "stop.fill" : "speaker.wave.2",
                           tint: reading ? Color.accentColor : .secondary)
+            }
+            .buttonStyle(.borderless)
+        }
+        if !text.isEmpty {
+            let faved = favorites.contains(text)
+            Button {
+                favorites.toggle(text: text, providerName: config.displayName, model: config.model)
+            } label: {
+                chipLabel(faved ? "已收藏" : "收藏", systemImage: faved ? "star.fill" : "star",
+                          tint: faved ? .yellow : .secondary)
             }
             .buttonStyle(.borderless)
         }
@@ -972,6 +989,7 @@ struct ChairSummaryCard: View {
     @State private var copied = false
     @State private var imageCopied = false
     @ObservedObject private var speech = SpeechService.shared
+    @ObservedObject private var favorites = FavoritesStore.shared
     @Environment(\.horizontalSizeClass) private var hSizeClass
 
     /// 最终可朗读 / 复制的文本(历史 text 或流式 liveText)。
@@ -1162,6 +1180,14 @@ struct ChairSummaryCard: View {
         Button { speech.toggle(shownText) } label: {
             footerChip(reading ? "停止" : "朗读", systemImage: reading ? "stop.fill" : "speaker.wave.2",
                        tint: reading ? role.tint : .secondary)
+        }
+        .buttonStyle(.borderless)
+        let faved = favorites.contains(shownText)
+        Button {
+            favorites.toggle(text: shownText, providerName: "\(role.prefix) · \(config.displayName)", model: config.model)
+        } label: {
+            footerChip(faved ? "已收藏" : "收藏", systemImage: faved ? "star.fill" : "star",
+                       tint: faved ? .yellow : .secondary)
         }
         .buttonStyle(.borderless)
         Button {
