@@ -285,6 +285,13 @@ final class AppViewModel {
         pendingScrollTurnID = turnID
     }
 
+    // MARK: - 成本预算闸
+    /// 本月花费接近/超过预算上限时,send() 置位此项让 UI 弹确认;确认后走 confirmBudgetAndSend()。
+    struct BudgetGate: Identifiable { let id = UUID(); let message: String }
+    var budgetGate: BudgetGate?
+    /// 确认「仍要发送」后置 true,让紧接着的 send() 跳过预算闸(发完即复位)。
+    var bypassBudgetOnce = false
+
     /// 正在生成图片(用于按钮 loading 态)。
     var isGeneratingImage = false
 

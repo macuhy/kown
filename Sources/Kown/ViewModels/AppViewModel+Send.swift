@@ -3,11 +3,41 @@ import Foundation
 // 发送 / 重试 / 流式编排 —— 从 AppViewModel 抽出的「SendCoordinator」关注点(同类型扩展,
 // 不改 View 绑定:liveStates 等仍在 AppViewModel 上)。纯粹按职责分文件,零行为变化。
 extension AppViewModel {
+    /// 预算闸文案:本月累计成本达到「上限 × 阈值%」时返回提示;未设上限或未达阈值返回 nil。
+    /// 读 @AppStorage 同 key(kown.budget.*),直接走 UserDefaults(ViewModel 非 View)。
+    func budgetGateMessage() -> String? {
+        let cap = UserDefaults.standard.double(forKey: "kown.budget.monthlyCapUSD")
+        guard cap > 0 else { return nil }
+        let warnPct = (UserDefaults.standard.object(forKey: "kown.budget.warnPercent") as? Int) ?? 80
+        let spent = UsageStore.shared.monthToDateCostUSD()
+        guard spent >= cap * Double(warnPct) / 100.0 else { return nil }
+        let pct = Int((spent / cap * 100).rounded())
+        if spent >= cap {
+            return String(format: "本月已用 $%.2f,已达预算上限 $%.2f(%d%%)。仍要继续发送吗?", spent, cap, pct)
+        }
+        return String(format: "本月已用 $%.2f / 上限 $%.2f(%d%%),已接近预算。仍要继续发送吗?", spent, cap, pct)
+    }
+
+    /// 用户在预算提醒里点「仍要发送」:跳过本次预算闸并重发。
+    func confirmBudgetAndSend() {
+        budgetGate = nil
+        bypassBudgetOnce = true
+        send()
+    }
+
     func send() {
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         var (panel, chair) = providersForCurrentSend()
         guard !panel.isEmpty else { return }
+
+        // 成本预算闸:本月花费接近/超过上限时先弹确认。bypassBudgetOnce 让确认后的重发跳过本检查。
+        if bypassBudgetOnce {
+            bypassBudgetOnce = false
+        } else if let msg = budgetGateMessage() {
+            budgetGate = BudgetGate(message: msg)
+            return
+        }
 
         // Direct 模式 + 自动路由:按问题难度在当前 provider 的 vendor 内换 model(便宜↔旗舰)。
         if autoRouteEnabled, currentMode == .direct, let first = panel.first {

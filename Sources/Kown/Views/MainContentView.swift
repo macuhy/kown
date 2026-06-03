@@ -58,6 +58,15 @@ struct MainContentView: View {
         .sheet(item: $editRequest) { req in
             EditTurnSheet(viewModel: viewModel, turnID: req.id, initialText: req.text)
         }
+        .alert("成本预算提醒", isPresented: Binding(
+            get: { viewModel.budgetGate != nil },
+            set: { if !$0 { viewModel.budgetGate = nil } }
+        ), presenting: viewModel.budgetGate) { _ in
+            Button("仍要发送", role: .destructive) { viewModel.confirmBudgetAndSend() }
+            Button("取消", role: .cancel) { viewModel.budgetGate = nil }
+        } message: { gate in
+            Text(gate.message)
+        }
         .onAppear {
             #if !os(iOS)
             // iOS 上不 auto-focus(避免 NavigationStack push 动画与 @FocusState 抢占),
