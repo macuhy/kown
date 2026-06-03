@@ -38,8 +38,8 @@ struct SourcesStrip: View {
             }
             .buttonStyle(.plain)
             if expanded {
-                ForEach(sources) { source in
-                    SourceCard(source: source, tint: tint)
+                ForEach(Array(sources.enumerated()), id: \.element.id) { index, source in
+                    SourceCard(source: source, index: index, tint: tint)
                 }
             }
         }
@@ -107,7 +107,9 @@ struct SourcesChip: View {
                 Text("引用来源(\(sources.count))")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(tint)
-                ForEach(sources) { SourceCard(source: $0, tint: tint) }
+                ForEach(Array(sources.enumerated()), id: \.element.id) { index, source in
+                    SourceCard(source: source, index: index, tint: tint)
+                }
             }
             .padding(14)
             .frame(maxWidth: 340, alignment: .leading)
@@ -119,6 +121,8 @@ struct SourcesChip: View {
 /// 单条来源卡片:标题 + 域名。整卡可点,用 `Link` 打开 url(跨 macOS / iOS)。
 private struct SourceCard: View {
     let source: SourceRef
+    /// 来源在列表中的 0-based 序号,展示为 `[index+1]` 角标。
+    let index: Int
     let tint: Color
 
     var body: some View {
@@ -136,11 +140,16 @@ private struct SourceCard: View {
                 .foregroundStyle(tint)
                 .font(.body.weight(.semibold))
             VStack(alignment: .leading, spacing: 3) {
-                Text(displayTitle)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
+                    Text("[\(index + 1)]")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(tint)
+                    Text(displayTitle)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                }
                 Text(domain)
                     .font(.system(.caption2, design: .monospaced))
                     .foregroundStyle(.secondary)
