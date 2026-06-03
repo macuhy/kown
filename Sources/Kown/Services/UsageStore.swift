@@ -214,6 +214,20 @@ final class UsageStore {
     /// 向后兼容(默认 .all)
     var totalCost: CostBreakdown { totalCost(scope: .all) }
 
+    /// 本月(当前自然月,"yyyy-MM" 前缀匹配)累计已知成本(美元)。预算卡片用。
+    func monthToDateCostUSD(scope: Scope = .all) -> Double {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = .current
+        let prefix = f.string(from: Date())
+        var sum = 0.0
+        for day in sortedDays(scope: scope) where day.hasPrefix(prefix) {
+            sum += cost(for: day, scope: scope).knownCostUSD
+        }
+        return sum
+    }
+
     /// 参与累加的设备数(包括本机)
     var deviceCount: Int {
         Self.deviceCount(excludingDeviceID: nil)

@@ -10,6 +10,11 @@ struct UsageSettingsView: View {
     /// 时间范围:近 7 天 / 近 30 天 / 全部。
     @State private var range: RangeOption = .all
 
+    /// 月度预算上限(美元,0 = 不限制)。发送前预检按此 key 读。
+    @AppStorage("kown.budget.monthlyCapUSD") private var monthlyCapUSD: Double = 0
+    /// 到达上限多少百分比时提醒。发送前预检按此 key 读。
+    @AppStorage("kown.budget.warnPercent") private var warnPercent: Int = 80
+
     private let tint = Color(red: 0.24, green: 0.63, blue: 0.36)
     private let secondaryTint = Color(red: 0.08, green: 0.70, blue: 0.78)
 
@@ -59,6 +64,7 @@ struct UsageSettingsView: View {
                 heroCard
                 scopePickerCard
                 rangePickerCard
+                budgetCard
                 if days.isEmpty {
                     emptyStateCard
                 } else {
@@ -81,6 +87,7 @@ struct UsageSettingsView: View {
                 heroCard
                 scopePickerCard
                 rangePickerCard
+                budgetCard
                 if days.isEmpty {
                     emptyStateCard
                 } else {
@@ -276,6 +283,75 @@ struct UsageSettingsView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
+            }
+        }
+    }
+
+    /// 预算卡:设置本月成本上限 + 提醒阈值,并显示本月已用进度。
+    private var budgetCard: some View {
+        let used = store.monthToDateCostUSD()
+        let cap = monthlyCapUSD
+        let enabled = cap > 0
+        let percent = enabled ? Int((used / cap * 100).rounded()) : 0
+        let overWarn = enabled && Double(percent) >= Double(warnPercent)
+        return cardShell(tint: secondaryTint) {
+            VStack(alignment: .leading, spacing: 14) {
+                sectionHeader("预算", subtitle: "设置本月成本上限和提醒阈值。上限设为 0 表示不限制。", icon: "dollarsign.circle", color: secondaryTint)
+
+                HStack(spacing: 10) {
+                    Text("月度上限")
+                        .font(.callout.weight(.semibold))
+                    Spacer(minLength: 8)
+                    Text("$")
+                        .font(.callout.weight(.bold))
+                        .foregroundStyle(.secondary)
+                    TextField("0", value: $monthlyCapUSD, format: .number)
+                        #if os(iOS)
+                        .keyboardType(.decimalPad)
+                        #endif
+                        .multilineTextAlignment(.trailing)
+                        .monospacedDigit()
+                        .frame(maxWidth: 120)
+                        .textFieldStyle(.roundedBorder)
+                }
+
+                HStack(spacing: 10) {
+                    Text("提醒阈值")
+                        .font(.callout.weight(.semibold))
+                    Spacer(minLength: 8)
+                    Picker("", selection: $warnPercent) {
+                        ForEach([50, 70, 80, 90, 100], id: \.self) { p in
+                            Text("\(p)%").tag(p)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .disabled(!enabled)
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    if enabled {
+                        HStack(spacing: 4) {
+                            Text("本月已用 \(CostFormat.usd(used)) / 上限 \(CostFormat.usd(cap))")
+                                .font(.caption.weight(.semibold))
+                                .monospacedDigit()
+                            Text("(\(percent)%)")
+                                .font(.caption.weight(.bold))
+                                .monospacedDigit()
+                                .foregroundStyle(overWarn ? .red : secondaryTint)
+                            Spacer(minLength: 0)
+                        }
+                        ProgressView(value: min(Double(percent), 100), total: 100)
+                            .tint(overWarn ? .red : secondaryTint)
+                    } else {
+                        Text("本月已用 \(CostFormat.usd(used)) · 未设置上限")
+                            .font(.caption.weight(.semibold))
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(12)
+                .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
         }
     }
