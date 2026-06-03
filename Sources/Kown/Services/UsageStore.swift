@@ -28,9 +28,17 @@ final class UsageStore {
     /// 本机只读,不会写也不会清。reload 时重新扫盘。
     private(set) var othersSnapshot: UsageSnapshot
 
-    /// 给 UI 用的合并 view(mineSnapshot + othersSnapshot 按 day/model 加总)
+    /// `.all` 合并快照缓存。`snapshot` 全量合并是 O(天数×条目),UI 滑动时反复访问会堆主线程卡死,
+    /// 所以缓存合并结果,数据变化(record/reset/reload)时失效。**不要标 @Published / Observation 追踪**。
+    @ObservationIgnored
+    private var mergedCache: UsageSnapshot?
+
+    /// 给 UI 用的合并 view(mineSnapshot + othersSnapshot 按 day/model 加总)。命中缓存直接返回。
     var snapshot: UsageSnapshot {
-        UsageSnapshot.merging(mineSnapshot, othersSnapshot)
+        if let cached = mergedCache { return cached }
+        let merged = UsageSnapshot.merging(mineSnapshot, othersSnapshot)
+        mergedCache = merged
+        return merged
     }
 
     private static let deviceIDKey = "kown.deviceID.v1"
@@ -72,12 +80,14 @@ final class UsageStore {
         modelEntry.callCount += 1
         dayBucket[key] = modelEntry
         mineSnapshot.days[day] = dayBucket
+        mergedCache = nil
         persistMine()
     }
 
     /// 抹掉本机的全部历史(其他设备的不动 — 它们的文件不在本机的"管辖范围"内)
     func reset() {
         mineSnapshot = UsageSnapshot()
+        mergedCache = nil
         persistMine()
     }
 
@@ -85,6 +95,7 @@ final class UsageStore {
     func reload() {
         mineSnapshot = Self.loadMine(deviceID: deviceID) ?? UsageSnapshot()
         othersSnapshot = Self.loadOthers(excludingDeviceID: deviceID)
+        mergedCache = nil
     }
 
     // MARK: - 聚合查询(给 UI 用)
