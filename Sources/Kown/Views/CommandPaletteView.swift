@@ -175,11 +175,48 @@ struct CommandPaletteView: View {
             convs = ordered.compactMap { byID[$0] }
         }
         return convs.map { conv in
-            Action(icon: conv.mode.symbol, tint: .orange, title: conv.title.isEmpty ? "未命名会话" : conv.title,
-                   subtitle: "\(modeLabel(conv.mode)) · \(conv.turns.count) 轮") {
-                viewModel.selectConversation(conv.id)
+            // 搜索态:定位首条命中的轮,subtitle 显示命中片段,点选跳到该轮;否则跳会话。
+            let hit = q.isEmpty ? nil : matchingTurn(in: conv, query: q)
+            let subtitle = hit?.snippet ?? "\(modeLabel(conv.mode)) · \(conv.turns.count) 轮"
+            return Action(icon: conv.mode.symbol, tint: .orange,
+                          title: conv.title.isEmpty ? "未命名会话" : conv.title,
+                          subtitle: subtitle) {
+                if let turnID = hit?.turnID {
+                    viewModel.selectConversationAndTurn(conv.id, turnID)
+                } else {
+                    viewModel.selectConversation(conv.id)
+                }
             }
         }
+    }
+
+    /// 在会话里找首条包含 query 的轮,返回 (turnID, 命中片段)。扫 prompt / 各回答 / chair / summary / 辩论各轮。
+    private func matchingTurn(in conv: Conversation, query: String) -> (turnID: UUID, snippet: String)? {
+        for turn in conv.turns {
+            var texts: [String] = [turn.prompt]
+            texts.append(contentsOf: turn.responses.values)
+            if let c = turn.chairSummary { texts.append(c) }
+            if let s = turn.summaryText { texts.append(s) }
+            if let rounds = turn.debateRounds {
+                for r in rounds { texts.append(contentsOf: r.responses.values) }
+            }
+            for t in texts {
+                if let range = t.range(of: query, options: .caseInsensitive) {
+                    return (turn.id, Self.snippet(t, around: range))
+                }
+            }
+        }
+        return nil
+    }
+
+    /// 截取命中词周围一小段上下文用于展示。
+    private static func snippet(_ text: String, around range: Range<String.Index>, pad: Int = 24) -> String {
+        let lower = text.index(range.lowerBound, offsetBy: -pad, limitedBy: text.startIndex) ?? text.startIndex
+        let upper = text.index(range.upperBound, offsetBy: pad, limitedBy: text.endIndex) ?? text.endIndex
+        var s = String(text[lower..<upper]).replacingOccurrences(of: "\n", with: " ")
+        if lower > text.startIndex { s = "…" + s }
+        if upper < text.endIndex { s = s + "…" }
+        return s
     }
 
     private func modeLabel(_ mode: ConversationMode) -> String {

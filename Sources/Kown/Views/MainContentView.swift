@@ -445,6 +445,15 @@ struct MainContentView: View {
                     guard let target else { return }
                     withAnimation { proxy.scrollTo(target, anchor: .top) }
                 }
+                // 全局搜索跳转:命令面板先切会话并置 pendingScrollTurnID,这里监听后滚到对应轮。
+                // 切会话后新内容需要一帧布局,稍延后再滚,避免目标 turn 还没渲染。
+                .onChange(of: viewModel.pendingScrollTurnID) { _, target in
+                    guard let target else { return }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                        withAnimation { proxy.scrollTo(target, anchor: .top) }
+                        viewModel.pendingScrollTurnID = nil
+                    }
+                }
                 #if os(iOS)
                 .scrollDismissesKeyboard(.interactively)
                 .contentMargins(.bottom, 14, for: .scrollContent)

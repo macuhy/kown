@@ -276,6 +276,15 @@ final class AppViewModel {
         }
     }
 
+    /// 全局搜索命中后,跳到某会话并定位到某一轮。
+    /// `scrollTarget` 是 MainContentView 的私有 @State,这里通过 `pendingScrollTurnID`
+    /// 桥接:切会话后置位,MainContentView 监听到再滚动到对应 turn。
+    var pendingScrollTurnID: UUID?
+    func selectConversationAndTurn(_ convID: UUID, _ turnID: UUID) {
+        selectConversation(convID)
+        pendingScrollTurnID = turnID
+    }
+
     /// 正在生成图片(用于按钮 loading 态)。
     var isGeneratingImage = false
 

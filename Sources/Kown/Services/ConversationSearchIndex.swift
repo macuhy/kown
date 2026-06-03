@@ -96,6 +96,7 @@ final class ConversationSearchIndex {
     // MARK: - 内部:索引构建
 
     /// 取会话的可搜索全文:标题 + 每个 Turn 的 prompt / 各 response / chair 综合 / summary 汇总
+    /// + 辩论各轮发言 + 各家思考过程,确保全局搜索能覆盖所有模式的内容。
     private func searchableText(_ conv: Conversation) -> String {
         var parts: [String] = [conv.title]
         for turn in conv.turns {
@@ -103,6 +104,10 @@ final class ConversationSearchIndex {
             parts.append(contentsOf: turn.responses.values)
             if let chair = turn.chairSummary { parts.append(chair) }
             if let summary = turn.summaryText { parts.append(summary) }
+            if let rounds = turn.debateRounds {
+                for round in rounds { parts.append(contentsOf: round.responses.values) }
+            }
+            if let reasoning = turn.reasoningByProvider { parts.append(contentsOf: reasoning.values) }
         }
         return parts.joined(separator: "\n")
     }
