@@ -637,8 +637,8 @@ struct SettingsView: View {
                 .controlSize(.large)
         }
         .padding(.horizontal, 24)
-        // 与侧栏一致:多留顶部空白,避开宿主窗口工具栏对 sheet 顶部的遮挡。
-        .padding(.top, 46)
+        // 与侧栏一致:多留顶部空白,避开宿主窗口工具栏(约 52pt)对 sheet 顶部的遮挡。
+        .padding(.top, 58)
         .padding(.bottom, 18)
         .background(.thinMaterial)
     }
