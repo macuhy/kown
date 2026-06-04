@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kown — 多模型 AI 议会 · 产品介绍与功能演进</title>
+<style>
+  :root{
+    --bg:#0b0d12;
+    --bg2:#10131b;
+    --card:#161a24;
+    --card2:#1c2230;
+    --line:#262d3d;
+    --txt:#e7ebf3;
+    --mut:#97a1b5;
+    --dim:#6c7689;
+    --acc:#7c8cff;
+    --acc2:#52d6c8;
+    --acc3:#ffb454;
+    --grad:linear-gradient(135deg,#7c8cff 0%,#52d6c8 100%);
+    --grad2:linear-gradient(135deg,#ff8db4 0%,#ffb454 100%);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--txt);line-height:1.65;
+    -webkit-font-smoothing:antialiased;
+    background-image:radial-gradient(900px 600px at 80% -5%,rgba(124,140,255,.18),transparent 60%),
+                     radial-gradient(700px 500px at 0% 10%,rgba(82,214,200,.12),transparent 55%);
+    background-attachment:fixed;
+  }
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+  a{color:var(--acc2);text-decoration:none}
+
+  /* ===== HERO ===== */
+  header.hero{padding:96px 0 64px;text-align:center}
+  .logo{
+    width:84px;height:84px;border-radius:22px;margin:0 auto 26px;
+    background:var(--grad);display:flex;align-items:center;justify-content:center;
+    font-size:42px;font-weight:800;color:#0b0d12;
+    box-shadow:0 18px 50px -12px rgba(124,140,255,.6);
+  }
+  .hero h1{font-size:clamp(38px,7vw,68px);font-weight:850;letter-spacing:-.03em;line-height:1.04}
+  .hero h1 .g{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .hero .tag{margin-top:18px;font-size:clamp(17px,2.4vw,22px);color:var(--mut);font-weight:500}
+  .hero .sub{max-width:660px;margin:22px auto 0;color:var(--dim);font-size:16px}
+  .pills{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:34px}
+  .pill{
+    border:1px solid var(--line);background:rgba(255,255,255,.03);
+    padding:8px 16px;border-radius:999px;font-size:13.5px;color:var(--mut);
+    backdrop-filter:blur(6px);
+  }
+  .pill b{color:var(--txt);font-weight:600}
+
+  /* ===== SECTIONS ===== */
+  section{padding:56px 0}
+  .eyebrow{font-size:13px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+    background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;margin-bottom:12px}
+  h2{font-size:clamp(26px,4vw,38px);font-weight:800;letter-spacing:-.02em;line-height:1.15}
+  .lead{color:var(--mut);font-size:17px;max-width:720px;margin-top:14px}
+
+  /* ===== MODES ===== */
+  .modes{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;margin-top:36px}
+  .mode{
+    background:var(--card);border:1px solid var(--line);border-radius:18px;padding:26px 24px;
+    position:relative;overflow:hidden;transition:transform .2s,border-color .2s;
+  }
+  .mode:hover{transform:translateY(-3px);border-color:#3a445c}
+  .mode .ico{font-size:26px;margin-bottom:12px;display:block}
+  .mode h3{font-size:19px;font-weight:750;margin-bottom:6px}
+  .mode p{color:var(--mut);font-size:14.5px}
+  .mode .bartop{position:absolute;top:0;left:0;right:0;height:3px;background:var(--grad)}
+  .mode:nth-child(2) .bartop,.mode:nth-child(3) .bartop{background:var(--grad2)}
+
+  /* ===== FEATURE GRID (capabilities) ===== */
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:36px}
+  .cap{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px}
+  .cap .e{font-size:22px}
+  .cap h4{font-size:15.5px;font-weight:700;margin:10px 0 5px}
+  .cap p{font-size:13.5px;color:var(--dim);line-height:1.55}
+
+  /* ===== TIMELINE ===== */
+  .tl{margin-top:44px;position:relative;padding-left:34px}
+  .tl::before{content:"";position:absolute;left:9px;top:8px;bottom:8px;width:2px;
+    background:linear-gradient(to bottom,var(--acc),var(--acc2),var(--acc3),transparent)}
+  .era{position:relative;margin-bottom:40px}
+  .era::before{content:"";position:absolute;left:-33px;top:6px;width:20px;height:20px;border-radius:50%;
+    background:var(--bg);border:3px solid var(--acc);box-shadow:0 0 0 5px rgba(124,140,255,.12)}
+  .era.c2::before{border-color:var(--acc2);box-shadow:0 0 0 5px rgba(82,214,200,.12)}
+  .era.c3::before{border-color:var(--acc3);box-shadow:0 0 0 5px rgba(255,180,84,.12)}
+  .era .ver{font-size:12.5px;font-weight:700;letter-spacing:.06em;color:var(--dim);text-transform:uppercase}
+  .era h3{font-size:22px;font-weight:780;margin:4px 0 4px;letter-spacing:-.01em}
+  .era .when{font-size:13px;color:var(--acc2);font-weight:600;margin-bottom:14px}
+  .era .desc{color:var(--mut);font-size:14.5px;margin-bottom:16px;max-width:760px}
+  .feats{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+  .feat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;transition:border-color .2s}
+  .feat:hover{border-color:#3a445c}
+  .feat b{font-size:14.5px;font-weight:680;display:block;margin-bottom:3px}
+  .feat span{font-size:13px;color:var(--dim);line-height:1.5}
+  .feat .vt{display:inline-block;font-size:10.5px;font-weight:700;color:var(--acc);
+    background:rgba(124,140,255,.12);border-radius:6px;padding:1px 7px;margin-left:6px;vertical-align:middle;letter-spacing:.04em}
+
+  /* ===== STATS ===== */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:36px}
+  .stat{text-align:center;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:24px 14px}
+  .stat .n{font-size:34px;font-weight:850;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;letter-spacing:-.02em}
+  .stat .l{font-size:13px;color:var(--mut);margin-top:4px}
+
+  footer{padding:60px 0 80px;text-align:center;color:var(--dim);font-size:13.5px;border-top:1px solid var(--line);margin-top:40px}
+
+  @media (max-width:760px){
+    .modes,.feats,.grid{grid-template-columns:1fr}
+    .stats{grid-template-columns:repeat(2,1fr)}
+    header.hero{padding:64px 0 40px}
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="logo">K</div>
+    <h1>Kown<br><span class="g">多模型 AI 议会</span></h1>
+    <p class="tag">一个问题,同时问遍 OpenAI · Claude · Gemini · DeepSeek,让模型们并排作答、互相辩论、综合给结论。</p>
+    <p class="sub">原生 SwiftUI 应用 · macOS + iOS 共享一份源码 · 数据 iCloud 跨设备同步 · API Key 存本地 Keychain,不经过任何中转服务器。</p>
+    <div class="pills">
+      <span class="pill">📅 始于 <b>2026-05-11</b></span>
+      <span class="pill">🧩 <b>4</b> 种回答模式</span>
+      <span class="pill">🤝 <b>5+</b> 家模型厂商</span>
+      <span class="pill">🍎 macOS + iOS</span>
+      <span class="pill">☁️ iCloud 同步</span>
+    </div>
+  </div>
+</header>
+
+<!-- ===== WHAT IS IT ===== -->
+<section>
+  <div class="wrap">
+    <div class="eyebrow">这是什么</div>
+    <h2>把多个大模型当成一个「议会」来用</h2>
+    <p class="lead">大多数 AI 工具一次只让你和一个模型对话。Kown 的核心想法不同:同一个问题,<b>并发</b>发给多家厂商,实时流式并排展示。你不再赌哪个模型今天状态好,而是让它们一起上、互相对照、甚至彼此辩论,最后由一个「主席」模型综合出结论。</p>
+
+    <div class="modes">
+      <div class="mode"><span class="bartop"></span><span class="ico">💬</span>
+        <h3>Direct · 直接问</h3>
+        <p>经典单模型对话。可随时「换模型重答」,也能按问题难度在同厂商内自动选档(简单走便宜、复杂走旗舰)。</p></div>
+      <div class="mode"><span class="bartop"></span><span class="ico">⚖️</span>
+        <h3>Compare · 对比</h3>
+        <p>两家模型并排回答同一问题,直观对照风格、准确度与花销。手机端可横滑切换。</p></div>
+      <div class="mode"><span class="bartop"></span><span class="ico">🏛️</span>
+        <h3>Council · 议会</h3>
+        <p>多家模型并发作答,再由「主席」模型综合成一份结论;可选让评审对各家答案按准确/完整/可执行/清晰四维打分排名。</p></div>
+      <div class="mode"><span class="bartop"></span><span class="ico">🥊</span>
+        <h3>Debate · 辩论</h3>
+        <p>多家模型多轮互相反驳(1~4 轮),反驳轮不喂自家立论以减少锚定,最后主持人总结立场变迁与结论。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== CORE CAPABILITIES ===== -->
+<section>
+  <div class="wrap">
+    <div class="eyebrow">现在能做什么</div>
+    <h2>从一次提问到完整的知识工作流</h2>
+    <p class="lead">三周密集迭代下来,Kown 早已不只是「并排聊天」。它围绕「问—答—整理—沉淀」长出了一整套能力。</p>
+
+    <div class="grid">
+      <div class="cap"><div class="e">🌐</div><h4>联网搜索 / 抓网页</h4><p>接 Firecrawl 做 web_search,回答正文内联可点来源;也能抓取整页正文入上下文。</p></div>
+      <div class="cap"><div class="e">📚</div><h4>知识库 / RAG</h4><p>把文档放进资料夹绑定会话,提问时本地向量 + BM25 混合检索最相关片段注入上下文,全程离线零成本。</p></div>
+      <div class="cap"><div class="e">🖼️</div><h4>看图 & 出图</h4><p>三家视觉 API 都能发图分析;也支持图像生成输出。附件支持图片 / PDF / 文本,拖拽、粘贴、相册皆可。</p></div>
+      <div class="cap"><div class="e">🗣️</div><h4>语音对话 & 朗读</h4><p>免手连续对话:说话→识别→发送→朗读→再聆听。神经语音(硅基流动 CosyVoice / 讯飞)逐字高亮朗读。</p></div>
+      <div class="cap"><div class="e">🧠</div><h4>思考过程 & 成本</h4><p>展示推理模型的思考链;每轮显示 token 数与估算成本,缓存命中也单独标注。</p></div>
+      <div class="cap"><div class="e">🗂️</div><h4>会话管理</h4><p>置顶 / 标签 / 文件夹分组 / 搜索 / 回收站 / 分支 / 自动起标题 / 草稿自动保存。</p></div>
+      <div class="cap"><div class="e">📤</div><h4>导出 & 分享</h4><p>Markdown / 纯文本 / 多页矢量 PDF / 整轮或整会话一键截图复制到剪贴板。</p></div>
+      <div class="cap"><div class="e">📁</div><h4>工作目录</h4><p>选一个文件夹作上下文,模型可读目录树、写文件(带行级 diff 和一键撤销)。</p></div>
+      <div class="cap"><div class="e">⚡</div><h4>系统集成</h4><p>菜单栏快速提问 + 全局热键、命令面板 ⌘K、URL Scheme 深链、分享扩展、Siri / App Intents。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== TIMELINE ===== -->
+<section>
+  <div class="wrap">
+    <div class="eyebrow">从 0 到 1 · 功能演进史</div>
+    <h2>它是怎么一步步长出来的</h2>
+    <p class="lead">从 2026-05-11 第一行代码到今天,不到三周时间。下面按时间顺序还原了 Kown 的成长轨迹——从一个「并发问多家」的 macOS 小工具,到跨平台、能联网、有记忆、会说话的 AI 工作台。每个里程碑标注了首次落地的版本。</p>
+
+    <div class="tl">
+
+      <!-- ERA 1 -->
+      <div class="era">
+        <div class="ver">起源 · 第一行代码</div>
+        <h3>① 并发议会的雏形</h3>
+        <div class="when">2026-05-11 · 初始提交</div>
+        <p class="desc">一个原生 macOS SwiftUI 应用:把同一个 prompt 并发发给多家厂商,用 SSE 流式解析器把回答实时并排渲染。每家可单独配 Base URL / Model / Key,每列独立成功失败、可取消。</p>
+        <div class="feats">
+          <div class="feat"><b>并发流式</b><span>withTaskGroup 同时拉多家,逐字流式并排展示</span></div>
+          <div class="feat"><b>三类厂商接入</b><span>OpenAI 兼容 / Anthropic / Gemini,Key 存 Keychain</span></div>
+          <div class="feat"><b>每列隔离</b><span>单家失败不影响其他列,可整体取消</span></div>
+          <div class="feat"><b>连接测试</b><span>设置里不离页就能验证每家配置</span></div>
+        </div>
+      </div>
+
+      <!-- ERA 2 -->
+      <div class="era c2">
+        <div class="ver">v0.4.x – v0.6.x · 平台与地基</div>
+        <h3>② 跨平台、会话、云同步、自动更新</h3>
+        <div class="when">2026-05-25 → 05-29</div>
+        <p class="desc">从「工具」变成「应用」:加上了多平台、对话历史、四种模式、iCloud 同步,以及一条能自我更新的发版链路。这一阶段也踩平了大量 iCloud 冲突与流式性能的坑。</p>
+        <div class="feats">
+          <div class="feat"><b>iOS 支持 <span class="vt">重构</span></b><span>macOS + iOS 共享一份源码,平台差异条件编译</span></div>
+          <div class="feat"><b>iCloud Drive 同步 <span class="vt">0.4.1</span></b><span>会话 / Provider / Key 跨设备同步,导入导出备份</span></div>
+          <div class="feat"><b>Debate 模式深化 <span class="vt">0.4.0</span></b><span>可配轮数、减少自家锚定、立场变迁维度</span></div>
+          <div class="feat"><b>工作目录 <span class="vt">0.5.0</span></b><span>模型读目录树、写文件(严格路径校验)</span></div>
+          <div class="feat"><b>更新日志 / What's New <span class="vt">0.5.3</span></b><span>CHANGELOG 随包,升级自动弹新特性</span></div>
+          <div class="feat"><b>Token 用量统计 <span class="vt">0.5.4</span></b><span>按天 / 按厂商模型分组,多设备累加</span></div>
+          <div class="feat"><b>流式 CPU 优化 <span class="vt">0.6.0</span></b><span>合批 flush,长回答 CPU 从 ~83% 降到 ~10%</span></div>
+          <div class="feat"><b>Sparkle 自动更新 <span class="vt">0.6.x</span></b><span>启动静默检查、一键安装重启,治好更新死循环</span></div>
+        </div>
+      </div>
+
+      <!-- ERA 3 -->
+      <div class="era c3">
+        <div class="ver">v0.7.0 · 第一波生产力</div>
+        <h3>③ 让对话能被存档、检索与复用</h3>
+        <div class="when">2026-05-30</div>
+        <p class="desc">围绕「用完之后」补齐:导出、备份、搜索、提示词库、用量统计、来源留痕——对话不再是一次性的。</p>
+        <div class="feats">
+          <div class="feat"><b>对话导出 / 本地备份</b><span>导出 Markdown / 纯文本,全量会话打包备份恢复</span></div>
+          <div class="feat"><b>侧栏会话搜索</b><span>按标题 / 内容快速过滤</span></div>
+          <div class="feat"><b>提示词库</b><span>常用 Prompt 收藏成库,随手取用</span></div>
+          <div class="feat"><b>引用来源留痕</b><span>联网回答结构化记录来源并展示</span></div>
+          <div class="feat"><b>超长回答折叠</b><span>默认折叠 + 渐隐,点开看全文</span></div>
+          <div class="feat"><b>对话菜单与快捷键</b><span>⌘1~4 切模式 · ⌘. 停止 · 输入栏 ↑/↓ 翻历史</span></div>
+        </div>
+      </div>
+
+      <!-- ERA 4 -->
+      <div class="era">
+        <div class="ver">v0.8.0 · 重度用户工具</div>
+        <h3>④ 命令面板、分支、按会话定制</h3>
+        <div class="when">2026-05-30</div>
+        <p class="desc">为高频使用者准备的「专业工具箱」:让长期对话可以被精细操控和组织。</p>
+        <div class="feats">
+          <div class="feat"><b>每会话独立系统提示</b><span>单会话设 system prompt,换会话不串味</span></div>
+          <div class="feat"><b>⌘K 命令面板</b><span>统一跳会话 / 切模式 / 切 Provider,全文检索</span></div>
+          <div class="feat"><b>从某轮分支对话</b><span>复制到该轮为止内容成新会话,探索不同路线</span></div>
+          <div class="feat"><b>编辑并重发</b><span>改历史消息后丢弃其后回合、原班模型重答</span></div>
+          <div class="feat"><b>PDF 附件</b><span>PDFKit 抽全文随问题发送,编码自动兜底</span></div>
+          <div class="feat"><b>追问 / 导出本轮报告</b><span>任意一轮继续追问或导出单轮 Markdown</span></div>
+        </div>
+      </div>
+
+      <!-- ERA 5 -->
+      <div class="era c2">
+        <div class="ver">v0.9.0 · 富文本与多媒体</div>
+        <h3>⑤ 回答会渲染、会朗读、能变成图</h3>
+        <div class="when">2026-05-31</div>
+        <p class="desc">输出体验全面升级:边生成边渲染 Markdown,回答能朗读、能导出成图片卡片,输入能拖拽,本地模型也能接。</p>
+        <div class="feats">
+          <div class="feat"><b>流式增量 Markdown</b><span>生成中代码块 / 表格 / 公式边成形,非 raw 字符</span></div>
+          <div class="feat"><b>回答朗读 TTS</b><span>回答卡一键朗读 / 停止</span></div>
+          <div class="feat"><b>导出为图片卡片</b><span>回答渲染成 PNG,便于分享</span></div>
+          <div class="feat"><b>换模型重答 / 自动容错</b><span>另一家模型再答并列对照,失败可自动切换</span></div>
+          <div class="feat"><b>Ollama 本地模型</b><span>localhost 一键接入,免 key 拉取本地模型</span></div>
+          <div class="feat"><b>抓网页正文入上下文</b><span>粘链接用 Firecrawl 抓整页作附件</span></div>
+          <div class="feat"><b>会话内查找 ⌘F</b><span>命中计数 + 上下跳转</span></div>
+          <div class="feat"><b>拖拽附件 / 崩溃留痕</b><span>拖文件入框成附件;异常 / 卡死写本地日志</span></div>
+        </div>
+      </div>
+
+      <!-- ERA 6 -->
+      <div class="era c3">
+        <div class="ver">v0.10.0 · 智能化大爆发</div>
+        <h3>⑥ 思考过程、成本、神经语音、本地检索</h3>
+        <div class="when">2026-06-01</div>
+        <p class="desc">单个版本一次性落地十余项能力,把 Kown 推向「智能工作台」:看得见模型怎么想、花了多少钱,能听写能朗读,能 diff 能投票能检索,还接进了系统的菜单栏和分享扩展。</p>
+        <div class="feats">
+          <div class="feat"><b>模型思考过程展示</b><span>推理模型回答上方可折叠「💭 思考过程」</span></div>
+          <div class="feat"><b>每轮 token 与成本角标</b><span>显示 token 数与估算成本,逐列对比花销</span></div>
+          <div class="feat"><b>神经语音朗读</b><span>微软 / 硅基流动 CosyVoice / 讯飞,分段流式播放</span></div>
+          <div class="feat"><b>语音听写输入</b><span>麦克风说话实时转文字填进输入框</span></div>
+          <div class="feat"><b>代码块语法高亮</b><span>按语言着色并标出语言</span></div>
+          <div class="feat"><b>Council 投票打分</b><span>评审按四维打分排名,导出报告带投票表</span></div>
+          <div class="feat"><b>知识库 / 本地检索</b><span>资料夹绑会话,本地 BM25 检索注入上下文</span></div>
+          <div class="feat"><b>Workspace 改动 diff / 撤销</b><span>模型写盘改动看绿红行级 diff,一键撤销</span></div>
+          <div class="feat"><b>菜单栏快速提问 + 热键</b><span>常驻图标 + ⌃⌥K 全局唤起</span></div>
+          <div class="feat"><b>iOS 分享扩展 + 快捷指令</b><span>从别的 app 分享到 Kown,Siri「问 Kown」</span></div>
+        </div>
+      </div>
+
+      <!-- ERA 7 -->
+      <div class="era">
+        <div class="ver">v0.11.0 · 像打电话一样聊</div>
+        <h3>⑦ 免手语音对话模式</h3>
+        <div class="when">2026-06-01</div>
+        <p class="desc">把听写 + 朗读串成一条闭环:说话 → 自动识别 → 自动发送 → 朗读回答 → 自动再次聆听,全屏带听/想/说状态动效与实时字幕,像打电话一样一直聊。</p>
+        <div class="feats">
+          <div class="feat"><b>连续语音对话</b><span>免手交互闭环,点「结束」退出</span></div>
+          <div class="feat"><b>朗读主回答</b><span>Direct 答 / Council 综合 / Compare 裁判 / Debate 主持</span></div>
+        </div>
+      </div>
+
+      <!-- ERA 8 -->
+      <div class="era c2">
+        <div class="ver">v0.12.0 及以后 · 当前形态</div>
+        <h3>⑧ 沉淀、整理与更深的集成</h3>
+        <div class="when">2026-06-02 · 最新</div>
+        <p class="desc">最近一批围绕「长期使用的舒适度」:更好的导出与组织、不怕误删、能接续、有模板、能被自动化调用,以及图像生成与答案收藏。</p>
+        <div class="feats">
+          <div class="feat"><b>会话导出 PDF</b><span>多页矢量、文字可选中、按块分页不截断</span></div>
+          <div class="feat"><b>会话回收站</b><span>软删除可恢复,超 30 天自动清理</span></div>
+          <div class="feat"><b>语音对话页改版</b><span>可滚动历史 + markdown 渲染 + 逐字 karaoke 高亮</span></div>
+          <div class="feat"><b>输入草稿自动保存</b><span>按会话暂存未发送内容,切回还原</span></div>
+          <div class="feat"><b>接续生成 / 追问建议</b><span>「继续生成」接上一轮;一键生成 3 条后续追问</span></div>
+          <div class="feat"><b>场景模板</b><span>代码审查 / 写作 / 头脑风暴 / 学习 / 决策 / 翻译一键开聊</span></div>
+          <div class="feat"><b>会话文件夹 + URL 深链</b><span>归入文件夹折叠管理;kown:// 一键直达</span></div>
+          <div class="feat"><b>语义检索升级</b><span>Apple 句向量 + BM25 混合,离线命中语义相关</span></div>
+          <div class="feat"><b>图像生成输出</b><span>模式回答卡支持生成图像</span></div>
+          <div class="feat"><b>答案收藏夹 / 片段库</b><span>把满意的回答片段收藏复用</span></div>
+          <div class="feat"><b>提示缓存命中展示</b><span>显示缓存 token 与缓存比,Anthropic 启用缓存</span></div>
+          <div class="feat"><b>更多 App Intents</b><span>用指定模式问 Kown,接入快捷指令自动化</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ===== STATS ===== -->
+<section>
+  <div class="wrap">
+    <div class="eyebrow">数字一览</div>
+    <h2>三周走过的路</h2>
+    <div class="stats">
+      <div class="stat"><div class="n">8</div><div class="l">个能力里程碑阶段</div></div>
+      <div class="stat"><div class="n">50+</div><div class="l">个对用户可见的功能</div></div>
+      <div class="stat"><div class="n">4</div><div class="l">种回答模式</div></div>
+      <div class="stat"><div class="n">2</div><div class="l">个平台 · 一份源码</div></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p><b>Kown</b> · 多模型 AI 议会 — 让模型们一起为你思考。</p>
+    <p style="margin-top:8px">macOS 走 Sparkle 自动更新 · iOS 走 TestFlight · 数据本地优先 + iCloud 同步</p>
+    <p style="margin-top:14px;color:#525b6e">本页根据项目 CHANGELOG 与 git 历史自动整理 · 截至 2026-06-02</p>
+  </div>
+</footer>
+
+</body>
+</html>
