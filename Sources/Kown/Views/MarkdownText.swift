@@ -34,7 +34,10 @@ struct MarkdownText: View {
         } else if text.count > MD.maxFinishedChars {
             MD.rawText(text)  // 防失控:超长走 raw,避开 anchor/布局重路径
         } else {
-            MD.rendered(for: MD.stylizeMath(text), selectable: true)
+            // selectable:false —— macOS 上每段可选中文本会套一个 SelectionOverlay,
+            // 滚动时这些浮层 setFont→失效 intrinsic size→再布局 自我重入,答卡一多滑动就烧满
+            // 一个核(卡死)。整段复制有底部「复制」按钮,这里关掉常开选中根治。
+            MD.rendered(for: MD.stylizeMath(text), selectable: false)
         }
     }
 }
