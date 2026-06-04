@@ -327,6 +327,7 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
     var systemPrompt: String?
     /// 本会话的生成参数覆盖。非 nil 时取代 provider 上的同名设置;nil 回退 provider/全局默认。
     var conversationTemperature: Double?
+    var conversationTopP: Double?
     var conversationMaxTokens: Int?
     /// 置顶 — 侧栏排序时优先于普通会话。
     var pinned: Bool
@@ -352,6 +353,7 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
          workspaceDisplayPath: String? = nil,
          systemPrompt: String? = nil,
          conversationTemperature: Double? = nil,
+         conversationTopP: Double? = nil,
          conversationMaxTokens: Int? = nil,
          pinned: Bool = false,
          tags: [String] = [],
@@ -372,6 +374,7 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
         self.workspaceDisplayPath = workspaceDisplayPath
         self.systemPrompt = systemPrompt
         self.conversationTemperature = conversationTemperature
+        self.conversationTopP = conversationTopP
         self.conversationMaxTokens = conversationMaxTokens
         self.pinned = pinned
         self.tags = tags
@@ -397,6 +400,7 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
         self.workspaceDisplayPath = try c.decodeIfPresent(String.self, forKey: .workspaceDisplayPath)
         self.systemPrompt = try c.decodeIfPresent(String.self, forKey: .systemPrompt)
         self.conversationTemperature = try c.decodeIfPresent(Double.self, forKey: .conversationTemperature)
+        self.conversationTopP = try c.decodeIfPresent(Double.self, forKey: .conversationTopP)
         self.conversationMaxTokens = try c.decodeIfPresent(Int.self, forKey: .conversationMaxTokens)
         self.pinned = try c.decodeIfPresent(Bool.self, forKey: .pinned) ?? false
         self.tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []

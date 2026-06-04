@@ -50,6 +50,7 @@ struct OpenAICompatibleClient: LLMClient {
                             messages: messages,
                             tools: toolsForThisRound,
                             temperature: options.temperature,
+                            topP: options.topP,
                             maxTokens: options.maxTokens,
                             yieldText: { continuation.yield(.text($0)) },
                             yieldReasoning: { continuation.yield(.reasoning($0)) }
@@ -163,6 +164,7 @@ struct OpenAICompatibleClient: LLMClient {
         messages: [[String: Any]],
         tools: [LLMTool],
         temperature: Double?,
+        topP: Double?,
         maxTokens: Int?,
         yieldText: (String) -> Void,
         yieldReasoning: (String) -> Void = { _ in }
@@ -183,6 +185,7 @@ struct OpenAICompatibleClient: LLMClient {
             "messages": messages
         ]
         if let temperature { body["temperature"] = temperature }
+        if let topP { body["top_p"] = topP }
         if let maxTokens { body["max_tokens"] = maxTokens }
         if !tools.isEmpty {
             body["tools"] = tools.map(serializeTool)

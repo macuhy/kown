@@ -588,9 +588,10 @@ final class AppViewModel {
     }
 
     /// 设置某会话的生成参数覆盖(nil = 清除,回退 provider 默认)。
-    func setConversationGenerationParams(_ id: UUID, temperature: Double?, maxTokens: Int?) {
+    func setConversationGenerationParams(_ id: UUID, temperature: Double?, topP: Double?, maxTokens: Int?) {
         guard let idx = conversations.firstIndex(where: { $0.id == id }) else { return }
         conversations[idx].conversationTemperature = temperature
+        conversations[idx].conversationTopP = topP
         conversations[idx].conversationMaxTokens = maxTokens
         conversations[idx].updatedAt = Date()
         ConversationStore.save(conversations[idx])

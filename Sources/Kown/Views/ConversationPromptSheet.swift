@@ -15,6 +15,8 @@ struct ConversationPromptSheet: View {
     // 会话级生成参数覆盖
     @State private var overrideTemp: Bool = false
     @State private var temp: Double = 0.7
+    @State private var overrideTopP: Bool = false
+    @State private var topP: Double = 1.0
     @State private var maxTokensText: String = ""
 
     var body: some View {
@@ -52,6 +54,14 @@ struct ConversationPromptSheet: View {
                             Slider(value: $temp, in: 0...2, step: 0.05)
                         }
                     }
+                    Toggle("自定义 top-p", isOn: $overrideTopP)
+                    if overrideTopP {
+                        VStack(alignment: .leading) {
+                            Text("top-p \(topP, specifier: "%.2f")")
+                                .font(.callout).monospacedDigit()
+                            Slider(value: $topP, in: 0...1, step: 0.05)
+                        }
+                    }
                     TextField("最大 tokens(留空 = 模型默认)", text: $maxTokensText)
                         #if os(iOS)
                         .keyboardType(.numberPad)
@@ -75,8 +85,9 @@ struct ConversationPromptSheet: View {
                     Button("保存") {
                         viewModel.setConversationSystemPrompt(conversationID, prompt: draft)
                         let t: Double? = overrideTemp ? temp : nil
+                        let p: Double? = overrideTopP ? topP : nil
                         let m = Int(maxTokensText.trimmingCharacters(in: .whitespaces))
-                        viewModel.setConversationGenerationParams(conversationID, temperature: t, maxTokens: m)
+                        viewModel.setConversationGenerationParams(conversationID, temperature: t, topP: p, maxTokens: m)
                         dismiss()
                     }
                 }
@@ -85,6 +96,7 @@ struct ConversationPromptSheet: View {
                 draft = viewModel.conversationSystemPrompt(conversationID)
                 let conv = viewModel.conversations.first { $0.id == conversationID }
                 if let t = conv?.conversationTemperature { overrideTemp = true; temp = t }
+                if let p = conv?.conversationTopP { overrideTopP = true; topP = p }
                 if let m = conv?.conversationMaxTokens { maxTokensText = String(m) }
             }
         }

@@ -66,6 +66,7 @@ struct GeminiClient: LLMClient {
                             ),
                             tools: toolsForThisRound,
                             temperature: options.temperature,
+                            topP: options.topP,
                             maxTokens: options.maxTokens,
                             yieldText: { continuation.yield(.text($0)) },
                             yieldReasoning: { continuation.yield(.reasoning($0)) }
@@ -175,6 +176,7 @@ struct GeminiClient: LLMClient {
         systemPrompt: String?,
         tools: [LLMTool],
         temperature: Double?,
+        topP: Double?,
         maxTokens: Int?,
         yieldText: (String) -> Void,
         yieldReasoning: (String) -> Void = { _ in }
@@ -202,6 +204,7 @@ struct GeminiClient: LLMClient {
         }
         var gen: [String: Any] = [:]
         if let temperature { gen["temperature"] = temperature }
+        if let topP { gen["topP"] = topP }
         if let maxTokens { gen["maxOutputTokens"] = maxTokens }
         if !gen.isEmpty { body["generationConfig"] = gen }
         if !tools.isEmpty {

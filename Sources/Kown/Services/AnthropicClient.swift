@@ -81,6 +81,7 @@ struct AnthropicClient: LLMClient {
                             ),
                             tools: toolsForThisRound,
                             temperature: options.temperature,
+                            topP: options.topP,
                             maxTokens: options.maxTokens ?? Self.defaultMaxTokens,
                             thinkingEnabled: thinkingOn,
                             yieldText: { continuation.yield(.text($0)) },
@@ -181,6 +182,7 @@ struct AnthropicClient: LLMClient {
         systemPrompt: String?,
         tools: [LLMTool],
         temperature: Double?,
+        topP: Double?,
         maxTokens: Int,
         thinkingEnabled: Bool = false,
         yieldText: (String) -> Void,
@@ -205,10 +207,12 @@ struct AnthropicClient: LLMClient {
         }
         if thinkingEnabled {
             // 扩展思考:max_tokens 必须 > budget;temperature 必须为 1(故不传 temperature)。
+            // 官方约束下也不传 top_p,避免与 thinking 冲突。
             body["thinking"] = ["type": "enabled", "budget_tokens": thinkingBudget]
             body["max_tokens"] = max(maxTokens, thinkingBudget + 1024)
-        } else if let temperature {
-            body["temperature"] = temperature
+        } else {
+            if let temperature { body["temperature"] = temperature }
+            if let topP { body["top_p"] = topP }
         }
         if !tools.isEmpty {
             body["tools"] = tools.map(serializeTool)

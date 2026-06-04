@@ -1343,6 +1343,7 @@ extension AppViewModel {
         return ChatOptions(
             systemPrompt: sys.isEmpty ? nil : sys,
             temperature: conv?.conversationTemperature ?? config.temperature,
+            topP: conv?.conversationTopP,
             maxTokens: conv?.conversationMaxTokens ?? config.maxTokens
         )
     }

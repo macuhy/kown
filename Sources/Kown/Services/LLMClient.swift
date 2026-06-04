@@ -10,6 +10,7 @@ struct PriorTurn: Sendable, Hashable {
 struct ChatOptions: Sendable {
     var systemPrompt: String?
     var temperature: Double?
+    var topP: Double?
     var maxTokens: Int?
     /// 图片附件（仅部分 provider 支持；其他 provider 会忽略）
     var images: [Attachment.ImagePayload] = []
