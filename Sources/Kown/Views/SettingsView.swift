@@ -103,7 +103,8 @@ struct SettingsView: View {
     }
 
     private var desktopBody: some View {
-        HStack(spacing: 0) {
+        // 顶部对齐:避免侧栏(高度可能与右栏不一致)被 .center 垂直居中后头部上浮到 sheet 顶被裁。
+        HStack(alignment: .top, spacing: 0) {
             desktopSidebar
             Rectangle()
                 .fill(Color.primary.opacity(0.08))
@@ -508,7 +509,8 @@ struct SettingsView: View {
 
             sidebarStatusCard
         }
-        .padding(.top, 30)
+        // 顶部 sheet 内容会被宿主窗口工具栏遮约 ~28pt,这里多留白把头部顶到遮挡之下。
+        .padding(.top, 58)
         .padding(.leading, 18)
         .padding(.trailing, 16)
         .padding(.bottom, 16)
@@ -635,7 +637,9 @@ struct SettingsView: View {
                 .controlSize(.large)
         }
         .padding(.horizontal, 24)
-        .padding(.vertical, 18)
+        // 与侧栏一致:多留顶部空白,避开宿主窗口工具栏对 sheet 顶部的遮挡。
+        .padding(.top, 46)
+        .padding(.bottom, 18)
         .background(.thinMaterial)
     }
 
@@ -951,10 +955,20 @@ struct SettingsView: View {
 
 private struct SettingsAppIcon: View {
     var body: some View {
-        // 两端统一用受控的 LaunchLogo(普通 imageset,mac/ios 的 Assets.xcassets 都有,
-        // KownApp / EmptyStateCard 已在用)。macOS 之前用 `NSApp.applicationIconImage`,
-        // 新版 macOS 改了 app 图标画布(带透明边距的圆角 squircle),scaledToFill 会把画布
-        // 撑满方框并裁掉顶部 → 图标顶部被切。换成 LaunchLogo + scaledToFit 不裁、可控。
+        #if os(macOS)
+        // 用真 app 图标(NSApp.applicationIconImage 始终可取)。关键是 scaledToFit 而非
+        // scaledToFill:新版 macOS 的图标是「带透明边距的圆角 squircle」,scaledToFill 会撑满
+        // 方框把顶部裁掉 → 图标顶被切。scaledToFit 完整显示、不裁。
+        Image(nsImage: NSApp.applicationIconImage)
+            .resizable()
+            .scaledToFit()
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.22), lineWidth: 1)
+            }
+        #else
+        // iOS 下 `Image("AppIcon")` 取不到 app 图标,改用 LaunchLogo imageset。
         Image("LaunchLogo")
             .resizable()
             .scaledToFit()
@@ -963,6 +977,7 @@ private struct SettingsAppIcon: View {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .strokeBorder(Color.white.opacity(0.22), lineWidth: 1)
             }
+        #endif
     }
 }
 
