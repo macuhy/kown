@@ -951,27 +951,18 @@ struct SettingsView: View {
 
 private struct SettingsAppIcon: View {
     var body: some View {
-        #if os(macOS)
-        Image(nsImage: NSApp.applicationIconImage)
-            .resizable()
-            .scaledToFill()
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.22), lineWidth: 1)
-            }
-        #else
-        // iOS 下 `Image("AppIcon")` 取不到 app 图标(asset catalog 的 AppIcon 不作为普通命名图开放),
-        // 之前因此留白。改用 LaunchLogo(普通 imageset,App 其它地方已在用),保证能渲染。
+        // 两端统一用受控的 LaunchLogo(普通 imageset,mac/ios 的 Assets.xcassets 都有,
+        // KownApp / EmptyStateCard 已在用)。macOS 之前用 `NSApp.applicationIconImage`,
+        // 新版 macOS 改了 app 图标画布(带透明边距的圆角 squircle),scaledToFill 会把画布
+        // 撑满方框并裁掉顶部 → 图标顶部被切。换成 LaunchLogo + scaledToFit 不裁、可控。
         Image("LaunchLogo")
             .resizable()
-            .scaledToFill()
+            .scaledToFit()
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .strokeBorder(Color.white.opacity(0.22), lineWidth: 1)
             }
-        #endif
     }
 }
 
