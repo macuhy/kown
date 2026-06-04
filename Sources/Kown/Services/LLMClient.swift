@@ -67,7 +67,13 @@ func combineSystem(userSystem: String?, summary: String?, includeCurrentTime: Bo
     let sys = (userSystem ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     let sum = (summary ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     var parts: [String] = []
-    if includeCurrentTime { parts.append(currentTimeContextLine()) }
+    if includeCurrentTime {
+        parts.append(currentTimeContextLine())
+        // 联网检索开启时(includeCurrentTime == toolSession 存在),要求行内标注引用,
+        // 供 UI 把正文里的 [n] 渲染成可点角标(n 对应 web_search 返回结果的顺序)。
+        parts.append("当你引用网页搜索结果时,在相关句末用方括号标注来源序号,如 [1]、[2],"
+                     + "序号对应 web_search 返回结果的先后顺序;不要编造未检索到的来源序号。")
+    }
     if !sys.isEmpty { parts.append(sys) }
     if !sum.isEmpty {
         parts.append("""

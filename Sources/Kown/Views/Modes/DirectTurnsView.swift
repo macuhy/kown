@@ -288,7 +288,8 @@ struct DirectTurnsView: View {
                         .foregroundStyle(.tertiary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
-                    MarkdownText(text: text, streaming: streaming)
+                    MarkdownText(text: streaming ? text : citationLinkified(text, sources: sources),
+                                 streaming: streaming)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 if showActions, error == nil, !text.isEmpty {

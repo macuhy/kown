@@ -459,7 +459,7 @@ struct HistoricalResponseCard: View {
         } else {
             let isLong = text.count > Self.collapseThreshold
             VStack(alignment: .leading, spacing: 8) {
-                MarkdownText(text: text)
+                MarkdownText(text: citationLinkified(text, sources: sources))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .frame(maxHeight: (isLong && !expanded) ? 360 : nil, alignment: .top)
                     .clipped()
@@ -1268,7 +1268,7 @@ struct ChairSummaryCard: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(role.tint.opacity(0.07), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         } else if let text, !text.isEmpty {
-            MarkdownText(text: text)
+            MarkdownText(text: citationLinkified(text, sources: sources))
         }
     }
 }
