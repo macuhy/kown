@@ -54,10 +54,9 @@ final class SpeechRecognizer: NSObject, ObservableObject, @unchecked Sendable {
 
     func stop() {
         onMain {
-            if self.audioEngine.isRunning {
-                self.audioEngine.stop()
-                self.audioEngine.inputNode.removeTap(onBus: 0)
-            }
+            if self.audioEngine.isRunning { self.audioEngine.stop() }
+            // 无条件摘 tap:即使引擎没在跑(上次 start 抛错),tap 也可能还挂着。
+            self.audioEngine.inputNode.removeTap(onBus: 0)
             self.request?.endAudio()
             self.task?.finish()
             self.teardown()
@@ -71,6 +70,12 @@ final class SpeechRecognizer: NSObject, ObservableObject, @unchecked Sendable {
         task?.cancel()
         task = nil
 
+        // 防御:无论之前是什么状态,先停引擎、摘掉可能残留的 tap。
+        // installTap 在同一 bus 上重复安装会抛 NSException("nullptr == Tap()") → 整个 App 崩溃。
+        // 上一次 audioEngine.start() 抛错时 tap 已装但 teardown() 不摘,下一次就会撞上这条路径。
+        if audioEngine.isRunning { audioEngine.stop() }
+        audioEngine.inputNode.removeTap(onBus: 0)
+
         #if os(iOS)
         let session = AVAudioSession.sharedInstance()
         try session.setCategory(.record, mode: .measurement, options: .duckOthers)
@@ -83,6 +88,12 @@ final class SpeechRecognizer: NSObject, ObservableObject, @unchecked Sendable {
 
         let inputNode = audioEngine.inputNode
         let format = inputNode.outputFormat(forBus: 0)
+        // macOS 上输入设备未就绪 / 没有麦克风时,format 可能是 0Hz、0 声道,
+        // installTap 会抛 NSException("IsFormatSampleRateAndChannelCountValid") → 崩溃。提前拦掉。
+        guard format.sampleRate > 0, format.channelCount > 0 else {
+            throw NSError(domain: "Kown.SpeechRecognizer", code: -1,
+                          userInfo: [NSLocalizedDescriptionKey: "音频输入设备不可用,请检查麦克风"])
+        }
         // tap 在音频线程回调:只 append 局部 req(线程安全),不碰 self,避免隔离断言。
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
             req.append(buffer)
