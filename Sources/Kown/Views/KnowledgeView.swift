@@ -7,41 +7,23 @@ struct KnowledgeView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var newFolderName = ""
+    private let tint = Color(red: 0.10, green: 0.58, blue: 0.52)
 
     var body: some View {
         NavigationStack {
-            List {
-                bindingSection
-                Section("资料夹") {
-                    if viewModel.knowledgeFolders.isEmpty {
-                        Text("还没有资料夹。新建一个,把常用文档放进去,提问时会自动检索相关片段注入上下文。")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    ForEach(viewModel.knowledgeFolders) { folder in
-                        NavigationLink {
-                            KnowledgeFolderDetail(viewModel: viewModel, folderID: folder.id)
-                        } label: {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(folder.name).font(.body.weight(.semibold))
-                                Text("\(folder.docs.count) 份文档 · \(folder.totalChars) 字")
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                    .onDelete { idx in
-                        for i in idx { viewModel.deleteKnowledgeFolder(viewModel.knowledgeFolders[i].id) }
-                    }
-                    HStack {
-                        TextField("新建资料夹名称", text: $newFolderName)
-                        Button("新建") {
-                            _ = viewModel.createKnowledgeFolder(name: newFolderName)
-                            newFolderName = ""
-                        }
-                        .disabled(newFolderName.trimmingCharacters(in: .whitespaces).isEmpty)
-                    }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    heroCard
+                    bindingCard
+                    foldersSection
+                    createFolderCard
                 }
+                .padding(.horizontal, 20)
+                .padding(.top, 18)
+                .padding(.bottom, 28)
             }
+            .scrollIndicators(.hidden)
+            .background(KnowledgeBackdrop())
             .navigationTitle("知识库")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -58,27 +40,317 @@ struct KnowledgeView: View {
     }
 
     @ViewBuilder
-    private var bindingSection: some View {
-        if viewModel.selectedConversationID != nil {
-            Section("当前会话") {
-                Picker("绑定资料夹", selection: Binding(
-                    get: { viewModel.currentKnowledgeFolder?.id },
-                    set: { viewModel.setKnowledgeFolder($0) }
-                )) {
-                    Text("不绑定").tag(UUID?.none)
-                    ForEach(viewModel.knowledgeFolders) { f in
-                        Text(f.name).tag(UUID?.some(f.id))
-                    }
+    private var heroCard: some View {
+        let folders = viewModel.knowledgeFolders.count
+        let docs = viewModel.knowledgeFolders.reduce(0) { $0 + $1.docs.count }
+        let chars = viewModel.knowledgeFolders.reduce(0) { $0 + $1.totalChars }
+
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [tint.opacity(0.28), Color.orange.opacity(0.18)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                    Image(systemName: "books.vertical.fill")
+                        .font(.system(size: 26, weight: .bold))
+                        .foregroundStyle(tint)
                 }
-                Text("绑定后,本会话每次提问都会按问题在该资料夹里检索最相关的片段,作为「相关资料」注入。")
-                    .font(.caption).foregroundStyle(.secondary)
+                .frame(width: 58, height: 58)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.32), lineWidth: 1)
+                }
+
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 8) {
+                        Text("把资料变成当前会话的离线大脑")
+                            .font(.system(.title3, design: .rounded).weight(.bold))
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 0)
+                    }
+                    Text("导入文档后,Kown 会在本地检索相关片段,随每次提问一起注入上下文。")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
-        } else {
-            Section {
-                Text("先选中或新建一个会话,才能把资料夹绑定到会话上。")
-                    .font(.caption).foregroundStyle(.secondary)
+
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 118), spacing: 10)], spacing: 10) {
+                statPill(title: "资料夹", value: "\(folders)", icon: "folder.fill", color: tint)
+                statPill(title: "文档", value: "\(docs)", icon: "doc.text.fill", color: .blue)
+                statPill(title: "字数", value: chars.formatted(), icon: "text.alignleft", color: .orange)
             }
         }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .strokeBorder(tint.opacity(0.16), lineWidth: 1)
+        }
+        .shadow(color: tint.opacity(0.08), radius: 18, x: 0, y: 10)
+    }
+
+    private func statPill(title: String, value: String, icon: String, color: Color) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(color)
+                .frame(width: 28, height: 28)
+                .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(value)
+                    .font(.callout.weight(.bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .monospacedDigit()
+                Text(title)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.platformControlBackground.opacity(0.56), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    @ViewBuilder
+    private var bindingCard: some View {
+        if viewModel.selectedConversationID != nil {
+            cardContainer {
+                VStack(alignment: .leading, spacing: 12) {
+                    sectionTitle("当前会话", icon: "bubble.left.and.text.bubble.right.fill", color: tint)
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .center, spacing: 14) {
+                            bindingCopy
+                            Spacer(minLength: 12)
+                            folderPicker
+                        }
+                        VStack(alignment: .leading, spacing: 10) {
+                            bindingCopy
+                            folderPicker
+                        }
+                    }
+                }
+            }
+        } else {
+            cardContainer {
+                VStack(alignment: .leading, spacing: 10) {
+                    sectionTitle("当前会话", icon: "bubble.left.and.text.bubble.right.fill", color: .secondary)
+                    Text("先选中或新建一个会话,再把资料夹绑定到会话上。")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private var bindingCopy: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(viewModel.currentKnowledgeFolder == nil ? "未绑定资料夹" : "已绑定「\(viewModel.currentKnowledgeFolder?.name ?? "")」")
+                .font(.headline.weight(.semibold))
+            Text("绑定后,本会话每次提问都会检索相关片段,作为「相关资料」注入。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var folderPicker: some View {
+        Picker("绑定资料夹", selection: Binding(
+            get: { viewModel.currentKnowledgeFolder?.id },
+            set: { viewModel.setKnowledgeFolder($0) }
+        )) {
+            Text("不绑定").tag(UUID?.none)
+            ForEach(viewModel.knowledgeFolders) { folder in
+                Text(folder.name).tag(UUID?.some(folder.id))
+            }
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .frame(minWidth: 128, alignment: .trailing)
+    }
+
+    private var foldersSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                sectionTitle("资料夹", icon: "folder.fill", color: tint)
+                Spacer()
+                Text("\(viewModel.knowledgeFolders.count) 个")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background(Color.secondary.opacity(0.10), in: Capsule(style: .continuous))
+            }
+
+            if viewModel.knowledgeFolders.isEmpty {
+                emptyFoldersCard
+            } else {
+                LazyVStack(spacing: 10) {
+                    ForEach(viewModel.knowledgeFolders) { folder in
+                        HStack(spacing: 8) {
+                            NavigationLink {
+                                KnowledgeFolderDetail(viewModel: viewModel, folderID: folder.id)
+                            } label: {
+                                KnowledgeFolderCard(folder: folder, tint: tint)
+                            }
+                            .buttonStyle(.plain)
+
+                            Button(role: .destructive) {
+                                viewModel.deleteKnowledgeFolder(folder.id)
+                            } label: {
+                                Image(systemName: "trash")
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundStyle(.red)
+                                    .frame(width: 34, height: 44)
+                                    .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            }
+                            .buttonStyle(.plain)
+                            .help("删除资料夹")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var emptyFoldersCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                Image(systemName: "tray.and.arrow.down.fill")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(tint)
+                    .frame(width: 44, height: 44)
+                    .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("还没有资料夹")
+                        .font(.headline.weight(.bold))
+                    Text("先创建一个资料夹,再把常用文档拖进来或粘贴进去。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Divider().opacity(0.45)
+            HStack(spacing: 8) {
+                Label("本地检索", systemImage: "lock.fill")
+                Label("随会话绑定", systemImage: "link")
+                Label("自动注入", systemImage: "sparkles")
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.72)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .strokeBorder(tint.opacity(0.13), lineWidth: 1)
+        }
+    }
+
+    private var createFolderCard: some View {
+        cardContainer {
+            VStack(alignment: .leading, spacing: 12) {
+                sectionTitle("新建资料夹", icon: "plus.rectangle.on.folder.fill", color: tint)
+                HStack(spacing: 10) {
+                    TextField("例如: 产品手册 / API 规范", text: $newFolderName)
+                        .textFieldStyle(.plain)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .background(Color.platformControlBackground.opacity(0.65), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .onSubmit(createFolder)
+
+                    Button {
+                        createFolder()
+                    } label: {
+                        Label("新建", systemImage: "plus")
+                            .labelStyle(.titleAndIcon)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(newFolderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+
+    private func sectionTitle(_ text: String, icon: String, color: Color) -> some View {
+        Label {
+            Text(text)
+                .font(.headline.weight(.bold))
+        } icon: {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(color)
+        }
+    }
+
+    private func cardContainer<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.07), lineWidth: 1)
+            }
+    }
+
+    private func createFolder() {
+        let trimmed = newFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        _ = viewModel.createKnowledgeFolder(name: trimmed)
+        newFolderName = ""
+    }
+}
+
+private struct KnowledgeFolderCard: View {
+    let folder: KnowledgeFolder
+    let tint: Color
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "folder.fill")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(tint)
+                .frame(width: 42, height: 42)
+                .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(folder.name)
+                    .font(.callout.weight(.bold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                Text("\(folder.docs.count) 份文档 · \(folder.totalChars.formatted()) 字")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+
+            Spacer(minLength: 8)
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.platformControlBackground.opacity(0.56), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(tint.opacity(0.12), lineWidth: 1)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }
 
@@ -194,5 +466,32 @@ private struct AddDocSheet: View {
         #if os(macOS)
         .frame(minWidth: 440, minHeight: 420)
         #endif
+    }
+}
+
+private struct KnowledgeBackdrop: View {
+    var body: some View {
+        ZStack {
+            Color.platformWindowBackground
+            RadialGradient(
+                colors: [
+                    Color(red: 0.10, green: 0.58, blue: 0.52).opacity(0.18),
+                    Color.clear
+                ],
+                center: .topLeading,
+                startRadius: 0,
+                endRadius: 440
+            )
+            RadialGradient(
+                colors: [
+                    Color.orange.opacity(0.12),
+                    Color.clear
+                ],
+                center: .bottomTrailing,
+                startRadius: 60,
+                endRadius: 520
+            )
+        }
+        .ignoresSafeArea()
     }
 }

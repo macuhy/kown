@@ -75,6 +75,7 @@ struct SettingsView: View {
     #endif
     private static let desktopWidth: CGFloat = 960
     private static let desktopHeight: CGFloat = 660
+    private static let desktopSheetTopPadding: CGFloat = 78
 
     /// 实际展示的 tab — 「软件更新」(Sparkle) 仅 macOS 有,iOS 过滤掉。
     private var availableTabs: [Tab] {
@@ -509,8 +510,8 @@ struct SettingsView: View {
 
             sidebarStatusCard
         }
-        // 顶部 sheet 内容会被宿主窗口工具栏遮约 ~28pt,这里多留白把头部顶到遮挡之下。
-        .padding(.top, 58)
+        // macOS sheet 会压在宿主窗口工具栏下方,这里额外下移,避免顶部控件贴边或被裁。
+        .padding(.top, Self.desktopSheetTopPadding)
         .padding(.leading, 18)
         .padding(.trailing, 16)
         .padding(.bottom, 16)
@@ -637,8 +638,8 @@ struct SettingsView: View {
                 .controlSize(.large)
         }
         .padding(.horizontal, 24)
-        // 与侧栏一致:多留顶部空白,避开宿主窗口工具栏(约 52pt)对 sheet 顶部的遮挡。
-        .padding(.top, 58)
+        // 与侧栏一致:避开宿主窗口工具栏下缘,给顶部标题和按钮留出呼吸感。
+        .padding(.top, Self.desktopSheetTopPadding)
         .padding(.bottom, 18)
         .background(.thinMaterial)
     }
