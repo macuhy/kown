@@ -348,7 +348,9 @@ extension AppViewModel {
             if let chair, modeAtSend == .council || modeAtSend == .compare || modeAtSend == .debate {
                 let nonEmpty = responses.filter { !$0.value.isEmpty }
                 if !nonEmpty.isEmpty {
-                    self.liveStates.removeAll()
+                    // 不清 liveStates —— 否则综合/裁判阶段面板各家答案会从实时视图消失
+                    // (CouncilTurnsView 靠 liveStates[cfg.id] 才渲染面板卡)。chair 用单独的
+                    // liveChairState,不依赖 liveStates;turn 结束时(后面)会统一清空。
                     self.liveChairState?.reset()
                     let synthesisPrompt: String
                     switch modeAtSend {
