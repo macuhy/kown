@@ -34,7 +34,7 @@ struct EmptyStateCard: View {
     var onUseScenario: (ScenarioTemplate) -> Void = { _ in }
 
     private var enabledProviders: [ProviderConfig] { providers.filter(\.enabled) }
-    private var modeTint: Color { mode.workspaceTint }
+    private var modeTint: Color { mode.kownTint }
 
     /// 覆盖不同模式典型用法的示例提问(对比 / 头脑风暴 / 代码 / 决策等)
     private var samplePrompts: [String] {
@@ -135,7 +135,7 @@ struct EmptyStateCard: View {
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .fill(
                             LinearGradient(
-                                colors: [modeTint.opacity(0.20), Color.orange.opacity(0.12)],
+                                colors: [modeTint.opacity(0.20), mode.kownSecondaryTint.opacity(0.12)],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
@@ -356,7 +356,7 @@ struct EmptyStateCard: View {
                         LinearGradient(
                             colors: [
                                 modeTint.opacity(0.18),
-                                Color.orange.opacity(mode == .debate ? 0.14 : 0.06),
+                                mode.kownSecondaryTint.opacity(mode == .debate ? 0.14 : 0.06),
                                 Color.clear
                             ],
                             startPoint: .topLeading,
@@ -402,7 +402,7 @@ struct EmptyStateCard: View {
                 .blur(radius: 18)
                 .offset(x: -26, y: 18)
             Circle()
-                .fill(Color.orange.opacity(0.12))
+                .fill(mode.kownSecondaryTint.opacity(0.12))
                 .frame(width: 130, height: 130)
                 .blur(radius: 16)
                 .offset(x: 42, y: -18)
@@ -420,7 +420,7 @@ struct EmptyStateCard: View {
                 RoundedRectangle(cornerRadius: 32, style: .continuous)
                     .fill(
                         LinearGradient(
-                            colors: [modeTint.opacity(0.95), Color.orange.opacity(0.78)],
+                            colors: [modeTint.opacity(0.95), mode.kownSecondaryTint.opacity(0.78)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -665,18 +665,18 @@ struct EmptyStateCard: View {
                     title: councilCardTitle,
                     subtitle: enabled.isEmpty ? "Enable providers before sending" : "Ready for the next message",
                     icon: councilCardIcon,
-                    tint: .orange
+                    tint: modeTint
                 )
                 Spacer(minLength: 8)
                 Button(action: onOpenSettings) {
                     Text("Change")
                         .font(.caption.weight(.bold))
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(modeTint)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
-                        .background(Color.accentColor.opacity(0.12), in: Capsule())
+                        .background(modeTint.opacity(0.12), in: Capsule())
                         .overlay {
-                            Capsule().strokeBorder(Color.accentColor.opacity(0.22), lineWidth: 1)
+                            Capsule().strokeBorder(modeTint.opacity(0.22), lineWidth: 1)
                         }
                 }
                 .buttonStyle(.plain)
@@ -705,7 +705,7 @@ struct EmptyStateCard: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .background(cardBackground(tint: .orange, cornerRadius: 22))
+        .background(cardBackground(tint: modeTint, cornerRadius: 22))
         .overlay {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
@@ -798,34 +798,11 @@ struct EmptyStateCard: View {
     }
 
     private func providerTint(_ cfg: ProviderConfig) -> Color {
-        switch cfg.kind {
-        case .openAICompatible: return Color(red: 0.06, green: 0.64, blue: 0.50)
-        case .anthropic:        return Color(red: 0.83, green: 0.38, blue: 0.18)
-        case .gemini:           return Color(red: 0.26, green: 0.52, blue: 0.96)
-        case .cliCommand:       return Color(red: 0.55, green: 0.45, blue: 0.78)
-        }
+        cfg.kownTint
     }
 
     private func providerSymbol(_ cfg: ProviderConfig) -> String {
-        switch cfg.kind {
-        case .openAICompatible: return "sparkles"
-        case .anthropic:        return "text.book.closed"
-        case .gemini:           return "diamond.fill"
-        case .cliCommand:       return "terminal"
-        }
-    }
-}
-
-private extension ConversationMode {
-    var workspaceTint: Color {
-        switch self {
-        case .council: return Color(red: 0.10, green: 0.66, blue: 0.56)
-        case .direct:  return Color(red: 0.16, green: 0.48, blue: 0.94)
-        case .compare: return Color(red: 0.91, green: 0.55, blue: 0.20)
-        case .debate:  return Color(red: 0.88, green: 0.35, blue: 0.22)
-        case .structured: return Color(red: 0.36, green: 0.42, blue: 0.92)
-        case .tournament: return Color(red: 0.85, green: 0.62, blue: 0.13)
-        }
+        cfg.kownSymbol
     }
 }
 

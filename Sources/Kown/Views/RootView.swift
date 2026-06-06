@@ -59,14 +59,11 @@ struct RootView: View {
                     ToolbarItem(placement: .topBarLeading) {
                         conversationsButton
                     }
-                    ToolbarItem(placement: .topBarLeading) {
-                        commandPaletteButton
-                    }
                     ToolbarItem(placement: .principal) {
                         iOSNavigationIdentity
                     }
                     ToolbarItem(placement: .topBarTrailing) {
-                        settingsButton
+                        utilityMenuButton
                     }
                     ToolbarItem(placement: .topBarTrailing) {
                         newConversationButton
@@ -119,7 +116,8 @@ struct RootView: View {
     }
 
     private var iOSNavigationIdentity: some View {
-        HStack(spacing: 9) {
+        let tint = viewModel.currentMode.kownTint
+        return HStack(spacing: 9) {
             Image("AppIcon")
                 .resizable()
                 .scaledToFill()
@@ -137,11 +135,17 @@ struct RootView: View {
                     .lineLimit(1)
                 Text(viewModel.currentMode.displayName)
                     .font(.caption2.weight(.bold))
-                    .foregroundStyle(iOSModeTint)
+                    .foregroundStyle(tint)
                     .lineLimit(1)
             }
         }
-        .frame(maxWidth: 190, alignment: .leading)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .frame(maxWidth: 156, alignment: .leading)
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay {
+            Capsule().strokeBorder(tint.opacity(0.14), lineWidth: 1)
+        }
     }
     #endif
 
@@ -162,10 +166,10 @@ struct RootView: View {
                 #if os(iOS)
                 .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(.primary)
-                .frame(width: 34, height: 34)
+                .frame(width: 36, height: 36)
                 .background(.thinMaterial, in: Circle())
                 .overlay {
-                    Circle().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+                    Circle().strokeBorder(viewModel.currentMode.kownTint.opacity(0.12), lineWidth: 1)
                 }
                 #endif
         }
@@ -183,10 +187,10 @@ struct RootView: View {
                 #if os(iOS)
                 .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(.primary)
-                .frame(width: 34, height: 34)
+                .frame(width: 36, height: 36)
                 .background(.thinMaterial, in: Circle())
                 .overlay {
-                    Circle().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+                    Circle().strokeBorder(viewModel.currentMode.kownTint.opacity(0.12), lineWidth: 1)
                 }
                 #endif
         }
@@ -204,10 +208,10 @@ struct RootView: View {
                 #if os(iOS)
                 .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(.primary)
-                .frame(width: 34, height: 34)
+                .frame(width: 36, height: 36)
                 .background(.thinMaterial, in: Circle())
                 .overlay {
-                    Circle().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+                    Circle().strokeBorder(viewModel.currentMode.kownTint.opacity(0.12), lineWidth: 1)
                 }
                 #endif
         }
@@ -217,18 +221,46 @@ struct RootView: View {
         .help("会话列表")
     }
 
+    #if os(iOS)
+    private var utilityMenuButton: some View {
+        Menu {
+            Button {
+                viewModel.showCommandPalette = true
+            } label: {
+                Label("命令面板", systemImage: "command")
+            }
+            Button {
+                showSettings = true
+            } label: {
+                Label("厂商配置", systemImage: "gearshape")
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(.primary)
+                .frame(width: 36, height: 36)
+                .background(.thinMaterial, in: Circle())
+                .overlay {
+                    Circle().strokeBorder(viewModel.currentMode.kownTint.opacity(0.12), lineWidth: 1)
+                }
+        }
+        .buttonStyle(.plain)
+        .help("更多操作")
+    }
+    #endif
+
     private var newConversationButton: some View {
         Button {
-            viewModel.newConversation(mode: viewModel.activeMode)
+            viewModel.newConversation(mode: viewModel.currentMode)
         } label: {
             Image(systemName: "square.and.pencil")
                 #if os(iOS)
                 .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(.white)
-                .frame(width: 34, height: 34)
+                .frame(width: 36, height: 36)
                 .background(
                     LinearGradient(
-                        colors: [iOSModeTint.opacity(0.98), iOSModeTint.opacity(0.72)],
+                        colors: [iOSModeTint.opacity(0.98), viewModel.currentMode.kownSecondaryTint.opacity(0.78)],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     ),
@@ -247,15 +279,6 @@ struct RootView: View {
     }
 
     #if os(iOS)
-    private var iOSModeTint: Color {
-        switch viewModel.currentMode {
-        case .council: return Color(red: 0.10, green: 0.66, blue: 0.56)
-        case .direct:  return Color(red: 0.16, green: 0.48, blue: 0.94)
-        case .compare: return Color(red: 0.91, green: 0.55, blue: 0.20)
-        case .debate:  return Color(red: 0.88, green: 0.35, blue: 0.22)
-        case .structured: return Color(red: 0.36, green: 0.44, blue: 0.88)
-        case .tournament: return Color(red: 0.85, green: 0.62, blue: 0.13)
-        }
-    }
+    private var iOSModeTint: Color { viewModel.currentMode.kownTint }
     #endif
 }

@@ -12,33 +12,49 @@ struct QuickAskView: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 6) {
-                Image(systemName: "sparkles")
-                    .foregroundStyle(.tint)
-                Text("快速提问")
-                    .font(.headline)
+        let mode = viewModel.activeMode
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                KownModeMark(mode: mode, size: 34)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("快速提问")
+                        .font(.headline.weight(.bold))
+                    Text("发送后打开主窗口查看回答")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
                 Spacer()
-                Text(viewModel.activeMode.displayName)
+                Text(mode.displayName)
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(mode.kownTint)
                     .padding(.horizontal, 7).padding(.vertical, 3)
-                    .background(Color.secondary.opacity(0.12), in: Capsule())
+                    .background(mode.kownTint.opacity(0.12), in: Capsule())
+                    .overlay {
+                        Capsule().strokeBorder(mode.kownTint.opacity(0.22), lineWidth: 1)
+                    }
             }
 
             TextField("输入问题,回车发送…", text: $text, axis: .vertical)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.plain)
                 .lineLimit(1...5)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(Color.platformControlBackground.opacity(0.48), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(focused ? mode.kownTint.opacity(0.42) : Color.primary.opacity(0.10), lineWidth: focused ? 1.5 : 1)
+                }
                 .focused($focused)
                 .onSubmit(send)
 
             HStack {
-                Text("发送后会打开主窗口看回答。")
+                Text(mode.kownPromptPlaceholder)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button("发送", action: send)
                     .buttonStyle(.borderedProminent)
+                    .tint(mode.kownTint)
                     .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
 
@@ -46,8 +62,22 @@ struct QuickAskView: View {
 
             ClipboardActionsSection(viewModel: viewModel, runner: clipboardRunner)
         }
-        .padding(14)
-        .frame(width: 340)
+        .padding(16)
+        .frame(width: 360)
+        .background {
+            ZStack {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(.regularMaterial)
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [mode.kownTint.opacity(0.10), mode.kownSecondaryTint.opacity(0.05), Color.clear],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
+        }
         .onAppear { focused = true }
     }
 

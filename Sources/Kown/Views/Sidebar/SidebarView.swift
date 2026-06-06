@@ -74,7 +74,7 @@ struct SidebarView: View {
         VStack(spacing: 0) {
             header
             Rectangle()
-                .fill(Color.primary.opacity(0.08))
+                .fill(KownTheme.hairline)
                 .frame(height: 1)
             if !isViewingTrash {
                 searchField
@@ -83,7 +83,7 @@ struct SidebarView: View {
             list
             trashBar
         }
-        .frame(minWidth: 240)
+        .frame(minWidth: sidebarMinWidth)
         .background(sidebarBackdrop)
         // 懒重建:索引只在搜索时用到,所以仅在开始搜索(空→非空)那一刻建一次,
         // 而不是每次会话数组变动都全量重扫 + 对整个大数组做相等性比较(都 O(全部文本))。
@@ -220,7 +220,7 @@ struct SidebarView: View {
                 .foregroundStyle(active ? Color.white : Color.primary)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
-                .background(active ? Color.accentColor : Color.primary.opacity(0.07), in: Capsule())
+                .background(active ? currentModeTint : Color.primary.opacity(0.07), in: Capsule())
         }
         .buttonStyle(.plain)
     }
@@ -251,10 +251,10 @@ struct SidebarView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .strokeBorder(currentModeTint.opacity(0.14), lineWidth: 1)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -270,54 +270,37 @@ struct SidebarView: View {
 
     private var desktopHeader: some View {
         HStack(spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 15, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.accentColor.opacity(0.92), Color.orange.opacity(0.68)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                Image(systemName: "tray.full.fill")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(.white)
-            }
-            .frame(width: 40, height: 40)
-            .shadow(color: Color.accentColor.opacity(0.18), radius: 12, x: 0, y: 6)
+            KownModeMark(mode: viewModel.currentMode, size: 40)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("All Conversations")
+                Text("Conversation Library")
                     .font(.system(.headline, design: .rounded).weight(.bold))
-                Text("\(viewModel.activeConversations.count) 个会话")
+                Text("\(viewModel.activeConversations.count) 个会话 · \(viewModel.conversationFolders.count) 个文件夹")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
             Spacer()
-            #if os(iOS)
-            Button(action: onOpenSettings) {
-                Image(systemName: "gearshape")
-                    .frame(width: 28, height: 28)
-            }
-            .buttonStyle(.borderless)
-            .help("厂商配置")
-            #endif
             Button {
                 newFolderName = ""
                 showNewFolder = true
             } label: {
                 Image(systemName: "folder.badge.plus")
-                    .frame(width: 28, height: 28)
+                    .font(.system(size: 13, weight: .bold))
+                    .frame(width: 30, height: 30)
+                    .background(Color.platformControlBackground.opacity(0.55), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
             .buttonStyle(.borderless)
             .help("新建文件夹")
             Button {
-                viewModel.newConversation(mode: viewModel.activeMode)
+                viewModel.newConversation(mode: viewModel.currentMode)
                 onSelectConversation()
             } label: {
                 Image(systemName: "square.and.pencil")
-                    .frame(width: 28, height: 28)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 30, height: 30)
+                    .background(currentModeTint, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
             .buttonStyle(.borderless)
             .help("新建会话")
@@ -330,21 +313,7 @@ struct SidebarView: View {
     #if os(iOS)
     private var mobileHeader: some View {
         HStack(spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 15, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [currentModeTint.opacity(0.95), Color.orange.opacity(0.70)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                Image(systemName: "bubble.left.and.text.bubble.right.fill")
-                    .font(.system(size: 16, weight: .black))
-                    .foregroundStyle(.white)
-            }
-            .frame(width: 40, height: 40)
-            .shadow(color: currentModeTint.opacity(0.16), radius: 10, x: 0, y: 5)
+            KownModeMark(mode: viewModel.currentMode, size: 40)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("会话库")
@@ -363,7 +332,7 @@ struct SidebarView: View {
                 showNewFolder = true
             }
             headerIconButton("square.and.pencil", help: "新建会话") {
-                viewModel.newConversation(mode: viewModel.activeMode)
+                viewModel.newConversation(mode: viewModel.currentMode)
                 onSelectConversation()
             }
         }
@@ -373,7 +342,7 @@ struct SidebarView: View {
             ZStack {
                 Rectangle().fill(.thinMaterial)
                 LinearGradient(
-                    colors: [currentModeTint.opacity(0.14), Color.orange.opacity(0.08), Color.clear],
+                    colors: [currentModeTint.opacity(0.14), viewModel.currentMode.kownSecondaryTint.opacity(0.08), Color.clear],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
@@ -417,9 +386,9 @@ struct SidebarView: View {
             VStack(spacing: 8) {
                 Image(systemName: "bubble.left.and.bubble.right")
                     .font(.system(size: 32, weight: .semibold))
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(currentModeTint)
                     .frame(width: 66, height: 66)
-                    .background(Color.accentColor.opacity(0.10), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    .background(currentModeTint.opacity(0.10), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
                 Text("还没有会话")
                     .font(.headline.weight(.bold))
                 Text("点右上 ⊕ 或直接在底部输入一条问题。")
@@ -556,7 +525,7 @@ struct SidebarView: View {
             } label: {
                 groupHeaderLabel(icon: collapsed ? "folder.fill" : "folder.fill",
                                  chevron: collapsed ? "chevron.right" : "chevron.down",
-                                 name: folder.name, count: convs.count, tint: Color.accentColor)
+                                 name: folder.name, count: convs.count, tint: currentModeTint)
             }
             .buttonStyle(.plain)
             .contextMenu {
@@ -599,12 +568,12 @@ struct SidebarView: View {
         ZStack {
             Color.platformWindowBackground
             LinearGradient(
-                colors: [Color.accentColor.opacity(0.08), Color.clear],
+                colors: [currentModeTint.opacity(0.08), Color.clear],
                 startPoint: .topLeading,
                 endPoint: .center
             )
             RadialGradient(
-                colors: [Color.orange.opacity(0.08), Color.clear],
+                colors: [viewModel.currentMode.kownSecondaryTint.opacity(0.08), Color.clear],
                 center: .bottomTrailing,
                 startRadius: 40,
                 endRadius: 360
@@ -613,14 +582,15 @@ struct SidebarView: View {
     }
 
     private var currentModeTint: Color {
-        switch viewModel.currentMode {
-        case .council: return Color(red: 0.10, green: 0.66, blue: 0.56)
-        case .direct:  return Color(red: 0.16, green: 0.48, blue: 0.94)
-        case .compare: return Color(red: 0.91, green: 0.55, blue: 0.20)
-        case .debate:  return Color(red: 0.88, green: 0.35, blue: 0.22)
-        case .structured: return Color(red: 0.36, green: 0.42, blue: 0.92)
-        case .tournament: return Color(red: 0.85, green: 0.62, blue: 0.13)
-        }
+        viewModel.currentMode.kownTint
+    }
+
+    private var sidebarMinWidth: CGFloat {
+        #if os(iOS)
+        return 280
+        #else
+        return 260
+        #endif
     }
 
     /// 把命中片段渲染成带高亮的富文本(命中子串加粗 + 强调色)。

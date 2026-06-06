@@ -193,7 +193,7 @@ struct CouncilTurnsView: View {
     }
 
     private var councilTint: Color {
-        Color(red: 0.06, green: 0.55, blue: 0.95)
+        ConversationMode.council.kownTint
     }
 
     /// providerID → 展示名(供投票卡显示)。

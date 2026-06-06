@@ -29,6 +29,8 @@ struct MainContentView: View {
             VStack(spacing: 0) {
                 #if os(iOS)
                 mobileModeBar
+                #else
+                desktopSessionHeader
                 #endif
                 workspacePathBar
                 if viewModel.showFind { findBar }
@@ -88,6 +90,111 @@ struct MainContentView: View {
             #endif
         }
     }
+
+    #if !os(iOS)
+    private var desktopSessionHeader: some View {
+        let mode = viewModel.currentMode
+        let tint = mode.kownTint
+        let turnCount = viewModel.selectedConversation?.turns.count ?? 0
+        let providerCount = viewModel.providersForCurrentSend().panel.count
+        return HStack(spacing: 14) {
+            KownModeMark(mode: mode, size: 42)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 8) {
+                    Text(viewModel.selectedConversation?.title ?? "New Conversation")
+                        .font(.system(.title3, design: .rounded).weight(.bold))
+                        .lineLimit(1)
+                    Text(mode.displayName)
+                        .font(.caption.weight(.black))
+                        .foregroundStyle(tint)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(tint.opacity(0.11), in: Capsule())
+                }
+                Text(mode.kownModeDescription)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 12)
+            headerMetric("\(turnCount)", label: "Turns", tint: tint)
+            headerMetric("\(providerCount)", label: "Models", tint: providerCount == 0 ? .orange : tint)
+            if viewModel.isRunning {
+                headerMetric("Live", label: "Running", tint: .green)
+            }
+            HStack(spacing: 8) {
+                desktopHeaderButton(viewModel.showFind ? "xmark" : "magnifyingglass", tint: tint, help: "会话内查找") {
+                    withAnimation(.easeInOut(duration: 0.18)) { viewModel.showFind.toggle() }
+                }
+                desktopHeaderButton("command", tint: tint, help: "命令面板") {
+                    viewModel.showCommandPalette = true
+                }
+                desktopHeaderButton("square.and.pencil", tint: tint, filled: true, help: "新建会话") {
+                    viewModel.newConversation(mode: viewModel.currentMode)
+                }
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 12)
+        .background {
+            ZStack {
+                Rectangle().fill(.thinMaterial)
+                LinearGradient(
+                    colors: [tint.opacity(0.11), mode.kownSecondaryTint.opacity(0.05), Color.clear],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            }
+        }
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(tint.opacity(0.12)).frame(height: 1)
+        }
+    }
+
+    private func headerMetric(_ value: String, label: String, tint: Color) -> some View {
+        VStack(alignment: .trailing, spacing: 1) {
+            Text(value)
+                .font(.caption.weight(.black))
+                .foregroundStyle(tint)
+                .monospacedDigit()
+            Text(label)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(tint.opacity(0.16), lineWidth: 1)
+        }
+    }
+
+    private func desktopHeaderButton(
+        _ symbol: String,
+        tint: Color,
+        filled: Bool = false,
+        help: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(filled ? Color.white : tint)
+                .frame(width: 32, height: 32)
+                .background {
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .fill(filled ? tint : Color.platformControlBackground.opacity(0.58))
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .strokeBorder(filled ? Color.white.opacity(0.24) : tint.opacity(0.16), lineWidth: 1)
+                }
+        }
+        .buttonStyle(.plain)
+        .help(help)
+    }
+    #endif
 
     // MARK: - 会话内查找
 
@@ -335,22 +442,22 @@ struct MainContentView: View {
                         HStack(spacing: 10) {
                             Image(systemName: "sparkles")
                                 .font(.caption.weight(.bold))
-                                .foregroundStyle(Color.accentColor)
+                                .foregroundStyle(modeTint)
                             Text(q)
                                 .font(.callout)
                                 .foregroundStyle(.primary)
                                 .multilineTextAlignment(.leading)
                             Spacer(minLength: 6)
                             Image(systemName: "arrow.up.circle.fill")
-                                .foregroundStyle(Color.accentColor.opacity(0.7))
+                                .foregroundStyle(modeTint.opacity(0.7))
                         }
                         .padding(.horizontal, 14)
                         .padding(.vertical, 11)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .background(modeTint.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                         .overlay {
                             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .strokeBorder(Color.accentColor.opacity(0.18), lineWidth: 1)
+                                .strokeBorder(modeTint.opacity(0.18), lineWidth: 1)
                         }
                         .contentShape(Rectangle())
                     }
@@ -549,13 +656,14 @@ struct MainContentView: View {
     @ViewBuilder
     private var workspacePathBar: some View {
         if let path = viewModel.currentWorkspaceDisplayPath {
+            let tint = viewModel.currentMode.kownTint
             HStack(spacing: 10) {
                 HStack(spacing: 8) {
                     Image(systemName: "folder.fill")
                         .font(.caption.weight(.bold))
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(tint)
                         .frame(width: 28, height: 28)
-                        .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                        .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                     Text("Workspace")
                         .font(.caption2.weight(.black))
                         .tracking(0.5)
@@ -604,7 +712,7 @@ struct MainContentView: View {
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .fill(
                             LinearGradient(
-                                colors: [Color.accentColor.opacity(0.10), Color.clear],
+                                colors: [tint.opacity(0.10), Color.clear],
                                 startPoint: .leading,
                                 endPoint: .trailing
                             )
@@ -613,7 +721,7 @@ struct MainContentView: View {
             }
             .overlay {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .strokeBorder(Color.accentColor.opacity(0.18), lineWidth: 1)
+                    .strokeBorder(tint.opacity(0.18), lineWidth: 1)
             }
             .padding(.horizontal, 14)
             #if os(iOS)
@@ -630,6 +738,10 @@ struct MainContentView: View {
         }
     }
 
+    private var modeTint: Color {
+        viewModel.currentMode.kownTint
+    }
+
     #if os(iOS)
     private var mobileModeBar: some View {
         HStack(spacing: 8) {
@@ -643,7 +755,7 @@ struct MainContentView: View {
                 LinearGradient(
                     colors: [
                         modeTint.opacity(0.08),
-                        Color.orange.opacity(viewModel.currentMode == .debate ? 0.05 : 0.02),
+                        viewModel.currentMode.kownSecondaryTint.opacity(viewModel.currentMode == .debate ? 0.05 : 0.02),
                         Color.clear
                     ],
                     startPoint: .topLeading,
@@ -684,17 +796,6 @@ struct MainContentView: View {
                 .frame(height: 1)
         }
     }
-
-    private var modeTint: Color {
-        switch viewModel.currentMode {
-        case .council: return Color(red: 0.10, green: 0.66, blue: 0.56)
-        case .direct:  return Color(red: 0.16, green: 0.48, blue: 0.94)
-        case .compare: return Color(red: 0.91, green: 0.55, blue: 0.20)
-        case .debate:  return Color(red: 0.88, green: 0.35, blue: 0.22)
-        case .structured: return Color(red: 0.36, green: 0.42, blue: 0.92)
-        case .tournament: return Color(red: 0.85, green: 0.62, blue: 0.13)
-        }
-    }
     #endif
 }
 
@@ -730,13 +831,13 @@ private struct MainWorkspaceBackdrop: View {
         ZStack {
             Color.platformWindowBackground
             RadialGradient(
-                colors: [tint.opacity(0.16), Color.clear],
+                colors: [mode.kownTint.opacity(0.17), Color.clear],
                 center: .topLeading,
                 startRadius: 0,
                 endRadius: 560
             )
             RadialGradient(
-                colors: [Color.orange.opacity(mode == .debate ? 0.16 : 0.10), Color.clear],
+                colors: [mode.kownSecondaryTint.opacity(mode == .debate ? 0.16 : 0.10), Color.clear],
                 center: .bottomTrailing,
                 startRadius: 80,
                 endRadius: 620
@@ -750,14 +851,4 @@ private struct MainWorkspaceBackdrop: View {
         .ignoresSafeArea()
     }
 
-    private var tint: Color {
-        switch mode {
-        case .council: return Color(red: 0.10, green: 0.66, blue: 0.56)
-        case .direct:  return Color(red: 0.16, green: 0.48, blue: 0.94)
-        case .compare: return Color(red: 0.91, green: 0.55, blue: 0.20)
-        case .debate:  return Color(red: 0.88, green: 0.35, blue: 0.22)
-        case .structured: return Color(red: 0.36, green: 0.42, blue: 0.92)
-        case .tournament: return Color(red: 0.85, green: 0.62, blue: 0.13)
-        }
-    }
 }

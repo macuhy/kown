@@ -17,7 +17,7 @@ struct ActiveProviderBar: View {
                     ZStack(alignment: .bottom) {
                         Rectangle().fill(.thinMaterial)
                         LinearGradient(
-                            colors: [modeTint(mode).opacity(0.06), Color.clear],
+                            colors: [mode.kownTint.opacity(0.07), mode.kownSecondaryTint.opacity(0.035), Color.clear],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -56,7 +56,7 @@ struct ActiveProviderBar: View {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .fill(
                         LinearGradient(
-                            colors: [modeTint(mode).opacity(0.10), Color.clear],
+                            colors: [mode.kownTint.opacity(0.12), mode.kownSecondaryTint.opacity(0.05), Color.clear],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -65,7 +65,7 @@ struct ActiveProviderBar: View {
         }
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(modeTint(mode).opacity(0.18), lineWidth: 1)
+                .strokeBorder(mode.kownTint.opacity(0.20), lineWidth: 1)
         }
     }
 
@@ -73,12 +73,12 @@ struct ActiveProviderBar: View {
         HStack(spacing: 9) {
             Image(systemName: mode.symbol)
                 .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(modeTint(mode))
+                .foregroundStyle(mode.kownTint)
                 .frame(width: 28, height: 28)
-                .background(modeTint(mode).opacity(0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .background(mode.kownTint.opacity(0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .strokeBorder(modeTint(mode).opacity(0.20), lineWidth: 1)
+                        .strokeBorder(mode.kownTint.opacity(0.20), lineWidth: 1)
                 }
             VStack(alignment: .leading, spacing: 1) {
                 Text(mode == .direct ? "对话模型" : "对比模型")
@@ -139,9 +139,9 @@ struct ActiveProviderBar: View {
 
     /// 参与本轮回答的模型 chip(纯展示)。增删 / 换模型走右侧菜单。
     private func providerChip(_ cfg: ProviderConfig) -> some View {
-        let tint = accentColor(cfg)
+        let tint = cfg.kownTint
         return HStack(spacing: 8) {
-            Image(systemName: providerSymbol(cfg))
+            Image(systemName: cfg.kownSymbol)
                 .font(.caption.weight(.bold))
                 .foregroundStyle(tint)
                 .frame(width: 26, height: 26)
@@ -206,12 +206,12 @@ struct ActiveProviderBar: View {
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.system(size: 10, weight: .bold))
             }
-            .foregroundStyle(enabled.isEmpty ? Color.secondary : Color.accentColor)
+            .foregroundStyle(enabled.isEmpty ? Color.secondary : mode.kownTint)
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
-            .background((enabled.isEmpty ? Color.secondary : Color.accentColor).opacity(0.11), in: Capsule())
+            .background((enabled.isEmpty ? Color.secondary : mode.kownTint).opacity(0.11), in: Capsule())
             .overlay {
-                Capsule().strokeBorder((enabled.isEmpty ? Color.secondary : Color.accentColor).opacity(0.22), lineWidth: 1)
+                Capsule().strokeBorder((enabled.isEmpty ? Color.secondary : mode.kownTint).opacity(0.22), lineWidth: 1)
             }
         }
         .menuStyle(.borderlessButton)
@@ -344,38 +344,10 @@ struct ActiveProviderBar: View {
         return result
     }
 
-    private func modeTint(_ mode: ConversationMode) -> Color {
-        switch mode {
-        case .council: return Color(red: 0.10, green: 0.66, blue: 0.56)
-        case .direct:  return Color(red: 0.16, green: 0.48, blue: 0.94)
-        case .compare: return Color(red: 0.91, green: 0.55, blue: 0.20)
-        case .debate:  return Color(red: 0.88, green: 0.35, blue: 0.22)
-        case .structured: return Color(red: 0.36, green: 0.42, blue: 0.92)
-        case .tournament: return Color(red: 0.85, green: 0.62, blue: 0.13)
-        }
-    }
-
     /// Chair 角色徽标色（金/橙系，呼应「主席」)。
     private var chairTint: Color { Color(red: 0.84, green: 0.60, blue: 0.13) }
 
     /// Summary 角色徽标色(青/绿系,呼应 Council 主色)。
     private var summaryTint: Color { Color(red: 0.10, green: 0.62, blue: 0.55) }
 
-    private func accentColor(_ cfg: ProviderConfig) -> Color {
-        switch cfg.kind {
-        case .openAICompatible: return Color(red: 0.06, green: 0.64, blue: 0.50)
-        case .anthropic:        return Color(red: 0.83, green: 0.38, blue: 0.18)
-        case .gemini:           return Color(red: 0.26, green: 0.52, blue: 0.96)
-        case .cliCommand:       return Color(red: 0.55, green: 0.45, blue: 0.78)
-        }
-    }
-
-    private func providerSymbol(_ cfg: ProviderConfig) -> String {
-        switch cfg.kind {
-        case .openAICompatible: return "sparkles"
-        case .anthropic:        return "text.book.closed"
-        case .gemini:           return "diamond.fill"
-        case .cliCommand:       return "terminal"
-        }
-    }
 }

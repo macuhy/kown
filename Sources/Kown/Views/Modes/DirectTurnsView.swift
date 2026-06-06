@@ -185,7 +185,7 @@ struct DirectTurnsView: View {
                         .padding(.vertical, 11)
                         .background(
                             LinearGradient(
-                                colors: [Color.accentColor.opacity(0.22), Color.accentColor.opacity(0.11)],
+                                colors: [directTint.opacity(0.22), directTint.opacity(0.11)],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             ),
@@ -193,7 +193,7 @@ struct DirectTurnsView: View {
                         )
                         .overlay {
                             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                .strokeBorder(Color.accentColor.opacity(0.24), lineWidth: 1)
+                                .strokeBorder(directTint.opacity(0.24), lineWidth: 1)
                         }
                 }
                 HStack(spacing: 6) {
@@ -389,24 +389,14 @@ struct DirectTurnsView: View {
     }
 
     private func accentColor(_ cfg: ProviderConfig) -> Color {
-        switch cfg.kind {
-        case .openAICompatible: return Color(red: 0.06, green: 0.64, blue: 0.50)
-        case .anthropic:        return Color(red: 0.83, green: 0.38, blue: 0.18)
-        case .gemini:           return Color(red: 0.26, green: 0.52, blue: 0.96)
-        case .cliCommand:       return Color(red: 0.55, green: 0.45, blue: 0.78)
-        }
+        cfg.kownTint
     }
 
     private func providerSymbol(_ cfg: ProviderConfig) -> String {
-        switch cfg.kind {
-        case .openAICompatible: return "sparkles"
-        case .anthropic:        return "text.book.closed"
-        case .gemini:           return "diamond.fill"
-        case .cliCommand:       return "terminal"
-        }
+        cfg.kownSymbol
     }
 
     private var directTint: Color {
-        Color(red: 0.55, green: 0.45, blue: 0.78)
+        ConversationMode.direct.kownTint
     }
 }

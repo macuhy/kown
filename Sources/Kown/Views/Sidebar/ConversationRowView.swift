@@ -26,27 +26,7 @@ struct ConversationRowView: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: iconCorner, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                modeColor.opacity(isSelected ? 0.95 : 0.18),
-                                modeColor.opacity(isSelected ? 0.62 : 0.08)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                Image(systemName: conversation.mode.symbol)
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(isSelected ? .white : modeColor)
-            }
-            .frame(width: iconSize, height: iconSize)
-            .overlay {
-                RoundedRectangle(cornerRadius: iconCorner, style: .continuous)
-                    .strokeBorder((isSelected ? Color.white : modeColor).opacity(isSelected ? 0.25 : 0.16), lineWidth: 1)
-            }
+            KownModeMark(mode: conversation.mode, size: iconSize, selected: isSelected)
 
             VStack(alignment: .leading, spacing: 5) {
                 if isRenaming {
@@ -128,11 +108,11 @@ struct ConversationRowView: View {
         .background(
             ZStack {
                 RoundedRectangle(cornerRadius: rowCorner, style: .continuous)
-                    .fill(isSelected ? modeColor.opacity(0.13) : Color.platformControlBackground.opacity(0.30))
+                    .fill(isSelected ? modeColor.opacity(0.12) : Color.platformControlBackground.opacity(0.24))
                 RoundedRectangle(cornerRadius: rowCorner, style: .continuous)
                     .fill(
                         LinearGradient(
-                            colors: [modeColor.opacity(isSelected ? 0.10 : 0.035), Color.clear],
+                            colors: [modeColor.opacity(isSelected ? 0.12 : 0.026), Color.clear],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -141,9 +121,9 @@ struct ConversationRowView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: rowCorner, style: .continuous)
-                .strokeBorder(isSelected ? modeColor.opacity(0.36) : Color.primary.opacity(0.06), lineWidth: 1)
+                .strokeBorder(isSelected ? modeColor.opacity(0.34) : KownTheme.quietStroke, lineWidth: 1)
         )
-        .shadow(color: modeColor.opacity(isSelected ? 0.12 : 0.035), radius: isSelected ? 16 : 9, x: 0, y: 7)
+        .shadow(color: modeColor.opacity(isSelected ? 0.14 : 0.025), radius: isSelected ? 16 : 7, x: 0, y: isSelected ? 8 : 4)
         // 整行可点 = 选中（重命名状态下不响应，避免点 TextField 退出 rename）
         .contentShape(RoundedRectangle(cornerRadius: rowCorner, style: .continuous))
         .onTapGesture {
@@ -192,14 +172,6 @@ struct ConversationRowView: View {
         #endif
     }
 
-    private var iconCorner: CGFloat {
-        #if os(iOS)
-        return 12
-        #else
-        return 12
-        #endif
-    }
-
     private var rowCorner: CGFloat {
         #if os(iOS)
         return 16
@@ -217,14 +189,7 @@ struct ConversationRowView: View {
     }
 
     private var modeColor: Color {
-        switch conversation.mode {
-        case .council: return Color(red: 0.06, green: 0.55, blue: 0.95)
-        case .direct:  return Color(red: 0.55, green: 0.45, blue: 0.78)
-        case .compare: return Color(red: 0.83, green: 0.38, blue: 0.18)
-        case .debate:  return Color.indigo
-        case .structured: return Color(red: 0.36, green: 0.42, blue: 0.92)
-        case .tournament: return Color(red: 0.85, green: 0.62, blue: 0.13)
-        }
+        conversation.mode.kownTint
     }
 
     private var modeLabel: String {

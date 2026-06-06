@@ -6,20 +6,34 @@ import SwiftUI
 @MainActor
 final class VoiceLoopController: ObservableObject {
     enum Phase: Equatable {
-        case idle, listening, thinking, speaking
+        case idle, listening, confirming, thinking, speaking, paused
         case error(String)
     }
 
     @Published private(set) var phase: Phase = .idle
     @Published var transcript: String = ""
     @Published private(set) var replyText: String = ""
+    @Published private(set) var pendingUtterance: String = ""
+    @Published private(set) var confirmProgress: Double = 0
+    @Published private(set) var confirmationNeedsManualSend = false
 
     private let viewModel: AppViewModel
     private var loopTask: Task<Void, Never>?
+    private var isPaused = false
+    private var discardCurrentUtterance = false
+    private var discardCurrentAnswer = false
+    private var confirmationAction: ConfirmationAction?
+    private var confirmationManualHold = false
     /// 最近一次收到识别增量的时刻(用于静音判定)。
     private var lastHeard = Date()
     /// 静音多久就当一句话说完(秒)。
     private let silenceSeconds: TimeInterval = 1.8
+    /// 识别完成后给用户短暂修正 / 重说的缓冲时间。
+    private let confirmSeconds: TimeInterval = 1.4
+
+    private enum ConfirmationAction: Equatable {
+        case send, retry
+    }
 
     init(viewModel: AppViewModel) {
         self.viewModel = viewModel
@@ -29,7 +43,15 @@ final class VoiceLoopController: ObservableObject {
 
     func start() {
         guard loopTask == nil else { return }
+        isPaused = false
+        discardCurrentUtterance = false
+        discardCurrentAnswer = false
+        confirmationAction = nil
+        confirmationManualHold = false
         transcript = ""
+        pendingUtterance = ""
+        confirmProgress = 0
+        confirmationNeedsManualSend = false
         replyText = ""
         phase = .listening
         loopTask = Task { await self.runLoop() }
@@ -40,7 +62,77 @@ final class VoiceLoopController: ObservableObject {
         loopTask = nil
         SpeechRecognizer.shared.stop()
         SpeechService.shared.stop()
+        pendingUtterance = ""
+        confirmProgress = 0
+        confirmationNeedsManualSend = false
         phase = .idle
+    }
+
+    func pause() {
+        guard loopTask != nil else { return }
+        isPaused = true
+        if phase == .listening { discardCurrentUtterance = true }
+        if phase == .confirming {
+            confirmationAction = .retry
+            confirmationManualHold = false
+            pendingUtterance = ""
+            confirmProgress = 0
+            confirmationNeedsManualSend = false
+        }
+        SpeechRecognizer.shared.stop()
+        SpeechService.shared.stop()
+        phase = .paused
+    }
+
+    func resume() {
+        guard loopTask != nil else { start(); return }
+        isPaused = false
+        if phase == .paused { phase = .listening }
+    }
+
+    func submitCurrentUtterance() {
+        guard phase == .listening, !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        SpeechRecognizer.shared.stop()
+    }
+
+    func retryListening() {
+        discardCurrentUtterance = true
+        confirmationAction = .retry
+        confirmationManualHold = false
+        pendingUtterance = ""
+        transcript = ""
+        confirmProgress = 0
+        confirmationNeedsManualSend = false
+        SpeechRecognizer.shared.stop()
+    }
+
+    func sendConfirmedUtterance() {
+        confirmationAction = .send
+    }
+
+    func updatePendingUtterance(_ text: String) {
+        if text != pendingUtterance {
+            confirmationManualHold = true
+            confirmProgress = 0
+            confirmationNeedsManualSend = true
+        }
+        pendingUtterance = text
+    }
+
+    func skipSpeechAndContinueListening() {
+        SpeechService.shared.stop()
+        phase = .listening
+    }
+
+    func interruptSpeechAndListen() {
+        isPaused = false
+        SpeechService.shared.stop()
+        phase = .listening
+    }
+
+    func cancelCurrentAnswer() {
+        discardCurrentAnswer = true
+        viewModel.cancel()
     }
 
     private func sleep(_ ms: UInt64) async {
@@ -58,6 +150,9 @@ final class VoiceLoopController: ObservableObject {
         }
 
         while !Task.isCancelled {
+            await waitIfPaused()
+            if Task.isCancelled { break }
+
             // 1. 听
             phase = .listening
             transcript = ""
@@ -70,15 +165,24 @@ final class VoiceLoopController: ObservableObject {
             }
             if Task.isCancelled { break }
             guard !heard.isEmpty else { await sleep(300); continue }  // 没听清,重听
+            guard let confirmed = await confirmHeardText(heard), !confirmed.isEmpty else {
+                await sleep(120)
+                continue
+            }
 
             // 2. 想(发送 + 等本轮跑完)
-            transcript = heard
+            transcript = confirmed
             phase = .thinking
             let before = viewModel.selectedConversation?.turns.count ?? 0
-            viewModel.prompt = heard
+            viewModel.prompt = confirmed
             viewModel.send()
             await waitSendDone()
             if Task.isCancelled { break }
+            if discardCurrentAnswer {
+                discardCurrentAnswer = false
+                await sleep(150)
+                continue
+            }
 
             let after = viewModel.selectedConversation?.turns.count ?? 0
             guard after > before,
@@ -90,6 +194,8 @@ final class VoiceLoopController: ObservableObject {
 
             // 3. 说(朗读回答 + 等播完)
             replyText = reply
+            await waitIfPaused()
+            if Task.isCancelled { break }
             phase = .speaking
             SpeechService.shared.speak(reply)
             await waitSpeakDone()
@@ -124,6 +230,11 @@ final class VoiceLoopController: ObservableObject {
         let maxListen = Date().addingTimeInterval(30)
         while stt.isRecording {
             if Task.isCancelled { stt.stop(); return "" }
+            if discardCurrentUtterance {
+                stt.stop()
+                discardCurrentUtterance = false
+                return ""
+            }
             if let err = stt.lastError { stt.stop(); throw VoiceError(err) }
             if Date() > maxListen { stt.stop(); break }
             if !transcript.isEmpty, Date().timeIntervalSince(lastHeard) > silenceSeconds {
@@ -131,7 +242,61 @@ final class VoiceLoopController: ObservableObject {
             }
             await sleep(120)
         }
+        if discardCurrentUtterance {
+            discardCurrentUtterance = false
+            return ""
+        }
         return transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func confirmHeardText(_ heard: String) async -> String? {
+        pendingUtterance = heard
+        confirmationAction = nil
+        confirmationManualHold = false
+        confirmationNeedsManualSend = false
+        confirmProgress = 0
+        phase = .confirming
+
+        let deadline = Date().addingTimeInterval(confirmSeconds)
+        while true {
+            if Task.isCancelled { return nil }
+            if isPaused {
+                pendingUtterance = ""
+                confirmProgress = 0
+                return nil
+            }
+            if confirmationAction == .retry {
+                confirmationAction = nil
+                pendingUtterance = ""
+                confirmProgress = 0
+                confirmationNeedsManualSend = false
+                return nil
+            }
+            if confirmationAction == .send { break }
+            if confirmationManualHold {
+                confirmProgress = 0
+                await sleep(80)
+                continue
+            }
+            if Date() >= deadline { break }
+            confirmProgress = 1 - max(0, deadline.timeIntervalSinceNow / confirmSeconds)
+            await sleep(50)
+        }
+
+        let text = pendingUtterance.trimmingCharacters(in: .whitespacesAndNewlines)
+        pendingUtterance = ""
+        confirmProgress = 0
+        confirmationAction = nil
+        confirmationManualHold = false
+        confirmationNeedsManualSend = false
+        return text.isEmpty ? nil : text
+    }
+
+    private func waitIfPaused() async {
+        while isPaused && !Task.isCancelled {
+            phase = .paused
+            await sleep(120)
+        }
     }
 
     /// 等本轮发送跑完(isRunning 由 true 回 false)。
@@ -225,9 +390,17 @@ struct VoiceConversationView: View {
     private var turns: [Turn] { viewModel.selectedConversation?.turns ?? [] }
 
     var body: some View {
-        ZStack {
-            LinearGradient(colors: [tint.opacity(0.12), Color.platformWindowBackground],
-                           startPoint: .top, endPoint: .bottom)
+        let mode = viewModel.currentMode
+        return ZStack {
+            LinearGradient(
+                colors: [
+                    mode.kownTint.opacity(0.14),
+                    mode.kownSecondaryTint.opacity(0.07),
+                    Color.platformWindowBackground
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -258,6 +431,13 @@ struct VoiceConversationView: View {
                     // 烧满一个核(同 ResponseColumnView.statusDot 既有修复)。活动态改由系统 ProgressView 表达。
                     .scaleEffect(animating ? 1.08 : 1.0)
                     .animation(.easeInOut(duration: 0.25), value: animating)
+                if controller.phase == .confirming, !controller.confirmationNeedsManualSend {
+                    Circle()
+                        .trim(from: 0, to: max(0.02, controller.confirmProgress))
+                        .stroke(tint, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                        .frame(width: 58, height: 58)
+                        .rotationEffect(.degrees(-90))
+                }
                 if case .thinking = controller.phase {
                     ProgressView().tint(tint)
                 } else if animating {
@@ -276,16 +456,29 @@ struct VoiceConversationView: View {
                 }
             }
             VStack(alignment: .leading, spacing: 3) {
-                Text(statusTitle)
-                    .font(.system(.headline, design: .rounded).weight(.bold))
-                    .foregroundStyle(tint)
-                if controller.phase == .listening {
-                    Text(controller.transcript.isEmpty ? "请开始说话" : controller.transcript)
+                HStack(spacing: 8) {
+                    Text(statusTitle)
+                        .font(.system(.headline, design: .rounded).weight(.bold))
+                        .foregroundStyle(tint)
+                    Text(viewModel.currentMode.displayName)
+                        .font(.caption2.weight(.black))
+                        .foregroundStyle(viewModel.currentMode.kownTint)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(viewModel.currentMode.kownTint.opacity(0.12), in: Capsule())
+                }
+                if controller.phase == .listening || controller.phase == .confirming {
+                    Text(statusSubtitle)
                         .font(.subheadline)
-                        .foregroundStyle(controller.transcript.isEmpty ? .secondary : .primary)
+                        .foregroundStyle((controller.transcript.isEmpty && controller.pendingUtterance.isEmpty) ? .secondary : .primary)
                         .lineLimit(2)
                 } else if case .error(let msg) = controller.phase {
                     Text(msg).font(.caption).foregroundStyle(.red).lineLimit(2)
+                } else {
+                    Text(statusSubtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
                 }
             }
             Spacer(minLength: 0)
@@ -310,6 +503,8 @@ struct VoiceConversationView: View {
                         thinkingBubble
                     } else if controller.phase == .listening, !controller.transcript.isEmpty {
                         userBubble(controller.transcript, pending: true)
+                    } else if controller.phase == .confirming, !controller.pendingUtterance.isEmpty {
+                        userBubble(controller.pendingUtterance, pending: true)
                     }
                     Color.clear.frame(height: 1).id("voiceBottom")
                 }
@@ -338,12 +533,12 @@ struct VoiceConversationView: View {
                 .textSelection(.enabled)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
-                .background(Color.accentColor.opacity(pending ? 0.10 : 0.18),
+                .background(viewModel.currentMode.kownTint.opacity(pending ? 0.10 : 0.18),
                             in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay {
                     if pending {
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .strokeBorder(Color.accentColor.opacity(0.45), style: StrokeStyle(lineWidth: 1, dash: [4]))
+                            .strokeBorder(viewModel.currentMode.kownTint.opacity(0.45), style: StrokeStyle(lineWidth: 1, dash: [4]))
                     }
                 }
         }
@@ -368,7 +563,7 @@ struct VoiceConversationView: View {
                         in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
+                    .strokeBorder((speech.speakingText == text ? tint : Color.primary).opacity(speech.speakingText == text ? 0.20 : 0.06), lineWidth: 1)
             }
             Spacer(minLength: 40)
         }
@@ -386,7 +581,7 @@ struct VoiceConversationView: View {
 
     private var thinkingBubble: some View {
         HStack(spacing: 8) {
-            ProgressView().controlSize(.small)
+            ProgressView().controlSize(.small).tint(tint)
             Text("思考中…").font(.callout).foregroundStyle(.secondary)
             Spacer(minLength: 40)
         }
@@ -424,26 +619,152 @@ struct VoiceConversationView: View {
 
     @ViewBuilder
     private var controls: some View {
-        if case .error = controller.phase {
-            HStack(spacing: 12) {
-                Button { controller.start() } label: {
-                    Label("重试", systemImage: "arrow.clockwise").frame(maxWidth: .infinity)
+        VStack(spacing: 10) {
+            if controller.phase == .confirming {
+                confirmationCard
+            }
+
+            switch controller.phase {
+            case .error:
+                controlGroup {
+                    voiceButton("重试", systemImage: "arrow.clockwise", prominent: true, tint: viewModel.currentMode.kownTint) {
+                        controller.start()
+                    }
+                    voiceButton("退出", systemImage: "xmark", role: .cancel) { close() }
                 }
+            case .paused:
+                controlGroup {
+                    voiceButton("继续", systemImage: "play.fill", prominent: true, tint: viewModel.currentMode.kownTint) {
+                        controller.resume()
+                    }
+                    voiceButton("退出", systemImage: "xmark", role: .cancel) { close() }
+                }
+            case .listening:
+                controlGroup {
+                    voiceButton("暂停", systemImage: "pause.fill") { controller.pause() }
+                    if !controller.transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        voiceButton("发送此句", systemImage: "paperplane.fill", prominent: true, tint: viewModel.currentMode.kownTint) {
+                            controller.submitCurrentUtterance()
+                        }
+                        voiceButton("重听", systemImage: "mic.badge.xmark") { controller.retryListening() }
+                    }
+                    voiceButton("结束", systemImage: "xmark.circle.fill", role: .destructive, prominent: true, tint: .red) { close() }
+                }
+            case .confirming:
+                controlGroup {
+                    voiceButton("重说", systemImage: "arrow.counterclockwise") { controller.retryListening() }
+                    voiceButton("发送", systemImage: "paperplane.fill", prominent: true, tint: viewModel.currentMode.kownTint) {
+                        controller.sendConfirmedUtterance()
+                    }
+                    voiceButton("暂停", systemImage: "pause.fill") { controller.pause() }
+                }
+            case .thinking:
+                controlGroup {
+                    voiceButton("取消回答", systemImage: "stop.fill", role: .destructive, prominent: true, tint: .red) {
+                        controller.cancelCurrentAnswer()
+                    }
+                    voiceButton("暂停后续", systemImage: "pause.fill") { controller.pause() }
+                    voiceButton("退出", systemImage: "xmark") { close() }
+                }
+            case .speaking:
+                controlGroup {
+                    voiceButton("打断并听", systemImage: "mic.fill", prominent: true, tint: viewModel.currentMode.kownTint) {
+                        controller.interruptSpeechAndListen()
+                    }
+                    voiceButton("跳过朗读", systemImage: "forward.fill") {
+                        controller.skipSpeechAndContinueListening()
+                    }
+                    voiceButton("暂停", systemImage: "pause.fill") { controller.pause() }
+                    voiceButton("结束", systemImage: "xmark.circle.fill", role: .destructive) { close() }
+                }
+            case .idle:
+                controlGroup {
+                    voiceButton("开始", systemImage: "play.fill", prominent: true, tint: viewModel.currentMode.kownTint) {
+                        controller.start()
+                    }
+                    voiceButton("退出", systemImage: "xmark") { close() }
+                }
+            }
+        }
+    }
+
+    private func controlGroup<Content: View>(@ViewBuilder content: @escaping () -> Content) -> some View {
+        WrappingHStack(horizontalSpacing: 10, verticalSpacing: 8) {
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var confirmationCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "waveform.and.magnifyingglass")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(viewModel.currentMode.kownTint)
+                Text("确认识别内容")
+                    .font(.caption.weight(.black))
+                Spacer()
+                Text(controller.confirmationNeedsManualSend ? "点发送继续" : "自动发送")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            if controller.confirmationNeedsManualSend {
+                Text("已暂停自动发送，修正后点击发送。")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            } else {
+                ProgressView(value: controller.confirmProgress)
+                    .tint(viewModel.currentMode.kownTint)
+            }
+            TextField(
+                "修正后发送…",
+                text: Binding(
+                    get: { controller.pendingUtterance },
+                    set: { controller.updatePendingUtterance($0) }
+                ),
+                axis: .vertical
+            )
+            .textFieldStyle(.plain)
+            .lineLimit(1...3)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(Color.platformControlBackground.opacity(0.48), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(viewModel.currentMode.kownTint.opacity(0.18), lineWidth: 1)
+            }
+        }
+        .padding(12)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(viewModel.currentMode.kownTint.opacity(0.16), lineWidth: 1)
+        }
+    }
+
+    @ViewBuilder
+    private func voiceButton(
+        _ title: String,
+        systemImage: String,
+        role: ButtonRole? = nil,
+        prominent: Bool = false,
+        tint buttonTint: Color? = nil,
+        action: @escaping () -> Void
+    ) -> some View {
+        let button = Button(role: role, action: action) {
+            Label(title, systemImage: systemImage)
+                .font(.callout.weight(.semibold))
+                .padding(.vertical, 4)
+        }
+
+        if prominent {
+            button
                 .buttonStyle(.borderedProminent)
-                Button(role: .cancel) { close() } label: {
-                    Label("退出", systemImage: "xmark").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-            }
+                .tint(buttonTint ?? viewModel.currentMode.kownTint)
         } else {
-            Button(role: .destructive) { close() } label: {
-                Label("结束", systemImage: "xmark.circle.fill")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(.red)
+            button
+                .buttonStyle(.bordered)
+                .tint(buttonTint)
         }
     }
 
@@ -456,7 +777,7 @@ struct VoiceConversationView: View {
 
     private var animating: Bool {
         switch controller.phase {
-        case .listening, .speaking: return true
+        case .listening, .confirming, .speaking: return true
         default: return false
         }
     }
@@ -465,16 +786,40 @@ struct VoiceConversationView: View {
         switch controller.phase {
         case .idle:      return "准备中"
         case .listening: return "聆听中…"
+        case .confirming:return "确认后发送"
         case .thinking:  return "思考中…"
         case .speaking:  return "回答中…"
+        case .paused:    return "已暂停"
         case .error:     return "出错了"
+        }
+    }
+
+    private var statusSubtitle: String {
+        switch controller.phase {
+        case .idle:
+            return "点击开始进入语音循环"
+        case .listening:
+            return controller.transcript.isEmpty ? "请开始说话，静音后会进入确认" : controller.transcript
+        case .confirming:
+            return controller.pendingUtterance.isEmpty ? "可重说，也可等待自动发送" : controller.pendingUtterance
+        case .thinking:
+            return "正在生成回答，可取消或暂停后续聆听"
+        case .speaking:
+            if speech.preparing { return "正在合成语音…" }
+            return speech.lastNote ?? "正在朗读回答，可打断并继续提问"
+        case .paused:
+            return viewModel.isRunning ? "当前回答仍在生成，完成后等待继续" : "语音输入和朗读已暂停"
+        case .error(let msg):
+            return msg
         }
     }
 
     private var orbIcon: String {
         switch controller.phase {
         case .listening: return "mic.fill"
+        case .confirming:return "checkmark.bubble.fill"
         case .speaking:  return "speaker.wave.3.fill"
+        case .paused:    return "pause.fill"
         case .error:     return "exclamationmark.triangle.fill"
         default:         return "ellipsis"
         }
@@ -483,10 +828,12 @@ struct VoiceConversationView: View {
     private var tint: Color {
         switch controller.phase {
         case .listening: return .red
-        case .thinking:  return .blue
-        case .speaking:  return Color(red: 0.10, green: 0.62, blue: 0.55)
+        case .confirming:return viewModel.currentMode.kownTint
+        case .thinking:  return viewModel.currentMode.kownSecondaryTint
+        case .speaking:  return viewModel.currentMode.kownTint
+        case .paused:    return .secondary
         case .error:     return .orange
-        case .idle:      return .accentColor
+        case .idle:      return viewModel.currentMode.kownTint
         }
     }
 }

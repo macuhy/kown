@@ -6,11 +6,12 @@ struct ModeTabsView: View {
     @State private var confirmSwitch = false
 
     var body: some View {
+        let tint = viewModel.currentMode.kownTint
         ViewThatFits(in: .horizontal) {
             tabs(showLabels: true)
             tabs(showLabels: false)
         }
-        .padding(3)
+        .padding(4)
         #if os(iOS)
         .frame(maxWidth: .infinity)
         #endif
@@ -21,7 +22,7 @@ struct ModeTabsView: View {
                 Capsule()
                     .fill(
                         LinearGradient(
-                            colors: [modeTint(viewModel.currentMode).opacity(0.10), Color.clear],
+                            colors: [tint.opacity(0.12), viewModel.currentMode.kownSecondaryTint.opacity(0.05), Color.clear],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -29,10 +30,10 @@ struct ModeTabsView: View {
             }
         }
         .overlay {
-            Capsule().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+            Capsule().strokeBorder(tint.opacity(0.16), lineWidth: 1)
         }
-        .shadow(color: modeTint(viewModel.currentMode).opacity(0.08), radius: 16, x: 0, y: 8)
-        .animation(.easeInOut(duration: 0.16), value: viewModel.currentMode)
+        .shadow(color: tint.opacity(0.10), radius: 18, x: 0, y: 9)
+        .animation(.spring(response: 0.26, dampingFraction: 0.82), value: viewModel.currentMode)
         .confirmationDialog(
             "切换模式将开始一个新会话",
             isPresented: $confirmSwitch
@@ -57,7 +58,7 @@ struct ModeTabsView: View {
 
     private func tab(for mode: ConversationMode, showLabel: Bool) -> some View {
         let isActive = viewModel.currentMode == mode
-        let tint = modeTint(mode)
+        let tint = mode.kownTint
         return Button {
             handleTap(mode)
         } label: {
@@ -82,7 +83,7 @@ struct ModeTabsView: View {
                     Capsule()
                         .fill(
                             LinearGradient(
-                                colors: [tint.opacity(0.98), tint.opacity(0.72)],
+                                colors: [tint.opacity(0.98), mode.kownSecondaryTint.opacity(0.78)],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
@@ -121,7 +122,7 @@ struct ModeTabsView: View {
 
     private func tabHorizontalPadding(showLabel: Bool) -> CGFloat {
         #if os(iOS)
-        showLabel ? 3 : 8
+        showLabel ? 5 : 9
         #else
         showLabel ? 11 : 10
         #endif
@@ -129,7 +130,7 @@ struct ModeTabsView: View {
 
     private var tabVerticalPadding: CGFloat {
         #if os(iOS)
-        5
+        6
         #else
         6
         #endif
@@ -147,14 +148,4 @@ struct ModeTabsView: View {
         }
     }
 
-    private func modeTint(_ mode: ConversationMode) -> Color {
-        switch mode {
-        case .council: return Color(red: 0.10, green: 0.66, blue: 0.56)
-        case .direct:  return Color(red: 0.16, green: 0.48, blue: 0.94)
-        case .compare: return Color(red: 0.91, green: 0.55, blue: 0.20)
-        case .debate:  return Color(red: 0.88, green: 0.35, blue: 0.22)
-        case .structured: return Color(red: 0.36, green: 0.42, blue: 0.92)
-        case .tournament: return Color(red: 0.85, green: 0.62, blue: 0.13)
-        }
-    }
 }

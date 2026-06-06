@@ -258,7 +258,7 @@ struct CompareTurnsView: View {
     }
 
     private var compareTint: Color {
-        Color(red: 0.83, green: 0.38, blue: 0.18)
+        ConversationMode.compare.kownTint
     }
 
     private func isJudgeStreaming(_ state: ResponseState) -> Bool {

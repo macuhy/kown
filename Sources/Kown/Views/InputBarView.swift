@@ -73,7 +73,7 @@ struct InputBarView: View {
             ZStack(alignment: .top) {
                 Rectangle().fill(.thinMaterial)
                 LinearGradient(
-                    colors: [Color.accentColor.opacity(0.07), Color.clear],
+                    colors: [viewModel.currentMode.kownTint.opacity(0.08), viewModel.currentMode.kownSecondaryTint.opacity(0.035), Color.clear],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
@@ -252,11 +252,12 @@ struct InputBarView: View {
     }
 
     private var promptField: some View {
+        let tint = viewModel.currentMode.kownTint
         // 注意:title 必须是空常量。给多行 TextField(axis:.vertical) 传非空 placeholder,
         // 在 macOS 聚焦态下会触发 setPlaceholderString → _restartEditingWithTextView →
         // endEditing → textDidEndEditing → 再布局 的重入死循环(整核 100% CPU)。
         // 占位文字改用 SwiftUI Text 叠层手动渲染,绕开 AppKit 的占位路径。
-        TextField("", text: $viewModel.prompt, axis: .vertical)
+        return TextField("", text: $viewModel.prompt, axis: .vertical)
             .overlay(alignment: .topLeading) {
                 if viewModel.prompt.isEmpty {
                     Text(placeholder)
@@ -279,7 +280,7 @@ struct InputBarView: View {
                         .fill(
                             LinearGradient(
                                 colors: [
-                                    inputFocused ? Color.accentColor.opacity(0.10) : Color.white.opacity(0.035),
+                                    inputFocused ? tint.opacity(0.11) : Color.white.opacity(0.035),
                                     Color.clear
                                 ],
                                 startPoint: .topLeading,
@@ -291,11 +292,11 @@ struct InputBarView: View {
             .overlay {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .strokeBorder(
-                        inputFocused ? Color.accentColor.opacity(0.48) : Color.primary.opacity(0.10),
+                        inputFocused ? tint.opacity(0.48) : Color.primary.opacity(0.10),
                         lineWidth: inputFocused ? 1.5 : 1
                     )
             }
-            .shadow(color: inputFocused ? Color.accentColor.opacity(0.12) : Color.clear, radius: 16, x: 0, y: 8)
+            .shadow(color: inputFocused ? tint.opacity(0.13) : Color.clear, radius: 16, x: 0, y: 8)
             .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .focused($inputFocused)
             // 拖拽文件/图片到输入框 → 分流成附件(图片走缩略图、其它走文本/PDF)。
@@ -408,7 +409,7 @@ struct InputBarView: View {
         .padding(4)
         .background(.regularMaterial, in: Capsule())
         .overlay {
-            Capsule().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+            Capsule().strokeBorder(viewModel.currentMode.kownTint.opacity(0.14), lineWidth: 1)
         }
         #if os(iOS)
         .fullScreenCover(isPresented: $showVoice) {
@@ -522,10 +523,24 @@ struct InputBarView: View {
     /// 无可用 provider 或设备不支持语音识别时禁用。
     private var voiceButton: some View {
         let ready = dictation.isAvailable && viewModel.providers.contains(where: \.enabled)
-        return iconButton("waveform", help: ready ? "语音对话(免手连续对话)" : "语音对话(需启用 provider 且设备支持语音识别)") {
+        let tint = viewModel.currentMode.kownTint
+        return Button {
             showVoice = true
+        } label: {
+            Image(systemName: "waveform")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(ready ? tint : .secondary)
+                .frame(width: toolButtonSize, height: toolButtonSize)
+                .background {
+                    Circle().fill((ready ? tint : Color.primary).opacity(ready ? 0.13 : 0.055))
+                }
+                .overlay {
+                    Circle().strokeBorder((ready ? tint : Color.primary).opacity(ready ? 0.30 : 0.07), lineWidth: 1)
+                }
         }
+        .buttonStyle(.plain)
         .disabled(!ready)
+        .help(ready ? "语音对话(免手连续对话)" : "语音对话(需启用 provider 且设备支持语音识别)")
     }
 
     #if os(macOS)
@@ -546,11 +561,11 @@ struct InputBarView: View {
                             .truncationMode(.middle)
                             .frame(maxWidth: 140)
                     }
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(viewModel.currentMode.kownTint)
                     .padding(.horizontal, 9)
-                    .frame(height: 30)
-                    .background(Color.accentColor.opacity(0.12), in: Capsule())
-                    .overlay(Capsule().strokeBorder(Color.accentColor.opacity(0.26), lineWidth: 1))
+                    .frame(height: toolButtonSize)
+                    .background(viewModel.currentMode.kownTint.opacity(0.12), in: Capsule())
+                    .overlay(Capsule().strokeBorder(viewModel.currentMode.kownTint.opacity(0.26), lineWidth: 1))
                 }
                 .buttonStyle(.plain)
                 .help("Workspace: \(displayPath)\n点击切换文件夹")
@@ -657,14 +672,7 @@ struct InputBarView: View {
     }
 
     private var placeholder: String {
-        switch viewModel.currentMode {
-        case .council: return "Ask the council..."
-        case .direct:  return "Send a message..."
-        case .compare: return "Ask both models..."
-        case .debate:  return "Start a debate..."
-        case .structured: return "Ask for structured JSON..."
-        case .tournament: return "Start a tournament..."
-        }
+        viewModel.currentMode.kownPromptPlaceholder
     }
 
     private var debateRoundsPicker: some View {
@@ -688,11 +696,11 @@ struct InputBarView: View {
                     .font(.caption.weight(.bold))
                     .monospacedDigit()
             }
-            .foregroundStyle(Color.orange)
+            .foregroundStyle(viewModel.currentMode.kownTint)
             .padding(.horizontal, 9)
-            .frame(height: 30)
-            .background(Color.orange.opacity(0.12), in: Capsule())
-            .overlay(Capsule().strokeBorder(Color.orange.opacity(0.22), lineWidth: 1))
+            .frame(height: toolButtonSize)
+            .background(viewModel.currentMode.kownTint.opacity(0.12), in: Capsule())
+            .overlay(Capsule().strokeBorder(viewModel.currentMode.kownTint.opacity(0.22), lineWidth: 1))
         }
         .menuIndicator(.hidden)
         .fixedSize()
@@ -728,7 +736,7 @@ struct InputBarView: View {
             Image(systemName: "globe")
                 .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(isOn ? Color.white : .secondary)
-                .frame(width: 30, height: 30)
+                .frame(width: toolButtonSize, height: toolButtonSize)
                 .background {
                     Circle().fill(
                         isOn
@@ -768,13 +776,13 @@ struct InputBarView: View {
         } label: {
             Image(systemName: bound ? "books.vertical.fill" : "books.vertical")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(bound ? Color.accentColor : .secondary)
-                .frame(width: 30, height: 30)
+                .foregroundStyle(bound ? viewModel.currentMode.kownTint : .secondary)
+                .frame(width: toolButtonSize, height: toolButtonSize)
                 .background {
-                    Circle().fill((bound ? Color.accentColor : Color.primary).opacity(bound ? 0.12 : 0.055))
+                    Circle().fill((bound ? viewModel.currentMode.kownTint : Color.primary).opacity(bound ? 0.12 : 0.055))
                 }
                 .overlay {
-                    Circle().strokeBorder((bound ? Color.accentColor : Color.primary).opacity(bound ? 0.26 : 0.07), lineWidth: 1)
+                    Circle().strokeBorder((bound ? viewModel.currentMode.kownTint : Color.primary).opacity(bound ? 0.26 : 0.07), lineWidth: 1)
                 }
         }
         .buttonStyle(.plain)
@@ -799,7 +807,7 @@ struct InputBarView: View {
             Image(systemName: recording ? "stop.fill" : "mic.fill")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(recording ? Color.white : .secondary)
-                .frame(width: 30, height: 30)
+                .frame(width: toolButtonSize, height: toolButtonSize)
                 .background {
                     Circle().fill(recording ? Color.red : Color.primary.opacity(0.055))
                 }
@@ -816,7 +824,7 @@ struct InputBarView: View {
             Image(systemName: symbol)
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.secondary)
-                .frame(width: 30, height: 30)
+                .frame(width: toolButtonSize, height: toolButtonSize)
                 .background {
                     Circle().fill(Color.primary.opacity(0.055))
                 }
@@ -825,7 +833,7 @@ struct InputBarView: View {
                 }
         }
         .buttonStyle(.plain)
-            .help(help)
+        .help(help)
     }
 
     private var shellSpacing: CGFloat {
@@ -870,9 +878,17 @@ struct InputBarView: View {
 
     private var promptMinHeight: CGFloat {
         #if os(iOS)
-        return 42
+        return 44
         #else
         return 48
+        #endif
+    }
+
+    private var toolButtonSize: CGFloat {
+        #if os(iOS)
+        return 34
+        #else
+        return 30
         #endif
     }
 
@@ -884,7 +900,7 @@ struct InputBarView: View {
 
     private var sendButton: some View {
         let isEnabled = viewModel.canSend || isViewingRunningConv
-        let tint = isViewingRunningConv ? Color.red : Color.accentColor
+        let tint = isViewingRunningConv ? Color.red : viewModel.currentMode.kownTint
         return Button {
             sendIfCan()
         } label: {
@@ -903,7 +919,7 @@ struct InputBarView: View {
                                 endPoint: .bottomTrailing
                             )
                     )
-                    .frame(width: 38, height: 38)
+                    .frame(width: sendButtonSize, height: sendButtonSize)
                     .shadow(color: isEnabled ? tint.opacity(0.22) : Color.clear, radius: 12, x: 0, y: 6)
                 if isViewingRunningConv {
                     Image(systemName: "stop.fill")
@@ -920,6 +936,14 @@ struct InputBarView: View {
         .keyboardShortcut(.return, modifiers: .command)
         .disabled(!viewModel.canSend && !isViewingRunningConv)
         .help(isViewingRunningConv ? "停止生成" : "⌘↩ 发送")
+    }
+
+    private var sendButtonSize: CGFloat {
+        #if os(iOS)
+        return 42
+        #else
+        return 38
+        #endif
     }
 
     private func sendIfCan() {

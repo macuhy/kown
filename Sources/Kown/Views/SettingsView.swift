@@ -1171,21 +1171,11 @@ private struct MobileProviderSummaryRow: View {
     }
 
     private var kindColor: Color {
-        switch config.kind {
-        case .openAICompatible: return Color(red: 0.06, green: 0.64, blue: 0.50)
-        case .anthropic:        return Color(red: 0.83, green: 0.38, blue: 0.18)
-        case .gemini:           return Color(red: 0.26, green: 0.52, blue: 0.96)
-        case .cliCommand:       return Color(red: 0.55, green: 0.45, blue: 0.78)
-        }
+        config.kownTint
     }
 
     private var providerSymbol: String {
-        switch config.kind {
-        case .openAICompatible: return "sparkles"
-        case .anthropic:        return "text.book.closed"
-        case .gemini:           return "diamond.fill"
-        case .cliCommand:       return "terminal"
-        }
+        config.kownSymbol
     }
 }
 
@@ -1559,21 +1549,11 @@ private struct MobileProviderEditorView: View {
     }
 
     private var kindColor: Color {
-        switch config.kind {
-        case .openAICompatible: return Color(red: 0.06, green: 0.64, blue: 0.50)
-        case .anthropic:        return Color(red: 0.83, green: 0.38, blue: 0.18)
-        case .gemini:           return Color(red: 0.26, green: 0.52, blue: 0.96)
-        case .cliCommand:       return Color(red: 0.55, green: 0.45, blue: 0.78)
-        }
+        config.kownTint
     }
 
     private var providerSymbol: String {
-        switch config.kind {
-        case .openAICompatible: return "sparkles"
-        case .anthropic:        return "text.book.closed"
-        case .gemini:           return "diamond.fill"
-        case .cliCommand:       return "terminal"
-        }
+        config.kownSymbol
     }
 
     private func saveKey() {

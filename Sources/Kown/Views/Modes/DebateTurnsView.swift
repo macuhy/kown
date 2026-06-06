@@ -265,7 +265,7 @@ struct DebateTurnsView: View {
     }
 
     private var debateTint: Color {
-        Color.indigo
+        ConversationMode.debate.kownTint
     }
 
     private func configs(
