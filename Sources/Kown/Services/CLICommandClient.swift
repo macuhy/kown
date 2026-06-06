@@ -49,7 +49,8 @@ struct CLICommandClient: LLMClient {
                     }
 
                     let args = Self.buildArgs(
-                        template: template, prompt: promptToSend, outFile: outFileURL?.path
+                        template: template, prompt: promptToSend, outFile: outFileURL?.path,
+                        temperature: options.temperature
                     )
 
                     process.executableURL  = executable
@@ -172,19 +173,28 @@ struct CLICommandClient: LLMClient {
     }
 
     /// Tokenize args template, substituting placeholders.
-    /// `{prompt}`  → the prompt as a single arg
-    /// `{outfile}` → path to a temp file (caller passes via outFile param)
-    static func buildArgs(template: String, prompt: String, outFile: String?) -> [String] {
-        template
+    /// `{prompt}`      → the prompt as a single arg
+    /// `{outfile}`     → path to a temp file (caller passes via outFile param)
+    /// `{temperature}` → 温度值(如 0.7);未配置温度时该 token 整个丢弃,
+    ///                   不会以字面量 / 空串形式传给子进程。
+    static func buildArgs(template: String, prompt: String, outFile: String?,
+                          temperature: Double?) -> [String] {
+        // nil 温度时用哨兵标记 {temperature},随后过滤掉
+        let dropSentinel = "\u{0}__kown_drop__"
+        return template
             .split(whereSeparator: \.isWhitespace)
             .map(String.init)
             .map {
                 switch $0 {
                 case "{prompt}":  return prompt
                 case "{outfile}": return outFile ?? $0
+                case "{temperature}":
+                    guard let t = temperature else { return dropSentinel }
+                    return String(format: "%g", t)
                 default:          return $0
                 }
             }
+            .filter { $0 != dropSentinel }
     }
 }
 
