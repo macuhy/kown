@@ -36,6 +36,8 @@ targets:
         # 语音听写(STT)— 麦克风 + 语音识别授权
         NSMicrophoneUsageDescription: "Kown 用麦克风把你的语音转成文字,填进输入框。"
         NSSpeechRecognitionUsageDescription: "Kown 用语音识别把你说的话转写成文字。"
+        # 设备工具:在系统「提醒事项」创建提醒(备忘录在 iOS 走剪贴板+跳转,无需权限)
+        NSRemindersFullAccessUsageDescription: "Kown 可以把你的待办写进系统「提醒事项」。"
         UIBackgroundModes:
           - audio   # 流式期间播放无声音频,保持后台网络连接
         UILaunchScreen:

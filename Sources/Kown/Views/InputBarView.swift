@@ -366,6 +366,8 @@ struct InputBarView: View {
             .disabled(ocrRunning)
             #endif
             webSearchToggle
+            deviceToolsToggle
+            skillPicker
             if viewModel.currentMode == .debate {
                 debateRoundsPicker
             }
@@ -765,6 +767,74 @@ struct InputBarView: View {
         .help(canEnable
               ? (isOn ? "下一条消息会带 web_search 工具(再按关闭)" : "本次发送启用 Firecrawl web_search")
               : "请先到 设置 → Web Search 启用并填好 API Key")
+    }
+
+    /// 设备工具开关 — 让模型本次发送可调用提醒/备忘录工具。仿 webSearchToggle 样式。
+    @ViewBuilder
+    private var deviceToolsToggle: some View {
+        let isOn = viewModel.deviceToolsEnabledForNextSend
+        Button {
+            viewModel.deviceToolsEnabledForNextSend.toggle()
+        } label: {
+            Image(systemName: "checklist")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(isOn ? Color.white : .secondary)
+                .frame(width: toolButtonSize, height: toolButtonSize)
+                .background {
+                    Circle().fill(
+                        isOn
+                            ? LinearGradient(colors: [Color(red: 0.20, green: 0.60, blue: 0.62), Color.teal.opacity(0.82)],
+                                             startPoint: .topLeading, endPoint: .bottomTrailing)
+                            : LinearGradient(colors: [Color.primary.opacity(0.06), Color.primary.opacity(0.035)],
+                                             startPoint: .topLeading, endPoint: .bottomTrailing)
+                    )
+                }
+                .overlay {
+                    Circle().strokeBorder(isOn ? Color.white.opacity(0.24) : Color.primary.opacity(0.08), lineWidth: 1)
+                }
+        }
+        .buttonStyle(.plain)
+        .help(isOn ? "下一条消息可创建提醒/备忘录(再按关闭)" : "本次发送启用设备工具(提醒/备忘录)")
+    }
+
+    /// 技能选择 — 手动给当前会话绑定一个技能,或留空走自动触发。
+    @ViewBuilder
+    private var skillPicker: some View {
+        let bound = viewModel.currentBoundSkill
+        Menu {
+            Button {
+                viewModel.setSelectedSkill(nil)
+            } label: {
+                if bound == nil { Label("自动(按输入匹配)", systemImage: "checkmark") }
+                else { Text("自动(按输入匹配)") }
+            }
+            Divider()
+            ForEach(viewModel.skillsStore.enabledSkills) { skill in
+                Button {
+                    viewModel.setSelectedSkill(skill.id)
+                } label: {
+                    if bound?.id == skill.id { Label(skill.name, systemImage: "checkmark") }
+                    else { Text(skill.name) }
+                }
+            }
+        } label: {
+            Image(systemName: bound == nil ? "wand.and.stars" : "wand.and.stars.inverse")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(bound == nil ? .secondary : Color(red: 0.48, green: 0.36, blue: 0.90))
+                .frame(width: toolButtonSize, height: toolButtonSize)
+                .background {
+                    Circle().fill(bound == nil
+                                  ? Color.primary.opacity(0.05)
+                                  : Color(red: 0.48, green: 0.36, blue: 0.90).opacity(0.16))
+                }
+                .overlay { Circle().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1) }
+        }
+        .menuIndicator(.hidden)
+        .fixedSize()
+        #if os(macOS)
+        .menuStyle(.borderlessButton)
+        .help(bound == nil ? "技能:自动匹配(点选可固定到本会话)" : "本会话技能:\(bound!.name)")
+        #endif
     }
 
     /// 知识库按钮。绑定了资料夹时高亮显示。点开管理 / 绑定 sheet。

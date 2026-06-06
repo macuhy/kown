@@ -83,6 +83,19 @@ final class AppViewModel {
             }
         }
     }
+    /// 输入栏「设备工具」开关 — 开启后本次发送暴露提醒/备忘录工具给模型。持久化,跨重启记得。
+    var deviceToolsEnabledForNextSend: Bool {
+        didSet { UserDefaults.standard.set(deviceToolsEnabledForNextSend, forKey: Self.deviceToolsToggleKey) }
+    }
+    /// 是否按输入自动匹配技能(纯启发式,零成本)。默认开;关掉则只用手动绑定的技能。
+    var skillAutoTriggerEnabled: Bool {
+        didSet { UserDefaults.standard.set(skillAutoTriggerEnabled, forKey: Self.skillAutoTriggerKey) }
+    }
+    /// 技能库(命名的「系统提示 + 工具白名单」能力包)。
+    let skillsStore = SkillsStore()
+    /// 最近一次发送被自动触发命中的技能 id(手动绑定时为 nil)。供 UI 显示「本次生效技能」徽标,非持久化。
+    var autoTriggeredSkillID: UUID?
+
     /// iCloud 同步管理器引用 — UI / Settings 通过 viewModel.iCloudSync 访问状态。
     let iCloudSync = ICloudSync.shared
     /// 标识当前是否在做 iCloud 迁移(开关切换瞬间)。UI 可据此显示进度。
@@ -140,6 +153,8 @@ final class AppViewModel {
     private static let councilVotingKey = "kown.councilVoting.v1"
     private static let autoRouteKey = "kown.autoRoute.v1"
     private static let memoryInjectionKey = "kown.memory.injection.v1"
+    private static let deviceToolsToggleKey = "kown.deviceTools.toggle.v1"
+    private static let skillAutoTriggerKey = "kown.skill.autoTrigger.v1"
     // 发送编排已移到 AppViewModel+Send.swift,以下原 private 状态降为 internal 供其访问。
     var runningTask: Task<Void, Never>?
     var summarizingTasks: [UUID: Task<Void, Never>] = [:]
@@ -170,6 +185,9 @@ final class AppViewModel {
         self.councilVotingEnabled = UserDefaults.standard.bool(forKey: Self.councilVotingKey)
         self.autoRouteEnabled = UserDefaults.standard.bool(forKey: Self.autoRouteKey)
         self.memoryInjectionEnabled = UserDefaults.standard.bool(forKey: Self.memoryInjectionKey)
+        self.deviceToolsEnabledForNextSend = UserDefaults.standard.bool(forKey: Self.deviceToolsToggleKey)
+        // 自动触发默认开:首次启动 UserDefaults 没有该键时取 true。
+        self.skillAutoTriggerEnabled = (UserDefaults.standard.object(forKey: Self.skillAutoTriggerKey) as? Bool) ?? true
 
         // 冷启动:会话 JSON 解码挪到后台线程(避免一启动就在主线程解码上百个文件 → 白屏/卡顿),
         // 解码完回主线程赋值,再清理过期回收站(purge 依赖已加载的 conversations)。
@@ -735,6 +753,22 @@ final class AppViewModel {
         guard let old = selectedConversationID else { return }
         let t = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         if t.isEmpty { drafts.removeValue(forKey: old) } else { drafts[old] = prompt }
+    }
+
+    // MARK: - Skills(会话绑定)
+
+    /// 当前会话手动绑定的技能(如有)。
+    var currentBoundSkill: Skill? {
+        skillsStore.skill(id: selectedConversation?.selectedSkillID)
+    }
+
+    /// 给当前会话绑定 / 解绑技能(nil = 解绑,回到自动触发)。
+    func setSelectedSkill(_ id: UUID?) {
+        guard let convID = selectedConversationID,
+              let idx = conversations.firstIndex(where: { $0.id == convID }) else { return }
+        conversations[idx].selectedSkillID = id
+        conversations[idx].updatedAt = Date()
+        ConversationStore.save(conversations[idx])
     }
 
     // MARK: - Working Folder

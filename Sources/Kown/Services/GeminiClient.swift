@@ -46,7 +46,7 @@ struct GeminiClient: LLMClient {
 
                     for round in 0..<Self.maxToolRounds {
                         let isLast = round == Self.maxToolRounds - 1
-                        if isLast, options.toolSession != nil, !options.tools.isEmpty {
+                        if isLast, options.toolContext != nil, !options.tools.isEmpty {
                             contents.append([
                                 "role": "user",
                                 "parts": [["text": "工具调用次数已达上限,请基于以上工具结果直接给出完整答案,本轮不要再调用工具。"]]
@@ -62,7 +62,7 @@ struct GeminiClient: LLMClient {
                             systemPrompt: combineSystem(
                                 userSystem: options.systemPrompt,
                                 summary: options.contextSummary,
-                                includeCurrentTime: options.toolSession != nil
+                                includeCurrentTime: options.toolContext != nil
                             ),
                             tools: toolsForThisRound,
                             temperature: options.temperature,
@@ -112,8 +112,8 @@ struct GeminiClient: LLMClient {
                             "parts": assistantParts
                         ])
 
-                        guard let session = options.toolSession else { break }
-                        let router = ToolRouter(session: session)
+                        guard let ctx = options.toolContext else { break }
+                        let router = ToolRouter(context: ctx)
                         var functionResponseParts: [[String: Any]] = []
                         for call in result.toolCalls {
                             continuation.yield(.toolEvent(Self.eventLineForCall(call)))

@@ -18,10 +18,10 @@ struct ChatOptions: Sendable {
     var contextSummary: String? = nil
     /// 最近若干轮原文(以 user/assistant pair 形式注入 messages 数组),保留细节。
     var priorTurns: [PriorTurn] = []
-    /// 暴露给模型的工具集 + 执行入口。nil 表示本次不带工具。
-    /// 客户端通过 `toolSession` 在工具被调用时本地执行并回灌结果。
+    /// 暴露给模型的工具集 + 执行入口。`toolContext == nil` 表示本次不带工具。
+    /// 客户端通过 `toolContext` 在工具被调用时本地执行并回灌结果。
     var tools: [LLMTool] = []
-    var toolSession: WebSearchSession? = nil
+    var toolContext: ToolContext? = nil
 
     static let `default` = ChatOptions()
 }
@@ -69,7 +69,7 @@ func combineSystem(userSystem: String?, summary: String?, includeCurrentTime: Bo
     var parts: [String] = []
     if includeCurrentTime {
         parts.append(currentTimeContextLine())
-        // 联网检索开启时(includeCurrentTime == toolSession 存在),要求行内标注引用,
+        // 联网检索开启时(includeCurrentTime == 本次带工具),要求行内标注引用,
         // 供 UI 把正文里的 [n] 渲染成可点角标(n 对应 web_search 返回结果的顺序)。
         parts.append("当你引用网页搜索结果时,在相关句末用方括号标注来源序号,如 [1]、[2],"
                      + "序号对应 web_search 返回结果的先后顺序;不要编造未检索到的来源序号。")

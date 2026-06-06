@@ -461,6 +461,8 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
     /// Structured 模式下本会话使用的 JSON Schema(纯文本)。各模型被要求严格按此 schema 返回 JSON。
     /// 旧会话/非 structured 模式为 nil,保持 optional 兼容旧 JSON。
     var structuredSchema: String?
+    /// 手动绑定到本会话的技能 id。非 nil 时该技能恒定生效(覆盖自动触发)。nil = 不绑定。
+    var selectedSkillID: UUID?
 
     init(id: UUID = UUID(),
          title: String = "New Conversation",
@@ -484,7 +486,8 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
          tags: [String] = [],
          knowledgeFolderID: UUID? = nil,
          folderID: UUID? = nil,
-         structuredSchema: String? = nil) {
+         structuredSchema: String? = nil,
+         selectedSkillID: UUID? = nil) {
         self.id = id
         self.title = title
         self.mode = mode
@@ -508,6 +511,7 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
         self.knowledgeFolderID = knowledgeFolderID
         self.folderID = folderID
         self.structuredSchema = structuredSchema
+        self.selectedSkillID = selectedSkillID
     }
 
     // 兼容旧 JSON(缺新字段)
@@ -536,6 +540,7 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
         self.knowledgeFolderID = try c.decodeIfPresent(UUID.self, forKey: .knowledgeFolderID)
         self.folderID = try c.decodeIfPresent(UUID.self, forKey: .folderID)
         self.structuredSchema = try c.decodeIfPresent(String.self, forKey: .structuredSchema)
+        self.selectedSkillID = try c.decodeIfPresent(UUID.self, forKey: .selectedSkillID)
     }
 
     var lastPromptPreview: String {

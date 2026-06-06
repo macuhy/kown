@@ -73,6 +73,7 @@ struct AnswerFooterBar: View {
             chip(copied ? "已复制" : "复制", systemImage: copied ? "checkmark" : "doc.on.doc",
                  color: copied ? .green : .secondary)
         }.buttonStyle(.borderless)
+        if !text.isEmpty { SaveToDeviceMenu(text: text) }
     }
 
     private func chip(_ title: String, systemImage: String, color: Color) -> some View {
@@ -80,6 +81,77 @@ struct AnswerFooterBar: View {
             .font(.caption2.weight(.semibold)).lineLimit(1).foregroundStyle(color)
             .padding(.horizontal, 8).padding(.vertical, 4)
             .background(color.opacity(0.10), in: Capsule()).fixedSize()
+    }
+}
+
+/// 把一段回答手动「存为提醒 / 存为备忘」。直接调系统服务,不经模型。各答卡 footer 复用。
+struct SaveToDeviceMenu: View {
+    let text: String
+    var compact: Bool = false
+
+    @State private var status: String?
+    @State private var showAlert = false
+
+    var body: some View {
+        Menu {
+            Button { saveReminder() } label: { Label("存为提醒", systemImage: "checklist") }
+            Button { saveNote() } label: { Label("存为备忘", systemImage: "note.text") }
+        } label: {
+            let base = Label("保存", systemImage: "tray.and.arrow.down")
+                .font(.caption2.weight(.semibold)).lineLimit(1).foregroundStyle(.secondary)
+            Group {
+                if compact { base.labelStyle(.iconOnly) }
+                else { base.labelStyle(.titleAndIcon) }
+            }
+            .padding(.horizontal, 8).padding(.vertical, 4)
+            .background(Color.secondary.opacity(0.10), in: Capsule()).fixedSize()
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        .alert("设备", isPresented: $showAlert) {
+            Button("好") {}
+        } message: {
+            Text(status ?? "")
+        }
+    }
+
+    /// 标题取首行(截断),正文用全文。
+    private func deviceTitle() -> String {
+        let firstLine = text.split(separator: "\n").first.map(String.init) ?? text
+        return String(firstLine.trimmingCharacters(in: .whitespacesAndNewlines).prefix(60))
+    }
+
+    private func saveReminder() {
+        #if canImport(EventKit)
+        Task {
+            do {
+                _ = try await EventKitService.shared.createReminder(title: deviceTitle(), notes: text, due: nil)
+                report("已存入「提醒事项」。")
+            } catch {
+                report(error.localizedDescription)
+            }
+        }
+        #else
+        report("当前平台不支持提醒事项。")
+        #endif
+    }
+
+    private func saveNote() {
+        Task { @MainActor in
+            do {
+                let r = try NotesService.createNote(title: deviceTitle(), body: text)
+                report(r.pastedFallback ? "已复制内容并打开备忘录,请粘贴保存。" : "已存入「备忘录」。")
+            } catch {
+                report(error.localizedDescription)
+            }
+        }
+    }
+
+    @MainActor private func report(_ msg: String) {
+        status = msg
+        showAlert = true
     }
 }
 
@@ -570,6 +642,7 @@ struct HistoricalResponseCard: View {
         }
         .buttonStyle(.borderless)
         .disabled(text.isEmpty)
+        if !text.isEmpty { SaveToDeviceMenu(text: text, compact: compactFooter) }
     }
 
     /// footer 动作按钮的统一外观:单行不换行 + 固定尺寸;iOS 紧凑宽度只显示图标。
@@ -1199,6 +1272,7 @@ struct ChairSummaryCard: View {
                        tint: copied ? .green : .secondary)
         }
         .buttonStyle(.borderless)
+        if !shownText.isEmpty { SaveToDeviceMenu(text: shownText) }
     }
 
     private func footerChip(_ title: String, systemImage: String, tint: Color) -> some View {

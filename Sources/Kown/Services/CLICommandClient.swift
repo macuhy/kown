@@ -16,14 +16,14 @@ struct CLICommandClient: LLMClient {
         AsyncThrowingStream { continuation in
             let task = Task {
                 // CLI 不参与工具调用 — 若上层带了 🌐,在这里给个友好提示。
-                if options.toolSession != nil, !options.tools.isEmpty {
+                if options.toolContext != nil, !options.tools.isEmpty {
                     continuation.yield(.toolEvent("⚠ CLI 不支持工具调用,本次跳过"))
                 }
                 let promptToSend = flattenPromptForCLI(
                     prompt: prompt,
                     summary: options.contextSummary,
                     priorTurns: options.priorTurns,
-                    includeCurrentTime: options.toolSession != nil
+                    includeCurrentTime: options.toolContext != nil
                 )
                 let process = Process()
                 let stdoutPipe = Pipe()

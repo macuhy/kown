@@ -38,6 +38,9 @@ targets:
         # 语音听写(STT)— 麦克风 + 语音识别授权
         NSMicrophoneUsageDescription: "Kown 用麦克风把你的语音转成文字,填进输入框。"
         NSSpeechRecognitionUsageDescription: "Kown 用语音识别把你说的话转写成文字。"
+        # 设备工具:在系统「提醒事项」创建提醒、用 AppleScript 控制「备忘录」
+        NSRemindersFullAccessUsageDescription: "Kown 可以把你的待办写进系统「提醒事项」。"
+        NSAppleEventsUsageDescription: "Kown 用自动化把整理好的内容写进「备忘录」。"
         # ── Sparkle 自动更新（feed/公钥;频率与自动安装由 UpdaterService 经 UserDefaults 管理）──
         SUFeedURL: https://raw.githubusercontent.com/macuhy/kown-mac/main/appcast.xml
         SUPublicEDKey: QxXWME0pGom6NLGkoNq6AdkK8h+i+ZttNeED2No5HT8=
@@ -64,6 +67,8 @@ targets:
         com.apple.security.files.user-selected.read-write: true
         # 语音听写需要麦克风(hardened runtime 下的资源访问例外)
         com.apple.security.device.audio-input: true
+        # 用 AppleScript 控制「备忘录」发 Apple Event,hardened runtime 下必需
+        com.apple.security.automation.apple-events: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.xiaobo.kown

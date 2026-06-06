@@ -15,7 +15,7 @@ struct OpenAICompatibleClient: LLMClient {
                     if let sys = combineSystem(
                         userSystem: options.systemPrompt,
                         summary: options.contextSummary,
-                        includeCurrentTime: options.toolSession != nil
+                        includeCurrentTime: options.toolContext != nil
                     ) {
                         messages.append(["role": "system", "content": sys])
                     }
@@ -35,7 +35,7 @@ struct OpenAICompatibleClient: LLMClient {
 
                     for round in 0..<Self.maxToolRounds {
                         let isLast = round == Self.maxToolRounds - 1
-                        if isLast, options.toolSession != nil, !options.tools.isEmpty {
+                        if isLast, options.toolContext != nil, !options.tools.isEmpty {
                             // 多 tool 轮已耗尽 — 提示模型停止调用,以现有信息作答
                             messages.append([
                                 "role": "user",
@@ -87,8 +87,8 @@ struct OpenAICompatibleClient: LLMClient {
                         messages.append(assistantMsg)
 
                         // 执行每个工具,并把结果作为 role=tool 的消息追加
-                        guard let session = options.toolSession else { break }
-                        let router = ToolRouter(session: session)
+                        guard let ctx = options.toolContext else { break }
+                        let router = ToolRouter(context: ctx)
                         for call in result.toolCalls {
                             continuation.yield(.toolEvent(Self.eventLineForCall(call)))
                             let toolResult = await router.execute(call)

@@ -10,6 +10,8 @@ struct SettingsView: View {
     enum Tab: String, CaseIterable, Identifiable {
         case providers
         case prompts
+        case skills
+        case deviceTools
         case chains
         case webSearch
         case tts
@@ -31,6 +33,8 @@ struct SettingsView: View {
             switch self {
             case .providers:   return "厂商"
             case .prompts:     return "Prompt 库"
+            case .skills:      return "技能"
+            case .deviceTools: return "设备工具"
             case .chains:      return "工作流"
             case .webSearch:   return "Web Search"
             case .tts:         return "朗读"
@@ -52,6 +56,8 @@ struct SettingsView: View {
             switch self {
             case .providers:   return "square.stack.3d.up"
             case .prompts:     return "text.badge.plus"
+            case .skills:      return "wand.and.stars"
+            case .deviceTools: return "checklist.checked"
             case .chains:      return "arrow.triangle.branch"
             case .webSearch:   return "globe"
             case .tts:         return "waveform"
@@ -73,6 +79,8 @@ struct SettingsView: View {
             switch self {
             case .providers:   return Color(red: 0.10, green: 0.66, blue: 0.56)
             case .prompts:     return Color(red: 0.56, green: 0.40, blue: 0.86)
+            case .skills:      return Color(red: 0.48, green: 0.36, blue: 0.90)
+            case .deviceTools: return Color(red: 0.20, green: 0.60, blue: 0.62)
             case .chains:      return Color(red: 0.30, green: 0.52, blue: 0.88)
             case .webSearch:   return Color(red: 0.16, green: 0.48, blue: 0.94)
             case .tts:         return Color(red: 0.36, green: 0.46, blue: 0.92)
@@ -158,6 +166,10 @@ struct SettingsView: View {
                         mobileProvidersList
                     case .prompts:
                         PromptLibraryView(viewModel: promptLibrary)
+                    case .skills:
+                        SkillsLibraryView(store: viewModel.skillsStore, viewModel: viewModel)
+                    case .deviceTools:
+                        DeviceToolsSettingsView(viewModel: viewModel)
                     case .chains:
                         ChainView()
                     case .webSearch:
@@ -688,6 +700,10 @@ struct SettingsView: View {
                 providersList
             case .prompts:
                 PromptLibraryView(viewModel: promptLibrary)
+            case .skills:
+                SkillsLibraryView(store: viewModel.skillsStore, viewModel: viewModel)
+            case .deviceTools:
+                DeviceToolsSettingsView(viewModel: viewModel)
             case .chains:
                 ChainView()
             case .webSearch:
@@ -955,6 +971,8 @@ struct SettingsView: View {
         switch tab {
         case .providers:   return "管理连接、密钥和每个模型的默认生成参数。"
         case .prompts:     return "保存可复用的 Prompt 模板,用 {{变量}} 占位,填充后一键复制。"
+        case .skills:      return "技能 = 系统提示 + 可用工具。可按输入自动触发,也可绑定到当前会话。"
+        case .deviceTools: return "让模型在你的系统「提醒事项 / 备忘录」里创建条目。需授权;iOS 备忘录走剪贴板+跳转。"
         case .chains:      return "把多个「模型 + 指示」步骤串成流水线,用 {{prev}} / {{input}} 接力,逐步执行。"
         case .webSearch:   return "配置 Firecrawl 让模型在需要时调用 web_search。"
         case .tts:         return "选择朗读引擎与音色:硅基流动 CosyVoice、讯飞语音(均国内直连)或系统语音。"

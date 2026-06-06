@@ -93,10 +93,23 @@ extension AppViewModel {
         // memory items 取一份快照(O(1) COW),供后台 BM25 打分,避免触碰 @MainActor 的 MemoryStore。
         let memoryItemsForSend: [MemoryItem] = memoryInjectionEnabled ? MemoryStore.shared.items : []
         let memoryQueryForSend: String? = memoryInjectionEnabled ? trimmed : nil
-        // 基础系统提示(会话级优先,否则全局);上下文片段在后台前置到它前面。
+        // 生效技能:手动绑定优先,否则(开了自动触发时)按输入启发式路由。
+        let manualSkill = skillsStore.skill(id: conversations[convIdx].selectedSkillID)
+        let activeSkill: Skill? = manualSkill
+            ?? (skillAutoTriggerEnabled
+                ? SkillRouter.match(prompt: trimmed, skills: skillsStore.enabledSkills)
+                : nil)
+        // 命中自动技能时记一笔,供 UI 显示当前生效技能徽标(手动绑定不覆盖)。
+        autoTriggeredSkillID = (manualSkill == nil) ? activeSkill?.id : nil
+        let skillInstructions = activeSkill.map { skillsStore.render($0, values: [:]) } ?? ""
+        // 基础系统提示(技能 → 会话级 / 全局);上下文片段在后台前置到它前面。
         let baseSystemPrompt: String = {
             let convPrompt = conversations[convIdx].systemPrompt?.trimmingCharacters(in: .whitespacesAndNewlines)
-            return (convPrompt?.isEmpty == false) ? convPrompt! : systemPrompt
+            let base = (convPrompt?.isEmpty == false) ? convPrompt! : systemPrompt
+            return [skillInstructions, base]
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .joined(separator: "\n\n")
         }()
         let imageSnapshot = imagePayloads
         // 把本轮图片字节落盘到同步目录,拿到轻量引用 → 历史里能看到 + 随 iCloud 同步。
@@ -104,9 +117,16 @@ extension AppViewModel {
         // 上下文摘要 + 最近原文多轮:摘要进 system prompt;原文进真正的 messages[user/assistant]
         let contextSummarySnapshot = ConversationSummarizer.summaryForNextSend(conversations[convIdx])
         let priorTurnsSnapshot = ConversationSummarizer.priorTurnsForReplay(conversations[convIdx])
-        // 工具调用 session(用户开 🌐 + Firecrawl 已配置时才非 nil)
-        let toolSessionSnapshot = WebSearchSession.makeIfReady(userToggle: webSearchEnabledForNextSend)
-        let toolsSnapshot: [LLMTool] = ToolCatalog.enabledTools(forSession: toolSessionSnapshot)
+        // 工具集:web_search(开 🌐 + Firecrawl 已配置)+ 设备工具(总开关或当前技能点名)。
+        let webSessionSnapshot = WebSearchSession.makeIfReady(userToggle: webSearchEnabledForNextSend)
+        let skillToolNames = Set(activeSkill?.allowedTools ?? [])
+        let toolsSnapshot: [LLMTool] = ToolCatalog.enabledTools(
+            webSearch: webSessionSnapshot,
+            deviceTools: deviceToolsEnabledForNextSend,
+            extraToolNames: skillToolNames)
+        // 有任一工具才建 context;否则 nil(客户端据此跳过工具循环、不注入当前时间)。
+        let toolContextSnapshot: ToolContext? = toolsSnapshot.isEmpty
+            ? nil : ToolContext(webSearch: webSessionSnapshot)
         let modeSnapshot = currentMode
         let debateRoundsSnapshot = debateRoundsForNextSend
         // Summary 只在 Council 模式跑
@@ -128,7 +148,7 @@ extension AppViewModel {
             promptText: promptSnapshot, systemPromptText: baseSystemPrompt, mode: modeSnapshot,
             turnImages: turnImages, imagePayloads: imageSnapshot,
             contextSummary: contextSummarySnapshot, priorTurns: priorTurnsSnapshot,
-            toolSession: toolSessionSnapshot, tools: toolsSnapshot,
+            toolContext: toolContextSnapshot, tools: toolsSnapshot,
             debateRoundsCount: debateRoundsSnapshot, workspaceURL: workspaceURLForSend,
             structuredSchema: structuredSchemaSnapshot,
             workspaceContextURL: workspaceURLForSend,
@@ -186,7 +206,7 @@ extension AppViewModel {
         imagePayloads: [Attachment.ImagePayload],
         contextSummary: String?,
         priorTurns: [PriorTurn],
-        toolSession: WebSearchSession?,
+        toolContext: ToolContext?,
         tools: [LLMTool],
         debateRoundsCount: Int,
         workspaceURL: URL?,
@@ -207,7 +227,7 @@ extension AppViewModel {
         let contextSummarySnapshot = contextSummary
         let priorTurnsSnapshot = priorTurns
         let toolsSnapshot = tools
-        let toolSessionSnapshot = toolSession
+        let toolContextSnapshot = toolContext
         let debateRoundsSnapshot = debateRoundsCount
         let summarySnapshot = summary
         let workspaceURLForSend = workspaceURL
@@ -361,7 +381,7 @@ extension AppViewModel {
                         contextSummary: contextSummarySnapshot,
                         priorTurns: priorTurnsSnapshot,
                         tools: toolsSnapshot,
-                        toolSession: toolSessionSnapshot,
+                        toolContext: toolContextSnapshot,
                         conversationTitle: convTitleSnapshot,
                         conversationID: convIDString
                     )
@@ -401,7 +421,7 @@ extension AppViewModel {
                     contextSummary: contextSummarySnapshot,
                     priorTurns: priorTurnsSnapshot,
                     tools: toolsSnapshot,
-                    toolSession: toolSessionSnapshot,
+                    toolContext: toolContextSnapshot,
                     conversationTitle: convTitleSnapshot,
                     conversationID: convIDString
                 )
@@ -484,7 +504,7 @@ extension AppViewModel {
                         contextSummary: contextSummarySnapshot,
                         priorTurns: priorTurnsSnapshot,
                         tools: [],
-                        toolSession: nil,
+                        toolContext: nil,
                         conversationTitle: convTitleSnapshot,
                         conversationID: convIDString
                     )
@@ -520,7 +540,7 @@ extension AppViewModel {
                         contextSummary: contextSummarySnapshot,
                         priorTurns: priorTurnsSnapshot,
                         tools: [],
-                        toolSession: nil,
+                        toolContext: nil,
                         conversationTitle: convTitleSnapshot,
                         conversationID: convIDString
                     )
@@ -798,7 +818,7 @@ extension AppViewModel {
             promptText: trimmed, systemPromptText: original.systemPrompt, mode: mode,
             turnImages: original.images ?? [], imagePayloads: [],
             contextSummary: contextSummary, priorTurns: priorTurns,
-            toolSession: nil, tools: [],
+            toolContext: nil, tools: [],
             debateRoundsCount: original.debateRounds?.count ?? debateRoundsForNextSend,
             workspaceURL: currentWorkspaceURL,
             structuredSchema: structuredSchema
@@ -1322,7 +1342,7 @@ extension AppViewModel {
         contextSummary: String?,
         priorTurns: [PriorTurn],
         tools: [LLMTool],
-        toolSession: WebSearchSession?,
+        toolContext: ToolContext?,
         conversationTitle: String,
         conversationID: String
     ) async -> (responses: [String: String], errors: [String: String]) {
@@ -1347,7 +1367,7 @@ extension AppViewModel {
                         contextSummary: contextSummary,
                         priorTurns: priorTurns,
                         tools: tools,
-                        toolSession: toolSession,
+                        toolContext: toolContext,
                         conversationTitle: conversationTitle,
                         conversationID: conversationID
                     )
@@ -1532,7 +1552,7 @@ extension AppViewModel {
         contextSummary: String?,
         priorTurns: [PriorTurn],
         tools: [LLMTool],
-        toolSession: WebSearchSession?,
+        toolContext: ToolContext?,
         conversationTitle: String,
         conversationID: String
     ) async -> (UUID, String, String?) {
@@ -1557,7 +1577,7 @@ extension AppViewModel {
             options.contextSummary = contextSummary
             options.priorTurns = priorTurns
             options.tools = tools
-            options.toolSession = toolSession
+            options.toolContext = toolContext
             for try await chunk in client.stream(prompt: prompt, options: options, config: config, apiKey: key) {
                 if Task.isCancelled { break }
                 switch chunk {
