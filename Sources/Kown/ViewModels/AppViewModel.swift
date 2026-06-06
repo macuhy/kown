@@ -47,6 +47,8 @@ final class AppViewModel {
     var gitHubError: String?
     /// 设备码授权流程中要展示给用户的 code + 链接;非 nil 表示正在等待用户在浏览器授权。
     var gitHubPendingDeviceCode: GitHubDeviceCode?
+    /// 正在跑的设备码轮询 Task。取消授权时一并 cancel,避免后台轮询「僵尸」继续(甚至事后翻成已连接)。
+    @ObservationIgnored var gitHubFlowTask: Task<Void, Never>?
     /// ⌘K 命令面板是否打开(macOS 菜单命令与 RootView sheet 共用此开关)。
     var showCommandPalette = false
     /// 会话内查找条是否显示(⌘F)。

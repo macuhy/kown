@@ -276,8 +276,11 @@ struct GitHubDeviceCodeSheet: View {
 }
 
 /// 设置页里的「GitHub」区块:连接状态 + 连接 / 断开按钮 + 错误提示。
+/// 设备码授权进行中时**内联**展示验证码(不弹 sheet —— 设置页本身是 sheet,
+/// 再叠一个 sheet 在 macOS 上会被排到设置关闭后才显示)。
 struct GitHubConnectionCard: View {
     @Bindable var viewModel: AppViewModel
+    @State private var copied = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -292,6 +295,9 @@ struct GitHubConnectionCard: View {
                     cardTitle
                     connectionAction
                 }
+            }
+            if let device = viewModel.gitHubPendingDeviceCode {
+                inlineDeviceCode(device)
             }
             if let err = viewModel.gitHubError, !err.isEmpty {
                 errorMessage(err)
@@ -334,6 +340,10 @@ struct GitHubConnectionCard: View {
             }
             .controlSize(.regular)
             .fixedSize(horizontal: true, vertical: false)
+        } else if viewModel.gitHubPendingDeviceCode != nil {
+            Label("授权中…", systemImage: "hourglass")
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(.secondary)
         } else {
             Button {
                 viewModel.startGitHubDeviceFlow()
@@ -343,6 +353,56 @@ struct GitHubConnectionCard: View {
             .buttonStyle(.borderedProminent)
             .controlSize(.regular)
             .fixedSize(horizontal: true, vertical: false)
+        }
+    }
+
+    /// 内联验证码面板:验证码(点复制)+ 打开链接 + 等待态 + 取消。
+    private func inlineDeviceCode(_ device: GitHubDeviceCode) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("在浏览器打开下面的链接,输入验证码完成授权:")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 10) {
+                Button {
+                    Platform.copyText(device.userCode)
+                    withAnimation { copied = true }
+                } label: {
+                    HStack(spacing: 8) {
+                        Text(device.userCode)
+                            .font(.system(.title2, design: .monospaced).weight(.bold))
+                            .tracking(2)
+                        Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                            .foregroundStyle(copied ? .green : .secondary)
+                    }
+                    .padding(.horizontal, 14).padding(.vertical, 8)
+                    .background(Color.platformTextBackground.opacity(0.6),
+                                in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .help("点击复制验证码")
+
+                Button {
+                    if let url = URL(string: device.verificationURI) { Platform.open(url) }
+                } label: {
+                    Label("打开授权页", systemImage: "safari")
+                }
+                .buttonStyle(.bordered)
+            }
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text("等待授权完成…").font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                Button("取消", role: .cancel) { viewModel.cancelGitHubDeviceFlow() }
+                    .controlSize(.small)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.teal.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(Color.teal.opacity(0.20), lineWidth: 1)
         }
     }
 

@@ -14,8 +14,13 @@ struct RootView: View {
             desktopBody
             #endif
         }
-        // 设备码授权进行中时,全局弹出展示验证码的 sheet(从设置页或输入栏发起都能正常显示)。
-        .sheet(item: $viewModel.gitHubPendingDeviceCode) { device in
+        // 设备码授权:从输入栏发起(设置已关)时用这个全局 sheet 展示验证码。
+        // 从设置页发起时,设置本身是 sheet,再叠一个 sheet 会被 macOS 排到设置关闭后才显示 ——
+        // 那种情况改由设置页 GitHubConnectionCard 内联展示;这里用 !showSettings 门控避免重复弹出。
+        .sheet(item: Binding(
+            get: { showSettings ? nil : viewModel.gitHubPendingDeviceCode },
+            set: { if $0 == nil { viewModel.cancelGitHubDeviceFlow() } }
+        )) { device in
             GitHubDeviceCodeSheet(device: device) {
                 viewModel.cancelGitHubDeviceFlow()
             }
@@ -33,15 +38,13 @@ struct RootView: View {
         .toolbar {
             ToolbarItem(placement: .principal) {
                 ModeTabsView(viewModel: viewModel)
+                    .frame(maxWidth: 500)
             }
             #if os(iOS)
             ToolbarItem(placement: .topBarTrailing) {
                 settingsButton
             }
             #else
-            ToolbarItem(placement: .primaryAction) {
-                logsButton
-            }
             ToolbarItem(placement: .primaryAction) {
                 settingsButton
             }
@@ -157,15 +160,6 @@ struct RootView: View {
     }
     #endif
 
-    private var logsButton: some View {
-        Button {
-            Platform.revealInExplorer(ResponseLogger.logsDirectory)
-        } label: {
-            Image(systemName: "doc.text")
-        }
-        .help("打开日志目录")
-    }
-
     private var settingsButton: some View {
         Button {
             showSettings = true
@@ -184,7 +178,7 @@ struct RootView: View {
         #if os(iOS)
         .buttonStyle(.plain)
         #endif
-        .help("厂商配置")
+        .help("设置")
     }
 
     private var commandPaletteButton: some View {

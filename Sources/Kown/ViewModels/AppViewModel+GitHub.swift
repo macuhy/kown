@@ -13,9 +13,11 @@ extension AppViewModel {
     /// 成功后保存 token、刷新连接状态并预拉仓库列表。
     func startGitHubDeviceFlow() {
         gitHubError = nil
-        Task { @MainActor in
+        gitHubFlowTask?.cancel()
+        gitHubFlowTask = Task { @MainActor in
             do {
                 let device = try await GitHubClient.requestDeviceCode()
+                if Task.isCancelled { return }
                 self.gitHubPendingDeviceCode = device
                 let token = try await GitHubClient.pollForToken(device)
                 try GitHubAuth.saveToken(token)
@@ -28,16 +30,21 @@ extension AppViewModel {
                 self.gitHubPendingDeviceCode = nil
                 self.gitHubError = error.localizedDescription
             }
+            self.gitHubFlowTask = nil
         }
     }
 
-    /// 取消正在进行的设备码授权(仅清 UI 状态;轮询 Task 会在下次检查时随会话结束)。
+    /// 取消正在进行的设备码授权:真正 cancel 轮询 Task(pollForToken 在下个 tick 抛 CancellationError)+ 清 UI 状态。
     func cancelGitHubDeviceFlow() {
+        gitHubFlowTask?.cancel()
+        gitHubFlowTask = nil
         gitHubPendingDeviceCode = nil
     }
 
     /// 断开 GitHub:删 token、清缓存、解绑所有会话的仓库选择。
     func disconnectGitHub() {
+        gitHubFlowTask?.cancel()
+        gitHubFlowTask = nil
         GitHubAuth.disconnect()
         gitHubConnected = false
         gitHubRepos = []
