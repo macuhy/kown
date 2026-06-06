@@ -13,8 +13,8 @@ enum GitHubAuth {
     static let clientID = "Ov23li0qCXvbdu8tcru1"
     /// 授权范围:`repo` 才能读写私有仓库(OAuth App 没有更细粒度)。
     static let scope = "repo"
-    /// token 在 KeychainStore 里的固定 key。
-    static let tokenID = UUID(uuidString: "G1THUB00-0000-4000-8000-000000000001")!
+    /// token 在 KeychainStore 里的固定 key。(必须是合法十六进制 UUID — 历史上误用非 hex 串导致启动崩溃。)
+    static let tokenID = UUID(uuidString: "C0FFEE00-0000-4000-8000-000000000001")!
 
     @MainActor static func token() -> String? {
         let t = try? KeychainStore.load(id: tokenID)
