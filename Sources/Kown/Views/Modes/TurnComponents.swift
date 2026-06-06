@@ -745,23 +745,26 @@ struct AppliedWritesStrip: View {
     /// 整组默认收起,点标题展开。
     @State private var expanded = false
 
+    /// 写入目标是 GitHub(任一条带 remoteURL)→ 标题/图标/徽标切成 GitHub 提交样式。
+    private var isRemote: Bool { writes.contains { $0.remoteURL != nil } }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Button {
                 withAnimation(.easeInOut(duration: 0.18)) { expanded.toggle() }
             } label: {
                 HStack(spacing: 6) {
-                    Image(systemName: "tray.and.arrow.down.fill")
+                    Image(systemName: isRemote ? "arrow.triangle.branch" : "tray.and.arrow.down.fill")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(.teal)
-                    Text("Workspace 写入(\(writes.count))")
+                    Text(isRemote ? "GitHub 提交(\(writes.count))" : "Workspace 写入(\(writes.count))")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(.teal)
                     Image(systemName: expanded ? "chevron.up" : "chevron.down")
                         .font(.caption2.weight(.bold))
                         .foregroundStyle(.teal)
                     Spacer()
-                    Text("Applied")
+                    Text(isRemote ? "Committed" : "Applied")
                         .font(.caption2.weight(.bold))
                         .foregroundStyle(.teal)
                         .padding(.horizontal, 8)
@@ -835,7 +838,15 @@ struct AppliedWriteCard: View {
 
     private var isReverted: Bool { write.reverted == true }
     private var canDiff: Bool { write.action == .update && (write.oldContent != nil) }
-    private var canUndo: Bool { onUndo != nil && write.success && write.action != .skipped && !isReverted }
+    // GitHub 提交(remoteURL 非 nil)不走本地 revert,不显示撤销按钮。
+    private var canUndo: Bool { onUndo != nil && write.success && write.action != .skipped && !isReverted && write.remoteURL == nil }
+
+    /// 本次写入影响的行数(+新增 / −删除),成功且非 skipped 时计算。
+    private var diffStats: (added: Int, removed: Int)? {
+        guard write.success, write.action != .skipped else { return nil }
+        let s = TextDiff.stats(TextDiff.diff(old: write.oldContent ?? "", new: write.newContent))
+        return (s.added, s.removed)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -848,6 +859,20 @@ struct AppliedWriteCard: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                 actionBadge
+                if let s = diffStats {
+                    HStack(spacing: 5) {
+                        Text("+\(s.added)").foregroundStyle(.green)
+                        Text("−\(s.removed)").foregroundStyle(.red)
+                    }
+                    .font(.caption2.weight(.bold).monospacedDigit())
+                }
+                if let urlStr = write.remoteURL, let url = URL(string: urlStr) {
+                    Link(destination: url) {
+                        Label("commit", systemImage: "arrow.up.right.square")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.teal)
+                    }
+                }
                 if isReverted {
                     Text("已撤销")
                         .font(.caption2.weight(.bold))

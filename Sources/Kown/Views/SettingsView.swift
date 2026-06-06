@@ -12,6 +12,7 @@ struct SettingsView: View {
         case prompts
         case skills
         case deviceTools
+        case github
         case chains
         case webSearch
         case tts
@@ -35,6 +36,7 @@ struct SettingsView: View {
             case .prompts:     return "Prompt 库"
             case .skills:      return "技能"
             case .deviceTools: return "设备工具"
+            case .github:      return "GitHub"
             case .chains:      return "工作流"
             case .webSearch:   return "Web Search"
             case .tts:         return "朗读"
@@ -58,6 +60,7 @@ struct SettingsView: View {
             case .prompts:     return "text.badge.plus"
             case .skills:      return "wand.and.stars"
             case .deviceTools: return "checklist.checked"
+            case .github:      return "chevron.left.forwardslash.chevron.right"
             case .chains:      return "arrow.triangle.branch"
             case .webSearch:   return "globe"
             case .tts:         return "waveform"
@@ -81,6 +84,7 @@ struct SettingsView: View {
             case .prompts:     return Color(red: 0.56, green: 0.40, blue: 0.86)
             case .skills:      return Color(red: 0.48, green: 0.36, blue: 0.90)
             case .deviceTools: return Color(red: 0.20, green: 0.60, blue: 0.62)
+            case .github:      return Color(red: 0.18, green: 0.62, blue: 0.58)
             case .chains:      return Color(red: 0.30, green: 0.52, blue: 0.88)
             case .webSearch:   return Color(red: 0.16, green: 0.48, blue: 0.94)
             case .tts:         return Color(red: 0.36, green: 0.46, blue: 0.92)
@@ -170,6 +174,8 @@ struct SettingsView: View {
                         SkillsLibraryView(store: viewModel.skillsStore, viewModel: viewModel)
                     case .deviceTools:
                         DeviceToolsSettingsView(viewModel: viewModel)
+                    case .github:
+                        gitHubTab
                     case .chains:
                         ChainView()
                     case .webSearch:
@@ -704,6 +710,8 @@ struct SettingsView: View {
                 SkillsLibraryView(store: viewModel.skillsStore, viewModel: viewModel)
             case .deviceTools:
                 DeviceToolsSettingsView(viewModel: viewModel)
+            case .github:
+                gitHubTab
             case .chains:
                 ChainView()
             case .webSearch:
@@ -967,12 +975,43 @@ struct SettingsView: View {
         }
     }
 
+    /// GitHub 连接设置页:连接卡片 + 用法说明。(macOS / iOS 共用)
+    private var gitHubTab: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                GitHubConnectionCard(viewModel: viewModel)
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("怎么用", systemImage: "info.circle")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.secondary)
+                    Text("""
+                    1. 点「连接」,在浏览器输入验证码完成授权(授权范围 repo,可读写你的仓库)。
+                    2. 回到对话,在输入栏的「选仓库」里选一个目标仓库。
+                    3. 让模型把定稿内容写进文件 —— 它会用 kown:write 块,系统自动提交到该仓库,\
+                    并在聊天里显示每个文件的 +/- 行数与 commit 链接。
+
+                    提示:本会话同时设了本地 workspace 时,以本地写入优先。
+                    """)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                Spacer(minLength: 0)
+            }
+            .padding(20)
+        }
+    }
+
     private var headerSubtitle: String {
         switch tab {
         case .providers:   return "管理连接、密钥和每个模型的默认生成参数。"
         case .prompts:     return "保存可复用的 Prompt 模板,用 {{变量}} 占位,填充后一键复制。"
         case .skills:      return "技能 = 系统提示 + 可用工具。可按输入自动触发,也可绑定到当前会话。"
         case .deviceTools: return "让模型在你的系统「提醒事项 / 备忘录」里创建条目。需授权;iOS 备忘录走剪贴板+跳转。"
+        case .github:      return "连接 GitHub 后,对话里可选仓库,把定稿内容直接提交;聊天显示改动行数与 commit 链接。"
         case .chains:      return "把多个「模型 + 指示」步骤串成流水线,用 {{prev}} / {{input}} 接力,逐步执行。"
         case .webSearch:   return "配置 Firecrawl 让模型在需要时调用 web_search。"
         case .tts:         return "选择朗读引擎与音色:硅基流动 CosyVoice、讯飞语音(均国内直连)或系统语音。"

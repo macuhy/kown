@@ -89,6 +89,16 @@ extension AppViewModel {
         // 扫文件树 / 本地 RAG(切块+NLEmbedding)/ 记忆 BM25 在大输入上能卡主线程 0.5–2s。
         // 这里只在主线程捕获**轻量**的原始输入,真正的打包在 runSend 的后台任务里做。
         let workspaceURLForSend = currentWorkspaceURL          // 双用途:① 上下文打包 ② kown:write 落盘
+        // GitHub 写入目标:本会话绑定了仓库且已连接 GitHub 时启用(与本地 workspace 互斥,本地优先)。
+        let gitHubTargetForSend: GitHubWriteTarget? = (workspaceURLForSend == nil)
+            ? GitHubWriteTarget.make(
+                repoFullName: conversations[convIdx].gitHubRepo,
+                branch: conversations[convIdx].gitHubBranch,
+                token: GitHubAuth.token())
+            : nil
+        let gitHubInstructionsForSend = gitHubTargetForSend.map {
+            GitHubClient.writeInstructions(repo: $0.fullName, branch: $0.branch)
+        }
         let knowledgeFolderForSend = currentKnowledgeFolder
         // memory items 取一份快照(O(1) COW),供后台 BM25 打分,避免触碰 @MainActor 的 MemoryStore。
         let memoryItemsForSend: [MemoryItem] = memoryInjectionEnabled ? MemoryStore.shared.items : []
@@ -151,6 +161,8 @@ extension AppViewModel {
             toolContext: toolContextSnapshot, tools: toolsSnapshot,
             debateRoundsCount: debateRoundsSnapshot, workspaceURL: workspaceURLForSend,
             structuredSchema: structuredSchemaSnapshot,
+            gitHubTarget: gitHubTargetForSend,
+            gitHubInstructions: gitHubInstructionsForSend,
             workspaceContextURL: workspaceURLForSend,
             knowledgeFolder: knowledgeFolderForSend,
             knowledgeQuery: trimmed,
@@ -167,6 +179,7 @@ extension AppViewModel {
     nonisolated private static func assembleSystemPrompt(
         base: String,
         workspaceContextURL: URL?,
+        gitHubInstructions: String?,
         knowledgeFolder: KnowledgeFolder?,
         knowledgeQuery: String,
         memoryItems: [MemoryItem],
@@ -175,6 +188,9 @@ extension AppViewModel {
         var parts: [String] = []
         if let url = workspaceContextURL, let ctx = WorkspaceManager.buildContext(workspaceURL: url) {
             parts.append(ctx)
+        }
+        if let gh = gitHubInstructions, !gh.isEmpty {
+            parts.append(gh)
         }
         if let folder = knowledgeFolder {
             let hits = await LocalRAG.retrieve(query: knowledgeQuery, folder: folder, topK: 4)
@@ -211,6 +227,9 @@ extension AppViewModel {
         debateRoundsCount: Int,
         workspaceURL: URL?,
         structuredSchema: String? = nil,
+        // GitHub 写入目标(本会话绑定了仓库时才传);kown:write 块提交到该仓库而非本地 workspace。
+        gitHubTarget: GitHubWriteTarget? = nil,
+        gitHubInstructions: String? = nil,
         // 上下文来源(主发送路径才传;edit/retry 用默认空值 → 不二次注入,沿用 systemPromptText 原样)。
         // 在后台 assembleSystemPrompt 里前置到 systemPromptText 前面。
         workspaceContextURL: URL? = nil,
@@ -296,6 +315,7 @@ extension AppViewModel {
             let sysSnapshot = await Self.assembleSystemPrompt(
                 base: systemPromptText,
                 workspaceContextURL: workspaceContextURL,
+                gitHubInstructions: gitHubInstructions,
                 knowledgeFolder: knowledgeFolder,
                 knowledgeQuery: knowledgeQuery,
                 memoryItems: memoryItems,
@@ -619,6 +639,37 @@ extension AppViewModel {
                             action: .skipped,
                             success: false,
                             error: "Model 输出了代码块,但都不是 kown:write 格式。提醒它用 kown:write 代码块改文件,或者直接复制内容到目标文件。",
+                            newContent: ""
+                        )]
+                    }
+                }
+            } else if let gh = gitHubTarget {
+                // 2.7') GitHub 写文件:扫响应里的 kown:write 块,逐个提交到绑定仓库。
+                var allTexts: [String] = []
+                allTexts.append(contentsOf: responses.values)
+                if let cs = chairSummary { allTexts.append(cs) }
+                if let st = summaryText { allTexts.append(st) }
+                var pendings: [PendingWrite] = []
+                for t in allTexts {
+                    pendings.append(contentsOf: WorkspaceManager.parseProposedWrites(t))
+                }
+                var seen: [String: PendingWrite] = [:]
+                for p in pendings { seen[p.relativePath] = p }
+                if !seen.isEmpty {
+                    let client = GitHubClient(token: gh.token)
+                    var committed: [AppliedWrite] = []
+                    for w in seen.values {
+                        committed.append(await client.commit(w, owner: gh.owner, repo: gh.repo, branch: gh.branch))
+                    }
+                    appliedWrites = committed
+                } else {
+                    let hasOtherCodeFence = allTexts.contains { $0.contains("```") }
+                    if hasOtherCodeFence {
+                        appliedWrites = [AppliedWrite(
+                            relativePath: "(无)",
+                            action: .skipped,
+                            success: false,
+                            error: "Model 输出了代码块,但都不是 kown:write 格式 — 没有内容被提交到 GitHub。",
                             newContent: ""
                         )]
                     }

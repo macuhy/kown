@@ -37,6 +37,16 @@ final class AppViewModel {
     var analyzingConsensusTurns: Set<UUID> = []
     /// 差异分析失败时的原因,key = turnID(给用户看;成功或重试时清空)。
     var consensusErrors: [UUID: String] = [:]
+    /// GitHub 集成:是否已连接(token 存在)。连接 / 断开后刷新,驱动 UI 显示。
+    var gitHubConnected: Bool = GitHubAuth.isConnected()
+    /// 当前用户的 GitHub 仓库列表(选仓库菜单用,首次打开时按需拉取后缓存)。
+    var gitHubRepos: [GitHubRepo] = []
+    /// 正在拉取仓库列表。
+    var gitHubReposLoading = false
+    /// 拉取仓库 / 设备码授权失败时的原因(给用户看)。
+    var gitHubError: String?
+    /// 设备码授权流程中要展示给用户的 code + 链接;非 nil 表示正在等待用户在浏览器授权。
+    var gitHubPendingDeviceCode: GitHubDeviceCode?
     /// ⌘K 命令面板是否打开(macOS 菜单命令与 RootView sheet 共用此开关)。
     var showCommandPalette = false
     /// 会话内查找条是否显示(⌘F)。

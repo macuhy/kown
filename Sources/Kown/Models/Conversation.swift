@@ -463,6 +463,11 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
     var structuredSchema: String?
     /// 手动绑定到本会话的技能 id。非 nil 时该技能恒定生效(覆盖自动触发)。nil = 不绑定。
     var selectedSkillID: UUID?
+    /// 本会话绑定的 GitHub 仓库 "owner/repo"。非 nil 时,model 输出的 ```kown:write 块会提交到该仓库
+    /// (而非本地 workspace),提交结果以 AppliedWrite 形式归档进 Turn 并在聊天里显示 diff 行数。
+    var gitHubRepo: String?
+    /// 提交到的分支。nil 回退到仓库默认分支(选仓库时填入)。
+    var gitHubBranch: String?
 
     init(id: UUID = UUID(),
          title: String = "New Conversation",
@@ -487,7 +492,9 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
          knowledgeFolderID: UUID? = nil,
          folderID: UUID? = nil,
          structuredSchema: String? = nil,
-         selectedSkillID: UUID? = nil) {
+         selectedSkillID: UUID? = nil,
+         gitHubRepo: String? = nil,
+         gitHubBranch: String? = nil) {
         self.id = id
         self.title = title
         self.mode = mode
@@ -512,6 +519,8 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
         self.folderID = folderID
         self.structuredSchema = structuredSchema
         self.selectedSkillID = selectedSkillID
+        self.gitHubRepo = gitHubRepo
+        self.gitHubBranch = gitHubBranch
     }
 
     // 兼容旧 JSON(缺新字段)
@@ -541,6 +550,8 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
         self.folderID = try c.decodeIfPresent(UUID.self, forKey: .folderID)
         self.structuredSchema = try c.decodeIfPresent(String.self, forKey: .structuredSchema)
         self.selectedSkillID = try c.decodeIfPresent(UUID.self, forKey: .selectedSkillID)
+        self.gitHubRepo = try c.decodeIfPresent(String.self, forKey: .gitHubRepo)
+        self.gitHubBranch = try c.decodeIfPresent(String.self, forKey: .gitHubBranch)
     }
 
     var lastPromptPreview: String {
@@ -597,6 +608,8 @@ struct AppliedWrite: Identifiable, Codable, Hashable, Sendable {
     var newContent: String
     /// 是否已被用户撤销(撤销后还原 oldContent / 删除新建文件)。旧存档无该字段 → optional。
     var reverted: Bool?
+    /// 写入目标是 GitHub 提交时,commit 的网页地址(本地 workspace 写入为 nil)。旧存档无该字段 → optional。
+    var remoteURL: String?
 
     enum Action: String, Codable, Sendable {
         case create     // 文件原本不存在
@@ -611,7 +624,8 @@ struct AppliedWrite: Identifiable, Codable, Hashable, Sendable {
          error: String? = nil,
          oldContent: String? = nil,
          newContent: String,
-         reverted: Bool? = nil) {
+         reverted: Bool? = nil,
+         remoteURL: String? = nil) {
         self.id = id
         self.relativePath = relativePath
         self.action = action
@@ -620,5 +634,6 @@ struct AppliedWrite: Identifiable, Codable, Hashable, Sendable {
         self.oldContent = oldContent
         self.newContent = newContent
         self.reverted = reverted
+        self.remoteURL = remoteURL
     }
 }

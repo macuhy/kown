@@ -7,11 +7,19 @@ struct RootView: View {
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     var body: some View {
-        #if os(iOS)
-        iOSBody
-        #else
-        desktopBody
-        #endif
+        Group {
+            #if os(iOS)
+            iOSBody
+            #else
+            desktopBody
+            #endif
+        }
+        // 设备码授权进行中时,全局弹出展示验证码的 sheet(从设置页或输入栏发起都能正常显示)。
+        .sheet(item: $viewModel.gitHubPendingDeviceCode) { device in
+            GitHubDeviceCodeSheet(device: device) {
+                viewModel.cancelGitHubDeviceFlow()
+            }
+        }
     }
 
     private var desktopBody: some View {

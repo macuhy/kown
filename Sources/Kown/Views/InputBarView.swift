@@ -375,6 +375,7 @@ struct InputBarView: View {
                 showPromptLibrary = true
             }
             knowledgeButton
+            GitHubRepoButton(viewModel: viewModel, tint: viewModel.currentMode.kownTint)
             if viewModel.canEnableWebSearch {
                 iconButton(scraping ? "hourglass" : "link.badge.plus", help: "抓取网页正文入上下文") {
                     urlDraft = ""
