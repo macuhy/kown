@@ -50,18 +50,19 @@ final class LocalRAGTests: XCTestCase {
 
     @MainActor
     func testRetrieveRanksRelevantChunkFirst() async throws {
-        // 注意:语料里放足够多的「干扰文档」。仅 2 篇时 BM25 的 IDF 退化——只在一篇出现的词
-        // idf=log((2-1+0.5)/(1+0.5))=0,得分为 0 被过滤,排序就只能靠 NLEmbedding 向量模型,
-        // 而该模型在 CI 上加载/可用性不稳 → 测试时绿时红。多放几篇让「光合作用」IDF 转正,
-        // BM25 单独即可稳定命中,不依赖向量模型。
+        // 稳定性关键:查询词必须**只**出现在目标文档里。BM25⁺(idf 带 +1,恒正)下,任何与查询
+        // 共享字符的干扰文档都会拿到正分进入排序;一旦 NLEmbedding 向量模型可用(CI 时有时无),
+        // RRF 融合可能把这种干扰文档顶到 B 前面 → 测试时绿时红。
+        // 这里用「光合作用」做查询,且确保 A/C/D/E 都不含 光/合/作/用 等字(D 原文有「用」,改成「靠」),
+        // 于是 BM25 只命中 B,B 永远排第一,与向量模型是否可用无关。
         let folder = KnowledgeFolder(name: "测试", docs: [
             KnowledgeDoc(name: "A", text: "猫是一种常见的家养宠物,喜欢睡觉和抓老鼠。"),
             KnowledgeDoc(name: "B", text: "光合作用是植物把二氧化碳和水转化成有机物的过程。"),
             KnowledgeDoc(name: "C", text: "篮球是一项团队运动,两队各五人争夺得分。"),
-            KnowledgeDoc(name: "D", text: "钢琴是一种键盘乐器,用琴槌敲击琴弦发声。"),
+            KnowledgeDoc(name: "D", text: "钢琴是一种键盘乐器,靠琴槌敲击琴弦发声。"),
             KnowledgeDoc(name: "E", text: "长城是中国古代修建的军事防御工程,绵延万里。"),
         ])
-        let hits = await LocalRAG.retrieve(query: "植物的光合作用是什么", folder: folder, topK: 1)
+        let hits = await LocalRAG.retrieve(query: "光合作用", folder: folder, topK: 1)
         let first = try XCTUnwrap(hits.first)
         XCTAssertTrue(first.contains("光合作用"))
     }
