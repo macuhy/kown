@@ -269,45 +269,72 @@ struct SidebarView: View {
     }
 
     private var desktopHeader: some View {
-        HStack(spacing: 12) {
-            KownModeMark(mode: viewModel.currentMode, size: 40)
+        HStack(spacing: 10) {
+            KownModeMark(mode: viewModel.currentMode, size: 32)
+                .shadow(color: currentModeTint.opacity(0.12), radius: 8, x: 0, y: 4)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("Conversation Library")
-                    .font(.system(.headline, design: .rounded).weight(.bold))
-                Text("\(viewModel.activeConversations.count) 个会话 · \(viewModel.conversationFolders.count) 个文件夹")
+                Text("会话")
+                    .font(.system(.headline, design: .rounded).weight(.black))
+                    .lineLimit(1)
+                Text("\(viewModel.currentMode.displayName) · \(viewModel.activeConversations.count) 个会话 · \(viewModel.conversationFolders.count) 个文件夹")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.74)
             }
-            Spacer()
-            Button {
+            .layoutPriority(1)
+
+            Spacer(minLength: 6)
+
+            desktopHeaderButton("folder.badge.plus", help: "新建文件夹") {
                 newFolderName = ""
                 showNewFolder = true
-            } label: {
-                Image(systemName: "folder.badge.plus")
-                    .font(.system(size: 13, weight: .bold))
-                    .frame(width: 30, height: 30)
-                    .background(Color.platformControlBackground.opacity(0.55), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
-            .buttonStyle(.borderless)
-            .help("新建文件夹")
-            Button {
+            desktopHeaderButton("square.and.pencil", filled: true, help: "新建会话") {
                 viewModel.newConversation(mode: viewModel.currentMode)
                 onSelectConversation()
-            } label: {
-                Image(systemName: "square.and.pencil")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 30, height: 30)
-                    .background(currentModeTint, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
-            .buttonStyle(.borderless)
-            .help("新建会话")
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
-        .background(.thinMaterial)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background {
+            ZStack {
+                Rectangle().fill(.thinMaterial)
+                LinearGradient(
+                    colors: [currentModeTint.opacity(0.08), Color.clear],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            }
+        }
+    }
+
+    private func desktopHeaderButton(
+        _ symbol: String,
+        filled: Bool = false,
+        help: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(filled ? .white : currentModeTint)
+                .frame(width: 31, height: 31)
+                .background(
+                    filled ? currentModeTint : Color.platformControlBackground.opacity(0.66),
+                    in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(filled ? Color.white.opacity(0.24) : currentModeTint.opacity(0.14), lineWidth: 1)
+                }
+                .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .buttonStyle(.borderless)
+        .help(help)
+        .accessibilityLabel(help)
     }
 
     #if os(iOS)
@@ -326,7 +353,7 @@ struct SidebarView: View {
 
             Spacer(minLength: 8)
 
-            headerIconButton("gearshape.fill", help: "厂商配置", action: onOpenSettings)
+            headerIconButton("gearshape.fill", help: "设置", action: onOpenSettings)
             headerIconButton("folder.badge.plus", help: "新建文件夹") {
                 newFolderName = ""
                 showNewFolder = true
