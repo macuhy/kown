@@ -218,10 +218,13 @@ struct DirectTurnsView: View {
                             Image(systemName: "ellipsis.circle")
                                 .font(.system(size: 13, weight: .semibold))
                                 .foregroundStyle(.secondary)
+                                .frame(width: 30, height: 30)
+                                .contentShape(Circle())
                         }
                         .menuStyle(.borderlessButton)
                         .menuIndicator(.hidden)
                         .fixedSize()
+                        .accessibilityLabel("本轮问题操作")
                     }
                     Text(timestamp, style: .time)
                         .font(.caption2)
@@ -257,29 +260,7 @@ struct DirectTurnsView: View {
             .shadow(color: accentColor(config).opacity(0.16), radius: 10, x: 0, y: 5)
 
             VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 6) {
-                    Text(config.displayName)
-                        .font(.caption.weight(.bold))
-                    Text(config.model)
-                        .font(.system(.caption2, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                    Spacer(minLength: 8)
-                    if let tokenUsage, tokenUsage.input > 0 || tokenUsage.output > 0 {
-                        TokenCostPill(usage: tokenUsage, model: config.model, providerKind: config.kind)
-                    }
-                    if streaming {
-                        HStack(spacing: 5) {
-                            ProgressView().controlSize(.small)
-                            Text("生成中")
-                        }
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(accentColor(config))
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(accentColor(config).opacity(0.10), in: Capsule())
-                    }
-                }
+                assistantHeader(config: config, streaming: streaming, tokenUsage: tokenUsage)
                 if let reasoning, !reasoning.isEmpty {
                     ReasoningDisclosure(reasoning: reasoning, streaming: streaming, tint: accentColor(config))
                 }
@@ -331,6 +312,59 @@ struct DirectTurnsView: View {
             }
             Spacer(minLength: assistantTrailingGutter)
         }
+    }
+
+    private func assistantHeader(config: ProviderConfig, streaming: Bool, tokenUsage: TurnTokenUsage?) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 6) {
+                Text(config.displayName)
+                    .font(.caption.weight(.bold))
+                    .lineLimit(1)
+                Text(config.model)
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: 8)
+                if let tokenUsage, tokenUsage.input > 0 || tokenUsage.output > 0 {
+                    TokenCostPill(usage: tokenUsage, model: config.model, providerKind: config.kind)
+                }
+                if streaming {
+                    streamingBadge(config: config)
+                }
+            }
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 6) {
+                    Text(config.displayName)
+                        .font(.caption.weight(.bold))
+                        .lineLimit(1)
+                    Spacer(minLength: 6)
+                    if streaming {
+                        streamingBadge(config: config)
+                    }
+                }
+                Text(config.model)
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                if let tokenUsage, tokenUsage.input > 0 || tokenUsage.output > 0 {
+                    TokenCostPill(usage: tokenUsage, model: config.model, providerKind: config.kind)
+                }
+            }
+        }
+    }
+
+    private func streamingBadge(config: ProviderConfig) -> some View {
+        HStack(spacing: 5) {
+            ProgressView().controlSize(.small)
+            Text("生成中")
+        }
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(accentColor(config))
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(accentColor(config).opacity(0.10), in: Capsule())
     }
 
     private var usesCompactChatLayout: Bool {

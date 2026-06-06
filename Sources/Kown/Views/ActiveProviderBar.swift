@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Direct / Compare 模式下显示当前选中的 provider,点击可改。
-/// Council 模式隐藏(用全部 enabled,不需要选)。
+/// Direct / Compare 显示当前选中的 provider,点击可改;Structured / Tournament 只读展示参赛池。
+/// Council / Debate 隐藏(用各自的模式内配置,不需要在输入栏上方再选)。
 struct ActiveProviderBar: View {
     @Bindable var viewModel: AppViewModel
 
@@ -81,23 +81,26 @@ struct ActiveProviderBar: View {
                         .strokeBorder(mode.kownTint.opacity(0.20), lineWidth: 1)
                 }
             VStack(alignment: .leading, spacing: 1) {
-                Text(mode == .direct ? "对话模型" : "对比模型")
+                Text(labelTitle(for: mode))
                     .font(.caption.weight(.bold))
                     .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
                 #if !os(iOS)
-                Text(mode == .direct ? "Single responder" : "Same prompt, two reads")
+                Text(labelSubtitle(for: mode))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                 #endif
             }
         }
-        .fixedSize(horizontal: true, vertical: false)
+        .fixedSize(horizontal: labelFixedHorizontal, vertical: false)
+        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder
     private func chips(_ mode: ConversationMode) -> some View {
-        // 只展示本轮真正会回答的模型(Direct = 1,Compare = ≤2)。
-        // 增删 / 换模型走右侧「选择 ≤2 / 切换模型」菜单。
+        // 只展示本轮真正会回答的模型(Direct = 1,Compare = ≤2,Structured/Tournament = 自动参赛池)。
+        // Direct/Compare 的增删 / 换模型走右侧菜单,Structured/Tournament 只读避免误以为能切换。
         let chipList = chipProviders()
         if chipList.isEmpty {
             statusChip("无可用 provider", icon: "exclamationmark.triangle.fill", tint: .orange)
@@ -152,6 +155,8 @@ struct ActiveProviderBar: View {
                         .font(.caption.weight(.bold))
                         .foregroundStyle(Color.primary)
                         .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: providerNameMaxWidth, alignment: .leading)
                     if cfg.isChair { roleBadge("主席", icon: "crown.fill", tint: chairTint) }
                     if cfg.isSummary { roleBadge("总结", icon: "list.bullet.rectangle.fill", tint: summaryTint) }
                 }
@@ -168,6 +173,8 @@ struct ActiveProviderBar: View {
         .padding(.vertical, chipVerticalPadding)
         .background { Capsule().fill(tint.opacity(0.10)) }
         .overlay { Capsule().strokeBorder(tint.opacity(0.24), lineWidth: 1) }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(cfg.displayName), \(cfg.model)")
     }
 
     /// Chair / Summary 角色小徽标 — 紧凑 capsule,跟 chip 内文对齐。
@@ -189,34 +196,95 @@ struct ActiveProviderBar: View {
 
     @ViewBuilder
     private func picker(_ mode: ConversationMode) -> some View {
-        let enabled = viewModel.providers.filter(\.enabled)
-        let selected = currentSelectedChoices(mode: mode)
-        Menu {
-            if enabled.isEmpty {
-                Text("没有启用的 provider — 去设置启用一个")
-            } else {
-                ForEach(enabled) { cfg in
-                    providerMenuItem(cfg: cfg, mode: mode, selected: selected)
+        if mode == .structured || mode == .tournament {
+            readOnlyPickerLabel(mode)
+        } else {
+            let enabled = viewModel.providers.filter(\.enabled)
+            let selected = currentSelectedChoices(mode: mode)
+            Menu {
+                if enabled.isEmpty {
+                    Text("没有启用的 provider — 去设置启用一个")
+                } else {
+                    ForEach(enabled) { cfg in
+                        providerMenuItem(cfg: cfg, mode: mode, selected: selected)
+                    }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Text(mode == .compare ? "选择 ≤2" : "切换模型")
+                        .font(.caption.weight(.bold))
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 10, weight: .bold))
+                }
+                .foregroundStyle(enabled.isEmpty ? Color.secondary : mode.kownTint)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background((enabled.isEmpty ? Color.secondary : mode.kownTint).opacity(0.11), in: Capsule())
+                .overlay {
+                    Capsule().strokeBorder((enabled.isEmpty ? Color.secondary : mode.kownTint).opacity(0.22), lineWidth: 1)
                 }
             }
-        } label: {
-            HStack(spacing: 6) {
-                Text(mode == .compare ? "选择 ≤2" : "切换模型")
-                    .font(.caption.weight(.bold))
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 10, weight: .bold))
-            }
-            .foregroundStyle(enabled.isEmpty ? Color.secondary : mode.kownTint)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background((enabled.isEmpty ? Color.secondary : mode.kownTint).opacity(0.11), in: Capsule())
-            .overlay {
-                Capsule().strokeBorder((enabled.isEmpty ? Color.secondary : mode.kownTint).opacity(0.22), lineWidth: 1)
-            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .disabled(enabled.isEmpty)
         }
-        .menuStyle(.borderlessButton)
+    }
+
+    private func readOnlyPickerLabel(_ mode: ConversationMode) -> some View {
+        let enabledCount = chipProviders().count
+        let text = mode == .structured ? "自动选择" : "参赛池"
+        let detail = enabledCount > 0 ? "\(enabledCount) 个" : "无可用"
+        return HStack(spacing: 6) {
+            Image(systemName: enabledCount > 0 ? "lock.fill" : "exclamationmark.triangle.fill")
+                .font(.system(size: 10, weight: .bold))
+            Text(text)
+                .font(.caption.weight(.bold))
+            Text(detail)
+                .font(.caption2.weight(.semibold))
+                .monospacedDigit()
+        }
+        .foregroundStyle(enabledCount > 0 ? mode.kownTint : Color.orange)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background((enabledCount > 0 ? mode.kownTint : Color.orange).opacity(0.11), in: Capsule())
+        .overlay {
+            Capsule().strokeBorder((enabledCount > 0 ? mode.kownTint : Color.orange).opacity(0.22), lineWidth: 1)
+        }
         .fixedSize()
-        .disabled(enabled.isEmpty)
+        .accessibilityLabel(readOnlyAccessibilityLabel(for: mode, enabledCount: enabledCount))
+    }
+
+    private func labelTitle(for mode: ConversationMode) -> String {
+        switch mode {
+        case .direct: return "对话模型"
+        case .compare: return "对比模型"
+        case .structured: return "结构化模型"
+        case .tournament: return "参赛模型"
+        case .council: return "参议模型"
+        case .debate: return "辩论模型"
+        }
+    }
+
+    private func labelSubtitle(for mode: ConversationMode) -> String {
+        switch mode {
+        case .direct: return "Single responder"
+        case .compare: return "Same prompt, two reads"
+        case .structured: return "Strict JSON from enabled API models"
+        case .tournament: return "Non-CLI players judged in bracket"
+        case .council: return "Enabled panel with chair summary"
+        case .debate: return "Enabled panel in rebuttal rounds"
+        }
+    }
+
+    private func readOnlyAccessibilityLabel(for mode: ConversationMode, enabledCount: Int) -> String {
+        switch mode {
+        case .structured:
+            return "结构化模式自动选择 \(enabledCount) 个可用模型"
+        case .tournament:
+            return "锦标赛模式参赛池 \(enabledCount) 个可用模型"
+        default:
+            return "\(labelTitle(for: mode)) \(enabledCount) 个可用模型"
+        }
     }
 
     private var outerHorizontalPadding: CGFloat {
@@ -272,6 +340,22 @@ struct ActiveProviderBar: View {
         return 4
         #else
         return 6
+        #endif
+    }
+
+    private var labelFixedHorizontal: Bool {
+        #if os(iOS)
+        return false
+        #else
+        return true
+        #endif
+    }
+
+    private var providerNameMaxWidth: CGFloat {
+        #if os(iOS)
+        return 132
+        #else
+        return 190
         #endif
     }
 

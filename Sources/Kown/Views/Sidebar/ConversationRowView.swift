@@ -49,7 +49,7 @@ struct ConversationRowView: View {
                                 .foregroundStyle(modeColor)
                                 .rotationEffect(.degrees(45))
                         }
-                        Text(conversation.title.isEmpty ? "New Conversation" : conversation.title)
+                        Text(displayTitle)
                             .font(.system(.subheadline, design: .rounded).weight(.bold))
                             .foregroundStyle(.primary)
                             .lineLimit(1)
@@ -96,10 +96,16 @@ struct ConversationRowView: View {
 
             #if os(iOS)
             if !isRenaming {
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(isSelected ? modeColor.opacity(0.95) : Color.secondary.opacity(0.45))
-                    .padding(.top, 10)
+                HStack(spacing: 6) {
+                    rowActionsMenu
+                    if !inTrash {
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(isSelected ? modeColor.opacity(0.95) : Color.secondary.opacity(0.45))
+                            .accessibilityHidden(true)
+                    }
+                }
+                .padding(.top, 5)
             }
             #endif
         }
@@ -129,38 +135,73 @@ struct ConversationRowView: View {
         .onTapGesture {
             if !isRenaming && !inTrash { onSelect() }
         }
-        .contextMenu {
-            if inTrash {
-                Button("恢复") { onRestore() }
-                Button("永久删除", role: .destructive) { confirmPurge = true }
-            } else {
-                Button(conversation.pinned ? "取消置顶" : "置顶") { onTogglePin() }
-                Button("编辑标签…") { onEditTags() }
-                Button("重命名") { onStartRename() }
-                Button("会话设置(提示 / 参数)…") { onEditSystemPrompt() }
-                if !folders.isEmpty {
-                    Menu("移动到文件夹") {
-                        ForEach(folders) { f in
-                            Button {
-                                onMoveToFolder(f.id)
-                            } label: {
-                                if conversation.folderID == f.id {
-                                    Label(f.name, systemImage: "checkmark")
-                                } else {
-                                    Text(f.name)
-                                }
-                            }
-                        }
-                        Divider()
-                        Button("移出(未分组)") { onMoveToFolder(nil) }
-                    }
-                }
-                Button("移到回收站", role: .destructive) { onDelete() }
-            }
-        }
-        .confirmationDialog("永久删除「\(conversation.title)」?此操作不可恢复。", isPresented: $confirmPurge) {
+        .contextMenu { rowActionItems }
+        .accessibilityHint(inTrash ? "打开更多操作可恢复或永久删除" : "点按打开会话，更多操作里可置顶、重命名或移动")
+        .confirmationDialog("永久删除「\(displayTitle)」?此操作不可恢复。", isPresented: $confirmPurge) {
             Button("永久删除", role: .destructive) { onPurge() }
             Button("取消", role: .cancel) { }
+        }
+    }
+
+    private var rowActionsMenu: some View {
+        Menu {
+            rowActionItems
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(.secondary)
+                .frame(width: 30, height: 30)
+                .background(Color.primary.opacity(0.05), in: Circle())
+                .contentShape(Circle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .accessibilityLabel("\(displayTitle) 的更多操作")
+    }
+
+    @ViewBuilder
+    private var rowActionItems: some View {
+        if inTrash {
+            Button { onRestore() } label: {
+                Label("恢复", systemImage: "arrow.uturn.backward")
+            }
+            Button(role: .destructive) { confirmPurge = true } label: {
+                Label("永久删除", systemImage: "trash.slash")
+            }
+        } else {
+            Button { onTogglePin() } label: {
+                Label(conversation.pinned ? "取消置顶" : "置顶",
+                      systemImage: conversation.pinned ? "pin.slash" : "pin")
+            }
+            Button { onEditTags() } label: {
+                Label("编辑标签…", systemImage: "tag")
+            }
+            Button { onStartRename() } label: {
+                Label("重命名", systemImage: "pencil")
+            }
+            Button { onEditSystemPrompt() } label: {
+                Label("会话设置(提示 / 参数)…", systemImage: "slider.horizontal.3")
+            }
+            if !folders.isEmpty {
+                Menu("移动到文件夹") {
+                    ForEach(folders) { f in
+                        Button {
+                            onMoveToFolder(f.id)
+                        } label: {
+                            if conversation.folderID == f.id {
+                                Label(f.name, systemImage: "checkmark")
+                            } else {
+                                Text(f.name)
+                            }
+                        }
+                    }
+                    Divider()
+                    Button("移出(未分组)") { onMoveToFolder(nil) }
+                }
+            }
+            Button(role: .destructive) { onDelete() } label: {
+                Label("移到回收站", systemImage: "trash")
+            }
         }
     }
 
@@ -190,6 +231,12 @@ struct ConversationRowView: View {
 
     private var modeColor: Color {
         conversation.mode.kownTint
+    }
+
+    private var displayTitle: String {
+        conversation.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "New Conversation"
+            : conversation.title
     }
 
     private var modeLabel: String {

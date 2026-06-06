@@ -100,77 +100,25 @@ struct SkillsLibraryView: View {
 
     private func skillCard(_ skill: Skill) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 12) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(LinearGradient(colors: [Self.tint.opacity(0.22), Self.tint.opacity(0.08)],
-                                             startPoint: .topLeading, endPoint: .bottomTrailing))
-                    Image(systemName: "wand.and.stars")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(Self.tint)
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: 12) {
+                    skillIcon
+                    skillText(skill)
+                    Spacer(minLength: 8)
+                    skillActions(skill, includeLabel: false)
                 }
-                .frame(width: 38, height: 38)
 
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 6) {
-                        Text(skill.name.isEmpty ? "未命名技能" : skill.name)
-                            .font(.system(.subheadline, design: .rounded).weight(.bold))
-                            .lineLimit(1)
-                        if skill.isPreset {
-                            Text("内置")
-                                .font(.caption2.weight(.bold))
-                                .padding(.horizontal, 6).padding(.vertical, 2)
-                                .background(Color.secondary.opacity(0.15), in: Capsule())
-                                .foregroundStyle(.secondary)
-                        }
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .top, spacing: 10) {
+                        skillIcon
+                        skillText(skill)
                     }
-                    Text(skill.summary.isEmpty ? skill.instructions : skill.summary)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
+                    skillActions(skill, includeLabel: true)
                 }
-
-                Spacer(minLength: 8)
-
-                Toggle("", isOn: Binding(
-                    get: { skill.enabled },
-                    set: { store.setEnabled(skill.id, $0) }
-                ))
-                .labelsHidden()
-                .tint(Self.tint)
-
-                Menu {
-                    Button {
-                        isCreating = false
-                        editing = skill
-                    } label: { Label("编辑", systemImage: "pencil") }
-                    if !skill.isPreset {
-                        Divider()
-                        Button(role: .destructive) {
-                            store.remove(skill)
-                        } label: { Label("删除", systemImage: "trash") }
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
-                }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
             }
 
             if !skill.allowedTools.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(skill.allowedTools, id: \.self) { name in
-                            Label(SkillEditor.toolLabel(name), systemImage: "hammer")
-                                .font(.caption2.weight(.bold))
-                                .padding(.horizontal, 7).padding(.vertical, 3)
-                                .background(Self.tint.opacity(0.13), in: Capsule(style: .continuous))
-                                .foregroundStyle(Self.tint)
-                        }
-                    }
-                }
+                toolChips(skill)
             }
         }
         .padding(14)
@@ -180,6 +128,107 @@ struct SkillsLibraryView: View {
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .strokeBorder(Self.tint.opacity(0.16), lineWidth: 1)
+        }
+    }
+
+    private var skillIcon: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(LinearGradient(colors: [Self.tint.opacity(0.22), Self.tint.opacity(0.08)],
+                                     startPoint: .topLeading, endPoint: .bottomTrailing))
+            Image(systemName: "wand.and.stars")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(Self.tint)
+        }
+        .frame(width: 38, height: 38)
+        .fixedSize()
+    }
+
+    private func skillText(_ skill: Skill) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                Text(skill.name.isEmpty ? "未命名技能" : skill.name)
+                    .font(.system(.subheadline, design: .rounded).weight(.bold))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                if skill.isPreset {
+                    Text("内置")
+                        .font(.caption2.weight(.bold))
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(Color.secondary.opacity(0.15), in: Capsule())
+                        .foregroundStyle(.secondary)
+                        .fixedSize()
+                }
+            }
+            Text(skill.summary.isEmpty ? skill.instructions : skill.summary)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func skillActions(_ skill: Skill, includeLabel: Bool) -> some View {
+        HStack(spacing: 10) {
+            if includeLabel {
+                Toggle(isOn: Binding(
+                    get: { skill.enabled },
+                    set: { store.setEnabled(skill.id, $0) }
+                )) {
+                    Text(skill.enabled ? "已启用" : "已停用")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .tint(Self.tint)
+            } else {
+                Toggle("", isOn: Binding(
+                    get: { skill.enabled },
+                    set: { store.setEnabled(skill.id, $0) }
+                ))
+                .labelsHidden()
+                .tint(Self.tint)
+            }
+            Spacer(minLength: includeLabel ? 0 : 4)
+            skillMenu(skill)
+        }
+        .fixedSize(horizontal: !includeLabel, vertical: false)
+    }
+
+    private func skillMenu(_ skill: Skill) -> some View {
+        Menu {
+            Button {
+                isCreating = false
+                editing = skill
+            } label: { Label("编辑", systemImage: "pencil") }
+            if !skill.isPreset {
+                Divider()
+                Button(role: .destructive) {
+                    store.remove(skill)
+                } label: { Label("删除", systemImage: "trash") }
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .font(.title3)
+                .foregroundStyle(.secondary)
+                .frame(width: 30, height: 30)
+                .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .accessibilityLabel("技能操作")
+    }
+
+    private func toolChips(_ skill: Skill) -> some View {
+        WrappingHStack(horizontalSpacing: 6, verticalSpacing: 6) {
+            ForEach(skill.allowedTools, id: \.self) { name in
+                Label(SkillEditor.toolLabel(name), systemImage: "hammer")
+                    .font(.caption2.weight(.bold))
+                    .lineLimit(1)
+                    .padding(.horizontal, 7).padding(.vertical, 3)
+                    .background(Self.tint.opacity(0.13), in: Capsule(style: .continuous))
+                    .foregroundStyle(Self.tint)
+            }
         }
     }
 

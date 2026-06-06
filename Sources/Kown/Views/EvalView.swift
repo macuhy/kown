@@ -27,6 +27,15 @@ struct EvalView: View {
     #endif
 
     private let tint = Color(red: 0.40, green: 0.52, blue: 0.92)
+    @Environment(\.horizontalSizeClass) private var hSizeClass
+
+    private var isCompact: Bool {
+        #if os(iOS)
+        return hSizeClass == .compact
+        #else
+        return false
+        #endif
+    }
 
     /// 可参与评测的模型:已启用;iOS 排除 CLI(沙箱起不了子进程)。
     private var evalProviders: [ProviderConfig] {
@@ -64,9 +73,12 @@ struct EvalView: View {
                     emptyState
                 }
             }
-            .padding(20)
+            .padding(isCompact ? 14 : 20)
             .frame(maxWidth: 1040, alignment: .topLeading)
         }
+        #if os(iOS)
+        .scrollDismissesKeyboard(.interactively)
+        #endif
         .onAppear {
             if selectedSuiteID == nil { selectedSuiteID = store.suites.first?.id }
             if selectedProviderIDs.isEmpty {
@@ -84,23 +96,16 @@ struct EvalView: View {
 
     private var suitePicker: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("评测集")
-                        .font(.headline)
-                    Text("保存一组「问题 + 期望关键词」,在多个模型上重跑,检测版本更新后的回归漂移。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    suitePickerCopy
+                    Spacer()
+                    addSuiteButton
                 }
-                Spacer()
-                Button {
-                    let suite = store.addSuite()
-                    selectedSuiteID = suite.id
-                    runner.clear()
-                } label: {
-                    Label("新建评测集", systemImage: "plus")
+                VStack(alignment: .leading, spacing: 10) {
+                    suitePickerCopy
+                    addSuiteButton
                 }
-                .buttonStyle(.borderedProminent)
             }
 
             if !store.suites.isEmpty {
@@ -114,6 +119,177 @@ struct EvalView: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var suitePickerCopy: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("评测集")
+                .font(.headline)
+            Text("保存一组「问题 + 期望关键词」,在多个模型上重跑,检测版本更新后的回归漂移。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var addSuiteButton: some View {
+        Button {
+            let suite = store.addSuite()
+            selectedSuiteID = suite.id
+            runner.clear()
+        } label: {
+            Label("新建评测集", systemImage: "plus")
+        }
+        .buttonStyle(.borderedProminent)
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "checklist")
+                .font(.system(size: 34, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 66, height: 66)
+                .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            Text("还没有评测集")
+                .font(.headline)
+            Text("点「新建评测集」后,添加几道带期望关键词的题目,即可在多个模型上重跑比对。")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(34)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+
+    // MARK: - 用例编辑
+
+    private func casesEditor(_ suite: EvalSuite) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) {
+                    suiteNameField(suite)
+                        .frame(maxWidth: 280)
+                    Spacer()
+                    deleteSuiteButton(suite)
+                }
+                VStack(alignment: .leading, spacing: 10) {
+                    suiteNameField(suite)
+                    deleteSuiteButton(suite)
+                }
+            }
+
+            if suite.cases.isEmpty {
+                Text("还没有题目。点下面的「添加题目」开始。")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 6)
+            } else {
+                ForEach(suite.cases) { c in
+                    caseRow(suite: suite, evalCase: c)
+                }
+            }
+
+            Button {
+                store.addCase(toSuite: suite.id)
+            } label: {
+                Label("添加题目", systemImage: "plus.circle")
+            }
+            .buttonStyle(.bordered)
+        }
+        .padding(16)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
+        }
+    }
+
+    private func suiteNameField(_ suite: EvalSuite) -> some View {
+        TextField("评测集名称", text: Binding(
+            get: { suite.name },
+            set: { store.renameSuite(suite.id, to: $0) }
+        ))
+        .textFieldStyle(.roundedBorder)
+    }
+
+    private func deleteSuiteButton(_ suite: EvalSuite) -> some View {
+        Button(role: .destructive) {
+            store.removeSuite(suite.id)
+            selectedSuiteID = store.suites.first?.id
+            runner.clear()
+        } label: {
+            Label("删除评测集", systemImage: "trash")
+        }
+        .buttonStyle(.bordered)
+    }
+
+    private func caseRow(suite: EvalSuite, evalCase: EvalCase) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: 8) {
+                    caseFields(suite: suite, evalCase: evalCase)
+                    removeCaseButton(suite: suite, evalCase: evalCase)
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    caseFields(suite: suite, evalCase: evalCase)
+                    removeCaseButton(suite: suite, evalCase: evalCase)
+                }
+            }
+        }
+        .padding(10)
+        .background(Color.platformControlBackground.opacity(0.5), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func caseFields(suite: EvalSuite, evalCase: EvalCase) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            TextField("题目 / Prompt", text: bindingForPrompt(suite: suite, caseID: evalCase.id), axis: .vertical)
+                .textFieldStyle(.roundedBorder)
+                .lineLimit(1...4)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    expectedField(suite: suite, caseID: evalCase.id)
+                    noteField(suite: suite, caseID: evalCase.id)
+                        .frame(maxWidth: 200)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    expectedField(suite: suite, caseID: evalCase.id)
+                    noteField(suite: suite, caseID: evalCase.id)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func expectedField(suite: EvalSuite, caseID: UUID) -> some View {
+        TextField("期望关键词(留空=不判合否)", text: bindingForExpected(suite: suite, caseID: caseID))
+            .textFieldStyle(.roundedBorder)
+    }
+
+    private func noteField(suite: EvalSuite, caseID: UUID) -> some View {
+        TextField("备注(可选)", text: bindingForNote(suite: suite, caseID: caseID))
+            .textFieldStyle(.roundedBorder)
+    }
+
+    private func removeCaseButton(suite: EvalSuite, evalCase: EvalCase) -> some View {
+        Button {
+            store.removeCase(evalCase.id, fromSuite: suite.id)
+        } label: {
+            Group {
+                if isCompact {
+                    Label("删除题目", systemImage: "minus.circle.fill")
+                        .labelStyle(.titleAndIcon)
+                } else {
+                    Label("删除题目", systemImage: "minus.circle.fill")
+                        .labelStyle(.iconOnly)
+                }
+            }
+            .foregroundStyle(.red.opacity(0.85))
+            .frame(minWidth: isCompact ? 0 : 30, minHeight: 30)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("删除这道评测题目")
     }
 
     private func suitePill(_ suite: EvalSuite) -> some View {
@@ -144,104 +320,6 @@ struct EvalView: View {
             }
         }
         .buttonStyle(.plain)
-    }
-
-    private var emptyState: some View {
-        VStack(spacing: 14) {
-            Image(systemName: "checklist")
-                .font(.system(size: 34, weight: .semibold))
-                .foregroundStyle(tint)
-                .frame(width: 66, height: 66)
-                .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-            Text("还没有评测集")
-                .font(.headline)
-            Text("点「新建评测集」后,添加几道带期望关键词的题目,即可在多个模型上重跑比对。")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(34)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-    }
-
-    // MARK: - 用例编辑
-
-    private func casesEditor(_ suite: EvalSuite) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                TextField("评测集名称", text: Binding(
-                    get: { suite.name },
-                    set: { store.renameSuite(suite.id, to: $0) }
-                ))
-                .textFieldStyle(.roundedBorder)
-                .frame(maxWidth: 280)
-
-                Spacer()
-
-                Button(role: .destructive) {
-                    store.removeSuite(suite.id)
-                    selectedSuiteID = store.suites.first?.id
-                    runner.clear()
-                } label: {
-                    Label("删除评测集", systemImage: "trash")
-                }
-                .buttonStyle(.bordered)
-            }
-
-            if suite.cases.isEmpty {
-                Text("还没有题目。点下面的「添加题目」开始。")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .padding(.vertical, 6)
-            } else {
-                ForEach(suite.cases) { c in
-                    caseRow(suite: suite, evalCase: c)
-                }
-            }
-
-            Button {
-                store.addCase(toSuite: suite.id)
-            } label: {
-                Label("添加题目", systemImage: "plus.circle")
-            }
-            .buttonStyle(.bordered)
-        }
-        .padding(16)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
-        }
-    }
-
-    private func caseRow(suite: EvalSuite, evalCase: EvalCase) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top, spacing: 8) {
-                VStack(alignment: .leading, spacing: 6) {
-                    TextField("题目 / Prompt", text: bindingForPrompt(suite: suite, caseID: evalCase.id), axis: .vertical)
-                        .textFieldStyle(.roundedBorder)
-                        .lineLimit(1...4)
-                    HStack(spacing: 8) {
-                        TextField("期望关键词(留空=不判合否)", text: bindingForExpected(suite: suite, caseID: evalCase.id))
-                            .textFieldStyle(.roundedBorder)
-                        TextField("备注(可选)", text: bindingForNote(suite: suite, caseID: evalCase.id))
-                            .textFieldStyle(.roundedBorder)
-                            .frame(maxWidth: 200)
-                    }
-                }
-                Button {
-                    store.removeCase(evalCase.id, fromSuite: suite.id)
-                } label: {
-                    Image(systemName: "minus.circle.fill")
-                        .foregroundStyle(.red.opacity(0.8))
-                }
-                .buttonStyle(.plain)
-                .padding(.top, 4)
-            }
-        }
-        .padding(10)
-        .background(Color.platformControlBackground.opacity(0.5), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private func bindingForPrompt(suite: EvalSuite, caseID: UUID) -> Binding<String> {
@@ -347,54 +425,118 @@ struct EvalView: View {
     // MARK: - 运行控制
 
     private func runControls(_ suite: EvalSuite) -> some View {
-        HStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
             if runner.isRunning {
-                Button(role: .destructive) {
-                    runner.cancel()
-                } label: {
-                    Label("取消", systemImage: "stop.circle")
-                }
-                .buttonStyle(.borderedProminent)
-
-                ProgressView(value: Double(runner.completedCount), total: Double(max(1, runner.totalCount)))
-                    .frame(maxWidth: 220)
-                Text("\(runner.completedCount)/\(runner.totalCount)")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-            } else {
-                Button {
-                    runner.run(cases: suite.cases, providers: chosenProviders)
-                } label: {
-                    Label("运行评测", systemImage: "play.fill")
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(chosenProviders.isEmpty || suite.cases.allSatisfy {
-                    $0.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                })
-
-                if runner.totalCount > 0 {
-                    Menu {
-                        Button("导出 CSV") { exportCSV(suite) }
-                        Button("导出 Markdown") { exportMarkdown(suite) }
-                    } label: {
-                        Label("导出结果", systemImage: "square.and.arrow.up")
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 12) {
+                        cancelRunButton
+                        runProgressView
+                            .frame(maxWidth: 220)
+                        runProgressLabel
                     }
-                    .menuStyle(.borderlessButton)
-                    .fixedSize()
+                    VStack(alignment: .leading, spacing: 8) {
+                        cancelRunButton
+                            .frame(maxWidth: isCompact ? .infinity : nil)
+                        runProgressView
+                        runProgressLabel
+                    }
+                }
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 10) {
+                        runButton(suite)
+                        if runner.totalCount > 0 {
+                            exportResultsMenu(suite)
+                        }
+                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        runButton(suite)
+                            .frame(maxWidth: isCompact ? .infinity : nil)
+                        if runner.totalCount > 0 {
+                            exportResultsMenu(suite)
+                                .frame(maxWidth: isCompact ? .infinity : nil)
+                        }
+                    }
                 }
             }
-            Spacer()
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var cancelRunButton: some View {
+        Button(role: .destructive) {
+            runner.cancel()
+        } label: {
+            Label("取消", systemImage: "stop.circle")
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(isCompact ? .large : .regular)
+    }
+
+    private var runProgressView: some View {
+        ProgressView(value: Double(runner.completedCount), total: Double(max(1, runner.totalCount)))
+    }
+
+    private var runProgressLabel: some View {
+        Text("\(runner.completedCount)/\(runner.totalCount)")
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(.secondary)
+    }
+
+    private func runButton(_ suite: EvalSuite) -> some View {
+        Button {
+            runner.run(cases: suite.cases, providers: chosenProviders)
+        } label: {
+            Label("运行评测", systemImage: "play.fill")
+                .frame(maxWidth: isCompact ? .infinity : nil)
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(isCompact ? .large : .regular)
+        .disabled(chosenProviders.isEmpty || suite.cases.allSatisfy {
+            $0.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        })
+        .accessibilityHint("使用当前评测集和已选择模型运行回归评测")
+    }
+
+    private func exportResultsMenu(_ suite: EvalSuite) -> some View {
+        Menu {
+            Button("导出 CSV") { exportCSV(suite) }
+            Button("导出 Markdown") { exportMarkdown(suite) }
+        } label: {
+            Label("导出结果", systemImage: "square.and.arrow.up")
+                .frame(maxWidth: isCompact ? .infinity : nil)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(isCompact ? .large : .regular)
+        .fixedSize(horizontal: !isCompact, vertical: false)
+        .accessibilityHint("将当前评测结果导出为 CSV 或 Markdown")
     }
 
     // MARK: - 结果矩阵
 
-    private func resultMatrix(_ suite: EvalSuite) -> some View {
+    private func resultMatrix(_: EvalSuite) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("结果矩阵")
                 .font(.headline)
 
-            // 模型汇总分数条
+            resultSummaryStrip
+
+            if isCompact {
+                compactResultCards
+            } else {
+                matrixResultTable
+            }
+        }
+        .padding(16)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
+        }
+    }
+
+    private var resultSummaryStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 10) {
                 ForEach(runner.runProviders) { p in
                     let s = runner.score(for: p.id)
@@ -402,6 +544,7 @@ struct EvalView: View {
                         Text(p.displayName)
                             .font(.caption.weight(.bold))
                             .lineLimit(1)
+                            .truncationMode(.middle)
                         Text(s.judged > 0 ? "\(s.pass)/\(s.judged) 通过" : "无判定")
                             .font(.caption2)
                             .foregroundStyle(s.judged > 0 && s.pass == s.judged ? .green : .secondary)
@@ -409,59 +552,244 @@ struct EvalView: View {
                     }
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
+                    .frame(minWidth: 120, alignment: .leading)
                     .background(tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
             }
+        }
+    }
 
-            ScrollView(.horizontal, showsIndicators: true) {
-                VStack(alignment: .leading, spacing: 0) {
-                    // 表头
+    private var matrixResultTable: some View {
+        ScrollView(.horizontal, showsIndicators: true) {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 0) {
+                    matrixCellFrame { Text("题目").font(.caption.weight(.bold)) }
+                        .frame(width: 220)
+                    ForEach(runner.runProviders) { p in
+                        matrixCellFrame {
+                            Text(p.displayName)
+                                .font(.caption.weight(.bold))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                        .frame(width: 160)
+                    }
+                }
+                Divider()
+                ForEach(runner.runCases) { c in
                     HStack(spacing: 0) {
-                        matrixCellFrame { Text("题目").font(.caption.weight(.bold)) }
-                            .frame(width: 220)
-                        ForEach(runner.runProviders) { p in
-                            matrixCellFrame {
-                                Text(p.displayName)
-                                    .font(.caption.weight(.bold))
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
+                        matrixCellFrame {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(c.prompt)
+                                    .font(.caption)
+                                    .lineLimit(2)
+                                if !c.expected.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                    Text("期望: \(c.expected)")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
                             }
-                            .frame(width: 160)
+                        }
+                        .frame(width: 220)
+                        ForEach(runner.runProviders) { p in
+                            matrixCellFrame { resultCell(caseID: c.id, providerID: p.id) }
+                                .frame(width: 160)
                         }
                     }
                     Divider()
-                    ForEach(runner.runCases) { c in
-                        HStack(spacing: 0) {
-                            matrixCellFrame {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(c.prompt)
-                                        .font(.caption)
-                                        .lineLimit(2)
-                                    if !c.expected.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                        Text("期望: \(c.expected)")
-                                            .font(.caption2)
-                                            .foregroundStyle(.secondary)
-                                            .lineLimit(1)
-                                    }
-                                }
-                            }
-                            .frame(width: 220)
-                            ForEach(runner.runProviders) { p in
-                                matrixCellFrame { resultCell(caseID: c.id, providerID: p.id) }
-                                    .frame(width: 160)
-                            }
-                        }
-                        Divider()
-                    }
                 }
             }
-            .frame(maxHeight: 420)
         }
-        .padding(16)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .frame(maxHeight: 420)
+    }
+
+    private var compactResultCards: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("按题目分组查看,每张卡片展示模型状态、输出和耗时。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            ForEach(Array(runner.runCases.enumerated()), id: \.element.id) { index, evalCase in
+                compactCaseResultGroup(index: index, evalCase: evalCase)
+            }
+        }
+    }
+
+    private func compactCaseResultGroup(index: Int, evalCase: EvalCase) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("第 \(index + 1) 题")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(tint)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(tint.opacity(0.12), in: Capsule())
+
+                Text(caseProgressText(evalCase))
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+            }
+
+            Text(evalCase.prompt)
+                .font(.callout.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
+
+            if !evalCase.expected.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Label("期望: \(evalCase.expected)", systemImage: "target")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Label("未设置期望关键词,仅记录输出", systemImage: "doc.text.magnifyingglass")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let note = evalCase.note, !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(note)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(runner.runProviders) { provider in
+                    compactProviderResultCard(evalCase: evalCase, provider: provider)
+                }
+            }
+        }
+        .padding(12)
+        .background(Color.platformControlBackground.opacity(0.50), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
+        }
+    }
+
+    private func compactProviderResultCard(evalCase: EvalCase, provider: ProviderConfig) -> some View {
+        let cell = runner.cell(caseID: evalCase.id, providerID: provider.id)
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(provider.displayName)
+                        .font(.caption.weight(.bold))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text(provider.model)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Spacer(minLength: 6)
+                if let cell {
+                    cellBadge(cell.phase)
+                } else {
+                    label("未开始", "clock", .secondary)
+                }
+            }
+
+            if let cell {
+                compactCellBody(cell)
+            } else {
+                Text("尚未生成结果")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(10)
+        .background(phaseBackground(cell), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(phaseBorder(cell), lineWidth: 1)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(provider.displayName) 评测结果")
+    }
+
+    @ViewBuilder
+    private func compactCellBody(_ cell: EvalRunner.Cell) -> some View {
+        if case .failed = cell.phase {
+            resultOutputBlock(title: "错误", text: cell.errorText ?? "失败", titleColor: .red, bodyColor: .red)
+        } else if !cell.output.isEmpty {
+            resultOutputBlock(title: "输出", text: cell.output, titleColor: .secondary, bodyColor: .primary)
+        } else {
+            Text(emptyResultText(for: cell.phase))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+
+        if cell.elapsed > 0 {
+            Label(String(format: "耗时 %.1fs", cell.elapsed), systemImage: "timer")
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(.tertiary)
+        }
+    }
+
+    private func resultOutputBlock(title: String, text: String, titleColor: Color, bodyColor: Color) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(titleColor)
+            Text(text)
+                .font(.caption)
+                .foregroundStyle(bodyColor)
+                .lineLimit(8)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func emptyResultText(for phase: EvalRunner.CellPhase) -> String {
+        switch phase {
+        case .pending: return "等待运行"
+        case .running: return "正在生成输出..."
+        case .done: return "无输出"
+        case .failed: return "失败"
+        }
+    }
+
+    private func caseProgressText(_ evalCase: EvalCase) -> String {
+        let cells = runner.runProviders.compactMap { runner.cell(caseID: evalCase.id, providerID: $0.id) }
+        let done = cells.filter { cell in
+            switch cell.phase {
+            case .done, .failed: return true
+            case .pending, .running: return false
+            }
+        }.count
+        return "\(done)/\(runner.runProviders.count)"
+    }
+
+    private func phaseBackground(_ cell: EvalRunner.Cell?) -> Color {
+        guard let cell else { return Color.secondary.opacity(0.05) }
+        switch cell.phase {
+        case .done(let pass):
+            if let pass { return (pass ? Color.green : Color.red).opacity(0.08) }
+            return tint.opacity(0.07)
+        case .failed:
+            return Color.red.opacity(0.08)
+        case .running:
+            return tint.opacity(0.08)
+        case .pending:
+            return Color.secondary.opacity(0.05)
+        }
+    }
+
+    private func phaseBorder(_ cell: EvalRunner.Cell?) -> Color {
+        guard let cell else { return Color.primary.opacity(0.06) }
+        switch cell.phase {
+        case .done(let pass):
+            if let pass { return (pass ? Color.green : Color.red).opacity(0.22) }
+            return tint.opacity(0.18)
+        case .failed:
+            return Color.red.opacity(0.22)
+        case .running:
+            return tint.opacity(0.22)
+        case .pending:
+            return Color.primary.opacity(0.06)
         }
     }
 
@@ -614,10 +942,12 @@ struct EvalView: View {
             }
             for p in runner.runProviders {
                 out += "### \(p.displayName)\n\n"
+
                 if let cell = runner.cell(caseID: c.id, providerID: p.id) {
                     out += "- 合否: \(phaseText(cell.phase))"
                     if cell.elapsed > 0 { out += String(format: " · %.1fs", cell.elapsed) }
                     out += "\n\n"
+
                     if let err = cell.errorText {
                         out += "> 错误: \(err)\n\n"
                     } else {

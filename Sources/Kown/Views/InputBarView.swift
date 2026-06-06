@@ -64,6 +64,11 @@ struct InputBarView: View {
                             .strokeBorder(Color.red.opacity(0.18), lineWidth: 1)
                     }
             }
+            #if os(iOS)
+            if hasIOSContextChips {
+                iOSContextChips
+            }
+            #endif
             promptImprovePreview
             barRow
         }
@@ -347,24 +352,30 @@ struct InputBarView: View {
         history.isBrowsing || viewModel.prompt.isEmpty
     }
 
+    @ViewBuilder
     private var toolButtons: some View {
-        HStack(spacing: 4) {
+        #if os(iOS)
+        iOSToolButtons
+            .fullScreenCover(isPresented: $showVoice) {
+                VoiceConversationView(viewModel: viewModel)
+            }
+        #else
+        macToolButtons
+            .sheet(isPresented: $showVoice) {
+                VoiceConversationView(viewModel: viewModel)
+            }
+        #endif
+    }
+
+    #if os(macOS)
+    private var macToolButtons: some View {
+        toolButtonCluster {
             iconButton("slider.horizontal.3", help: "System Prompt") {
                 withAnimation(.easeInOut(duration: 0.18)) { showSystemPromptDrawer.toggle() }
             }
-            #if os(macOS)
             iconButton("photo", help: viewModel.anyProviderSupportsImage
                                ? "附加图片（OpenAI 兼容 / Anthropic / Gemini 支持视觉）"
                                : "附加图片（当前面板里没有支持视觉的 provider，发送时会忽略）") { pickImage() }
-            #endif
-            #if os(iOS)
-            iconButton("photo", help: "从相册添加图片") { showPhotoPicker = true }
-            iconButton(ocrRunning ? "hourglass" : "doc.viewfinder",
-                       help: ocrRunning ? "正在识别文字…" : "扫描图片文字(OCR)— 识别后追加到输入框") {
-                showOCRPicker = true
-            }
-            .disabled(ocrRunning)
-            #endif
             webSearchToggle
             deviceToolsToggle
             skillPicker
@@ -405,24 +416,219 @@ struct InputBarView: View {
                     .disabled(viewModel.isGeneratingImage || viewModel.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
-            #if os(macOS)
             workspaceButton
-            #endif
+        }
+    }
+    #endif
+
+    #if os(iOS)
+    private var iOSToolButtons: some View {
+        toolButtonCluster {
+            iconButton("photo", help: "从相册添加图片") { showPhotoPicker = true }
+            iconButton(ocrRunning ? "hourglass" : "doc.viewfinder",
+                       help: ocrRunning ? "正在识别文字" : "扫描图片文字 OCR") {
+                showOCRPicker = true
+            }
+            .disabled(ocrRunning)
+            if viewModel.canEnableWebSearch {
+                webSearchToggle
+            }
+            if viewModel.currentMode == .debate {
+                debateRoundsPicker
+            }
+            micButton
+            voiceButton
+            moreToolsMenu
+        }
+    }
+
+    private var moreToolsMenu: some View {
+        let promptEmpty = viewModel.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return Menu {
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) { showSystemPromptDrawer.toggle() }
+            } label: {
+                Label("System Prompt", systemImage: "slider.horizontal.3")
+            }
+            Button {
+                showPromptLibrary = true
+            } label: {
+                Label("提示词库", systemImage: "text.badge.plus")
+            }
+            Button {
+                showKnowledge = true
+            } label: {
+                Label("知识库", systemImage: "books.vertical")
+            }
+            Divider()
+            Button {
+                viewModel.deviceToolsEnabledForNextSend.toggle()
+            } label: {
+                Label(viewModel.deviceToolsEnabledForNextSend ? "关闭设备工具" : "启用设备工具",
+                      systemImage: viewModel.deviceToolsEnabledForNextSend ? "checkmark.circle" : "wrench.and.screwdriver.fill")
+            }
+            iOSSkillBindingMenu
+            iOSGitHubMenu
+            if !viewModel.canEnableWebSearch {
+                Label("网页搜索未配置", systemImage: "globe.badge.exclamationmark")
+            }
+            if viewModel.canEnableWebSearch {
+                Button {
+                    urlDraft = ""
+                    showURLScrape = true
+                } label: {
+                    Label(scraping ? "正在抓取网页" : "抓取网页正文",
+                          systemImage: scraping ? "hourglass" : "link.badge.plus")
+                }
+                .disabled(scraping)
+            }
+            Divider()
+            Button {
+                viewModel.enhancePrompt()
+                showEnhancer = true
+            } label: {
+                Label("AI 改写问题", systemImage: "wand.and.stars")
+            }
+            .disabled(promptEmpty)
+            Button {
+                viewModel.improvePrompt()
+            } label: {
+                Label(viewModel.improvingPrompt ? "正在润色" : "润色问题",
+                      systemImage: viewModel.improvingPrompt ? "hourglass" : "wand.and.rays")
+            }
+            .disabled(promptEmpty || viewModel.improvingPrompt)
+            if viewModel.currentMode == .direct {
+                Divider()
+                Button {
+                    viewModel.generateImage()
+                } label: {
+                    Label(viewModel.isGeneratingImage ? "正在生成图片" : "生成图片",
+                          systemImage: viewModel.isGeneratingImage ? "hourglass" : "photo.badge.plus")
+                }
+                .disabled(viewModel.isGeneratingImage || promptEmpty)
+                if viewModel.imageGenComparableProviders.count >= 2 {
+                    Button {
+                        viewModel.generateImageComparison()
+                    } label: {
+                        Label(viewModel.isGeneratingImage ? "正在生成对比" : "图像生成对比",
+                              systemImage: viewModel.isGeneratingImage ? "hourglass" : "photo.stack")
+                    }
+                    .disabled(viewModel.isGeneratingImage || promptEmpty)
+                }
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "ellipsis.circle")
+                    .font(.system(size: 14, weight: .semibold))
+                Text("更多")
+                    .font(.caption.weight(.bold))
+            }
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 10)
+            .frame(height: toolButtonSize)
+            .background(Color.primary.opacity(0.055), in: Capsule())
+            .overlay {
+                Capsule().strokeBorder(Color.primary.opacity(0.07), lineWidth: 1)
+            }
+        }
+        .menuIndicator(.hidden)
+        .accessibilityLabel("更多工具")
+    }
+
+    private var iOSSkillBindingMenu: some View {
+        let bound = viewModel.currentBoundSkill
+        return Menu {
+            Button {
+                viewModel.setSelectedSkill(nil)
+            } label: {
+                if bound == nil {
+                    Label("自动匹配", systemImage: "checkmark")
+                } else {
+                    Text("自动匹配")
+                }
+            }
+            if viewModel.skillsStore.enabledSkills.isEmpty {
+                Text("没有启用的技能")
+            } else {
+                Divider()
+                ForEach(viewModel.skillsStore.enabledSkills) { skill in
+                    Button {
+                        viewModel.setSelectedSkill(skill.id)
+                    } label: {
+                        if bound?.id == skill.id {
+                            Label(skill.name, systemImage: "checkmark")
+                        } else {
+                            Text(skill.name)
+                        }
+                    }
+                }
+            }
+        } label: {
+            Label(bound == nil ? "技能：自动匹配" : "技能：\(bound?.name ?? "")",
+                  systemImage: bound == nil ? "wand.and.stars" : "wand.and.stars.inverse")
+        }
+    }
+
+    private var iOSGitHubMenu: some View {
+        Group {
+            if viewModel.gitHubConnected {
+                Menu {
+                    if viewModel.gitHubReposLoading {
+                        Text("加载仓库中…")
+                    } else if viewModel.gitHubRepos.isEmpty {
+                        Text("没有可用仓库")
+                    } else {
+                        ForEach(viewModel.gitHubRepos) { repo in
+                            Button {
+                                viewModel.setGitHubRepo(repo)
+                            } label: {
+                                let title = abbreviatedMiddle(repo.fullName, maxCharacters: 42)
+                                if viewModel.currentGitHubRepo == repo.fullName {
+                                    Label("\(title)\(repo.isPrivate ? " 🔒" : "")", systemImage: "checkmark")
+                                } else {
+                                    Text("\(title)\(repo.isPrivate ? " 🔒" : "")")
+                                }
+                            }
+                        }
+                    }
+                    Divider()
+                    Button("重新加载") {
+                        Task { await viewModel.loadGitHubRepos(force: true) }
+                    }
+                    if viewModel.currentGitHubRepo != nil {
+                        Button("解除绑定", role: .destructive) { viewModel.clearGitHubRepo() }
+                    }
+                } label: {
+                    Label(iOSGitHubMenuTitle, systemImage: "arrow.triangle.branch")
+                }
+                .task { await viewModel.loadGitHubRepos() }
+            } else {
+                Button {
+                    viewModel.startGitHubDeviceFlow()
+                } label: {
+                    Label("连接 GitHub", systemImage: "arrow.triangle.branch")
+                }
+            }
+        }
+    }
+
+    private var iOSGitHubMenuTitle: String {
+        if let repo = viewModel.currentGitHubRepo {
+            return "GitHub：\(repoShortName(repo))"
+        }
+        return "选择 GitHub 仓库"
+    }
+    #endif
+
+    private func toolButtonCluster<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        HStack(spacing: 4) {
+            content()
         }
         .padding(4)
         .background(.regularMaterial, in: Capsule())
         .overlay {
             Capsule().strokeBorder(viewModel.currentMode.kownTint.opacity(0.14), lineWidth: 1)
         }
-        #if os(iOS)
-        .fullScreenCover(isPresented: $showVoice) {
-            VoiceConversationView(viewModel: viewModel)
-        }
-        #else
-        .sheet(isPresented: $showVoice) {
-            VoiceConversationView(viewModel: viewModel)
-        }
-        #endif
     }
 
     // MARK: - 提示词润色(Prompt Improver)
@@ -544,6 +750,7 @@ struct InputBarView: View {
         .buttonStyle(.plain)
         .disabled(!ready)
         .help(ready ? "语音对话(免手连续对话)" : "语音对话(需启用 provider 且设备支持语音识别)")
+        .accessibilityLabel(ready ? "语音对话" : "语音对话不可用")
     }
 
     #if os(macOS)
@@ -714,6 +921,7 @@ struct InputBarView: View {
             .help("Debate 轮数(1=仅立论, 2=+反驳, 3-4=多轮收敛)")
         #else
         return menu
+            .accessibilityLabel("Debate 轮数 \(viewModel.debateRoundsForNextSend) 轮")
         #endif
     }
 
@@ -768,6 +976,7 @@ struct InputBarView: View {
         .help(canEnable
               ? (isOn ? "下一条消息会带 web_search 工具(再按关闭)" : "本次发送启用 Firecrawl web_search")
               : "请先到 设置 → Web Search 启用并填好 API Key")
+        .accessibilityLabel(canEnable ? (isOn ? "关闭网页搜索" : "启用网页搜索") : "网页搜索不可用")
     }
 
     /// 设备工具开关 — 让模型本次发送可调用提醒/备忘录工具。仿 webSearchToggle 样式。
@@ -777,7 +986,7 @@ struct InputBarView: View {
         Button {
             viewModel.deviceToolsEnabledForNextSend.toggle()
         } label: {
-            Image(systemName: "checklist")
+            Image(systemName: "wrench.and.screwdriver.fill")
                 .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(isOn ? Color.white : .secondary)
                 .frame(width: toolButtonSize, height: toolButtonSize)
@@ -858,6 +1067,7 @@ struct InputBarView: View {
         }
         .buttonStyle(.plain)
         .help(bound ? "知识库:已绑定「\(viewModel.currentKnowledgeFolder?.name ?? "")」" : "知识库 / 资料夹")
+        .accessibilityLabel(bound ? "知识库已绑定" : "知识库")
     }
 
     /// 语音听写按钮。点一下开始录音(首次弹权限),边说边把文字写进输入框;再点停止。
@@ -888,6 +1098,7 @@ struct InputBarView: View {
         }
         .buttonStyle(.plain)
         .help(recording ? "停止听写" : "语音听写(中文)")
+        .accessibilityLabel(recording ? "停止听写" : "语音听写")
     }
 
     private func iconButton(_ symbol: String, help: String, action: @escaping () -> Void) -> some View {
@@ -905,7 +1116,80 @@ struct InputBarView: View {
         }
         .buttonStyle(.plain)
         .help(help)
+        .accessibilityLabel(help)
     }
+
+    #if os(iOS)
+    private var hasIOSContextChips: Bool {
+        viewModel.deviceToolsEnabledForNextSend ||
+        viewModel.currentBoundSkill != nil ||
+        viewModel.currentGitHubRepo != nil
+    }
+
+    private var iOSContextChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 7) {
+                if viewModel.deviceToolsEnabledForNextSend {
+                    contextChip(
+                        "设备工具",
+                        icon: "wrench.and.screwdriver.fill",
+                        tint: Color(red: 0.20, green: 0.60, blue: 0.62)
+                    ) {
+                        viewModel.deviceToolsEnabledForNextSend = false
+                    }
+                }
+                if let skill = viewModel.currentBoundSkill {
+                    contextChip(
+                        "技能：\(skill.name)",
+                        icon: "wand.and.stars.inverse",
+                        tint: Color(red: 0.48, green: 0.36, blue: 0.90)
+                    ) {
+                        viewModel.setSelectedSkill(nil)
+                    }
+                }
+                if let repo = viewModel.currentGitHubRepo {
+                    contextChip(
+                        "GitHub：\(repoShortName(repo))",
+                        icon: "arrow.triangle.branch",
+                        tint: .teal
+                    ) {
+                        viewModel.clearGitHubRepo()
+                    }
+                }
+            }
+            .padding(.vertical, 1)
+        }
+        .accessibilityLabel("当前发送上下文")
+    }
+
+    private func contextChip(_ title: String, icon: String, tint: Color, onRemove: @escaping () -> Void) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.caption2.weight(.bold))
+            Text(title)
+                .font(.caption.weight(.bold))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: 170, alignment: .leading)
+            Button(action: onRemove) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.tertiary)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("移除 \(title)")
+        }
+        .foregroundStyle(tint)
+        .padding(.leading, 9)
+        .padding(.trailing, 7)
+        .padding(.vertical, 6)
+        .background(tint.opacity(0.11), in: Capsule(style: .continuous))
+        .overlay {
+            Capsule(style: .continuous)
+                .strokeBorder(tint.opacity(0.20), lineWidth: 1)
+        }
+    }
+    #endif
 
     private var shellSpacing: CGFloat {
         #if os(iOS)
@@ -1007,6 +1291,7 @@ struct InputBarView: View {
         .keyboardShortcut(.return, modifiers: .command)
         .disabled(!viewModel.canSend && !isViewingRunningConv)
         .help(isViewingRunningConv ? "停止生成" : "⌘↩ 发送")
+        .accessibilityLabel(isViewingRunningConv ? "停止生成" : "发送")
     }
 
     private var sendButtonSize: CGFloat {
@@ -1177,6 +1462,20 @@ struct InputBarView: View {
         return "Pasted-\(f.string(from: Date())).\(ext)"
     }
     #endif
+
+    private func repoShortName(_ repo: String) -> String {
+        if let leaf = repo.split(separator: "/", omittingEmptySubsequences: true).last, !leaf.isEmpty {
+            return String(leaf)
+        }
+        return repo
+    }
+
+    private func abbreviatedMiddle(_ value: String, maxCharacters: Int) -> String {
+        guard value.count > maxCharacters, maxCharacters > 12 else { return value }
+        let headCount = max(6, (maxCharacters - 1) / 2)
+        let tailCount = max(6, maxCharacters - headCount - 1)
+        return "\(value.prefix(headCount))…\(value.suffix(tailCount))"
+    }
 }
 
 // MARK: - 附件缩略图

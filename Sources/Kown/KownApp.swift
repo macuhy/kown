@@ -96,9 +96,6 @@ struct KownApp: App {
                 ChangelogView(autoOpenedForVersion: ChangelogService.shared.currentVersion)
                 #endif
             }
-            #if os(iOS)
-            .dynamicTypeSize(.xSmall ... .medium)
-            #endif
             .onOpenURL { url in viewModel.handleDeepLink(url) }
         }
         .onChange(of: scenePhase) { _, newPhase in

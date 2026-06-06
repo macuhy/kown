@@ -364,6 +364,7 @@ struct SidebarView: View {
         }
         .buttonStyle(.plain)
         .help(help)
+        .accessibilityLabel(help)
     }
 
     #endif
@@ -391,7 +392,7 @@ struct SidebarView: View {
                     .background(currentModeTint.opacity(0.10), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
                 Text("还没有会话")
                     .font(.headline.weight(.bold))
-                Text("点右上 ⊕ 或直接在底部输入一条问题。")
+                Text("点右上新建按钮,或直接在底部输入一条问题。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -520,23 +521,56 @@ struct SidebarView: View {
         let convs = conversations(inFolder: folder.id)
         let collapsed = collapsedFolders.contains(folder.id)
         VStack(spacing: 7) {
-            Button {
-                if collapsed { collapsedFolders.remove(folder.id) } else { collapsedFolders.insert(folder.id) }
-            } label: {
-                groupHeaderLabel(icon: collapsed ? "folder.fill" : "folder.fill",
-                                 chevron: collapsed ? "chevron.right" : "chevron.down",
-                                 name: folder.name, count: convs.count, tint: currentModeTint)
+            HStack(spacing: 4) {
+                Button {
+                    if collapsed { collapsedFolders.remove(folder.id) } else { collapsedFolders.insert(folder.id) }
+                } label: {
+                    groupHeaderLabel(icon: collapsed ? "folder.fill" : "folder.fill",
+                                     chevron: collapsed ? "chevron.right" : "chevron.down",
+                                     name: folder.name, count: convs.count, tint: currentModeTint)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(collapsed ? "展开" : "折叠")文件夹 \(folder.name)")
+                #if os(iOS)
+                folderActionsMenu(folder)
+                #endif
             }
-            .buttonStyle(.plain)
             .contextMenu {
-                Button("重命名文件夹") { folderRenameDraft = folder.name; folderRenameTarget = IdentifiedID(id: folder.id) }
-                Button("删除文件夹", role: .destructive) { viewModel.deleteFolder(folder.id) }
+                folderActionItems(folder)
             }
             if !collapsed {
                 ForEach(convs) { conv in conversationRow(conv) }
             }
         }
     }
+
+    @ViewBuilder
+    private func folderActionItems(_ folder: ConversationFolder) -> some View {
+        Button { folderRenameDraft = folder.name; folderRenameTarget = IdentifiedID(id: folder.id) } label: {
+            Label("重命名文件夹", systemImage: "pencil")
+        }
+        Button(role: .destructive) { viewModel.deleteFolder(folder.id) } label: {
+            Label("删除文件夹", systemImage: "trash")
+        }
+    }
+
+    #if os(iOS)
+    private func folderActionsMenu(_ folder: ConversationFolder) -> some View {
+        Menu {
+            folderActionItems(folder)
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(.secondary)
+                .frame(width: 30, height: 30)
+                .background(Color.primary.opacity(0.05), in: Circle())
+                .contentShape(Circle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .accessibilityLabel("文件夹 \(folder.name) 的更多操作")
+    }
+    #endif
 
     @ViewBuilder
     private var ungroupedSection: some View {

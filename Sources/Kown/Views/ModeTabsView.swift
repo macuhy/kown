@@ -102,6 +102,8 @@ struct ModeTabsView: View {
         .buttonStyle(.plain)
         .help(mode.displayName)
         .accessibilityLabel(mode.displayName)
+        .accessibilityValue(isActive ? "当前模式" : "未选中")
+        .accessibilityHint(isActive ? "已选择" : "切换到此模式")
     }
 
     private var tabFont: Font {

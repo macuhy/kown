@@ -252,10 +252,13 @@ struct PromptBubble: View {
                             Image(systemName: "ellipsis.circle")
                                 .font(.system(size: 14, weight: .semibold))
                                 .foregroundStyle(.secondary)
+                                .frame(width: 30, height: 30)
+                                .contentShape(Circle())
                         }
                         .menuStyle(.borderlessButton)
                         .menuIndicator(.hidden)
                         .fixedSize()
+                        .accessibilityLabel("本轮问题操作")
                     }
                 }
                 if !prompt.isEmpty {
@@ -753,24 +756,7 @@ struct AppliedWritesStrip: View {
             Button {
                 withAnimation(.easeInOut(duration: 0.18)) { expanded.toggle() }
             } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: isRemote ? "arrow.triangle.branch" : "tray.and.arrow.down.fill")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.teal)
-                    Text(isRemote ? "GitHub 提交(\(writes.count))" : "Workspace 写入(\(writes.count))")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.teal)
-                    Image(systemName: expanded ? "chevron.up" : "chevron.down")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(.teal)
-                    Spacer()
-                    Text(isRemote ? "Committed" : "Applied")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(.teal)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.teal.opacity(0.11), in: Capsule())
-                }
+                headerLabel
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -810,6 +796,46 @@ struct AppliedWritesStrip: View {
                 .strokeBorder(Color.teal.opacity(0.24), lineWidth: 1)
         }
     }
+
+    private var headerLabel: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                headerTitle
+                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+                headerStatus
+            }
+            WrappingHStack(horizontalSpacing: 8, verticalSpacing: 6) {
+                headerTitle
+                headerStatus
+            }
+        }
+    }
+
+    private var headerTitle: some View {
+        HStack(spacing: 6) {
+            Image(systemName: isRemote ? "arrow.triangle.branch" : "tray.and.arrow.down.fill")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.teal)
+            Text(isRemote ? "GitHub 提交(\(writes.count))" : "Workspace 写入(\(writes.count))")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.teal)
+                .lineLimit(1)
+            Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.teal)
+        }
+    }
+
+    private var headerStatus: some View {
+        Text(isRemote ? "Committed" : "Applied")
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(.teal)
+            .lineLimit(1)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.teal.opacity(0.11), in: Capsule())
+            .fixedSize()
+    }
 }
 
 /// 在 Turn 回答下方渲染「引用来源」卡片 —— 当 `turn.sources` 非空时显示 `SourcesStrip`。
@@ -835,11 +861,19 @@ struct AppliedWriteCard: View {
     var onUndo: (() -> Void)? = nil
     @State private var copied = false
     @State private var showDiff = false
+    @Environment(\.horizontalSizeClass) private var hSizeClass
 
     private var isReverted: Bool { write.reverted == true }
     private var canDiff: Bool { write.action == .update && (write.oldContent != nil) }
     // GitHub 提交(remoteURL 非 nil)不走本地 revert,不显示撤销按钮。
     private var canUndo: Bool { onUndo != nil && write.success && write.action != .skipped && !isReverted && write.remoteURL == nil }
+    private var isCompact: Bool {
+        #if os(iOS)
+        return hSizeClass == .compact
+        #else
+        return false
+        #endif
+    }
 
     /// 本次写入影响的行数(+新增 / −删除),成功且非 skipped 时计算。
     private var diffStats: (added: Int, removed: Int)? {
@@ -850,46 +884,7 @@ struct AppliedWriteCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                Image(systemName: statusIcon)
-                    .foregroundStyle(statusColor)
-                    .font(.body.weight(.semibold))
-                Text(write.relativePath)
-                    .font(.system(.body, design: .monospaced))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                actionBadge
-                if let s = diffStats {
-                    HStack(spacing: 5) {
-                        Text("+\(s.added)").foregroundStyle(.green)
-                        Text("−\(s.removed)").foregroundStyle(.red)
-                    }
-                    .font(.caption2.weight(.bold).monospacedDigit())
-                }
-                if let urlStr = write.remoteURL, let url = URL(string: urlStr) {
-                    Link(destination: url) {
-                        Label("commit", systemImage: "arrow.up.right.square")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.teal)
-                    }
-                }
-                if isReverted {
-                    Text("已撤销")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(Color.secondary.opacity(0.16), in: Capsule())
-                }
-                Spacer()
-                Button {
-                    onToggleExpand()
-                } label: {
-                    Image(systemName: expanded ? "chevron.up" : "chevron.down")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-            }
+            header
             if let err = write.error, !write.success {
                 Text(err)
                     .font(.caption)
@@ -898,45 +893,7 @@ struct AppliedWriteCard: View {
             }
             if expanded {
                 VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 8) {
-                        if canDiff {
-                            Picker("", selection: $showDiff) {
-                                Text("新内容").tag(false)
-                                Text("Diff").tag(true)
-                            }
-                            .pickerStyle(.segmented)
-                            .labelsHidden()
-                            .fixedSize()
-                        } else {
-                            Text("新内容(\(write.newContent.count) 字)")
-                                .font(.caption2.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        if canUndo, let onUndo {
-                            Button(role: .destructive) {
-                                onUndo()
-                            } label: {
-                                Label("撤销", systemImage: "arrow.uturn.backward")
-                                    .font(.caption2.weight(.semibold))
-                            }
-                            .buttonStyle(.borderless)
-                            .help(write.action == .update ? "把文件还原到本轮修改前的内容" : "删除本轮新建的文件")
-                        }
-                        Button {
-                            Platform.copyText(write.newContent)
-                            withAnimation { copied = true }
-                            Task { @MainActor in
-                                try? await Task.sleep(for: .seconds(1.4))
-                                withAnimation { copied = false }
-                            }
-                        } label: {
-                            Label(copied ? "已复制" : "复制", systemImage: copied ? "checkmark" : "doc.on.doc")
-                                .font(.caption2)
-                                .foregroundStyle(copied ? .green : .secondary)
-                        }
-                        .buttonStyle(.borderless)
-                    }
+                    previewToolbar
                     if showDiff && canDiff {
                         diffView
                     } else {
@@ -963,6 +920,204 @@ struct AppliedWriteCard: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .strokeBorder(statusColor.opacity(write.success ? 0.16 : 0.34), lineWidth: 1)
         }
+    }
+
+    private var header: some View {
+        Group {
+            if isCompact {
+                compactHeader
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    regularHeader
+                    compactHeader
+                }
+            }
+        }
+    }
+
+    private var regularHeader: some View {
+        HStack(spacing: 8) {
+            statusImage
+            pathLabel(lineLimit: 1)
+                .layoutPriority(1)
+            actionBadge
+            diffStatsBadge
+            commitLink(compact: false)
+            revertedBadge
+            Spacer(minLength: 6)
+            disclosureButton
+        }
+    }
+
+    private var compactHeader: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(alignment: .top, spacing: 8) {
+                statusImage
+                    .padding(.top, 2)
+                pathLabel(lineLimit: 2)
+                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+                disclosureButton
+            }
+            WrappingHStack(horizontalSpacing: 6, verticalSpacing: 6) {
+                actionBadge
+                diffStatsBadge
+                commitLink(compact: true)
+                revertedBadge
+            }
+        }
+    }
+
+    private var statusImage: some View {
+        Image(systemName: statusIcon)
+            .foregroundStyle(statusColor)
+            .font(.body.weight(.semibold))
+            .fixedSize()
+    }
+
+    private func pathLabel(lineLimit: Int) -> some View {
+        Text(write.relativePath)
+            .font(.system(.body, design: .monospaced))
+            .lineLimit(lineLimit)
+            .truncationMode(.middle)
+            .textSelection(.enabled)
+    }
+
+    private var disclosureButton: some View {
+        Button {
+            onToggleExpand()
+        } label: {
+            Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.secondary)
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(expanded ? "收起写入内容" : "展开写入内容")
+    }
+
+    @ViewBuilder
+    private var diffStatsBadge: some View {
+        if let s = diffStats {
+            HStack(spacing: 5) {
+                Text("+\(s.added)").foregroundStyle(.green)
+                Text("−\(s.removed)").foregroundStyle(.red)
+            }
+            .font(.caption2.weight(.bold).monospacedDigit())
+            .lineLimit(1)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Color.secondary.opacity(0.08), in: Capsule())
+            .fixedSize()
+            .accessibilityLabel("新增 \(s.added) 行,删除 \(s.removed) 行")
+        }
+    }
+
+    @ViewBuilder
+    private func commitLink(compact: Bool) -> some View {
+        if let urlStr = write.remoteURL, let url = URL(string: urlStr) {
+            Link(destination: url) {
+                Group {
+                    if compact {
+                        Image(systemName: "arrow.up.right.square")
+                    } else {
+                        Label("commit", systemImage: "arrow.up.right.square")
+                    }
+                }
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.teal)
+                .lineLimit(1)
+                .padding(.horizontal, compact ? 7 : 8)
+                .padding(.vertical, 3)
+                .background(Color.teal.opacity(0.10), in: Capsule())
+            }
+            .fixedSize()
+            .accessibilityLabel("打开 GitHub commit")
+        }
+    }
+
+    @ViewBuilder
+    private var revertedBadge: some View {
+        if isReverted {
+            Text("已撤销")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Color.secondary.opacity(0.16), in: Capsule())
+                .fixedSize()
+        }
+    }
+
+    private var previewToolbar: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                previewModeControl
+                Spacer(minLength: 8)
+                undoButton
+                copyButton
+            }
+            WrappingHStack(horizontalSpacing: 8, verticalSpacing: 7) {
+                previewModeControl
+                undoButton
+                copyButton
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var previewModeControl: some View {
+        if canDiff {
+            Picker("", selection: $showDiff) {
+                Text("新内容").tag(false)
+                Text("Diff").tag(true)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(maxWidth: isCompact ? 170 : nil)
+            .fixedSize(horizontal: !isCompact, vertical: true)
+            .accessibilityLabel("写入预览模式")
+        } else {
+            Text("新内容(\(write.newContent.count) 字)")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+        }
+    }
+
+    @ViewBuilder
+    private var undoButton: some View {
+        if canUndo, let onUndo {
+            Button(role: .destructive) {
+                onUndo()
+            } label: {
+                Label("撤销", systemImage: "arrow.uturn.backward")
+                    .font(.caption2.weight(.semibold))
+                    .lineLimit(1)
+            }
+            .buttonStyle(.borderless)
+            .fixedSize()
+            .help(write.action == .update ? "把文件还原到本轮修改前的内容" : "删除本轮新建的文件")
+        }
+    }
+
+    private var copyButton: some View {
+        Button {
+            Platform.copyText(write.newContent)
+            withAnimation { copied = true }
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(1.4))
+                withAnimation { copied = false }
+            }
+        } label: {
+            Label(copied ? "已复制" : "复制", systemImage: copied ? "checkmark" : "doc.on.doc")
+                .font(.caption2)
+                .foregroundStyle(copied ? .green : .secondary)
+                .lineLimit(1)
+        }
+        .buttonStyle(.borderless)
+        .fixedSize()
     }
 
     @ViewBuilder
@@ -1417,6 +1572,7 @@ struct ModeTurnCard<Content: View>: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(collapsed ? "展开本轮" : "折叠本轮")
                 }
                 ZStack {
                     RoundedRectangle(cornerRadius: isCompact ? 12 : 14, style: .continuous)
@@ -1442,12 +1598,12 @@ struct ModeTurnCard<Content: View>: View {
                         Text(subtitle)
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                            .lineLimit(isCompact ? 2 : 1)
                             .truncationMode(.tail)
                     }
                 }
                 .layoutPriority(1)
-                Spacer(minLength: 10)
+                Spacer(minLength: isCompact ? 6 : 10)
                 if isLive {
                     HStack(spacing: 6) {
                         ProgressView()

@@ -16,6 +16,7 @@ struct MainContentView: View {
     @State private var findQuery: String = ""
     @State private var findIndex: Int = 0
     @State private var scrollTarget: UUID?
+    @FocusState private var findFocused: Bool
     /// 批量执行 / 提示词队列 sheet 开关。
     @State private var showBatch = false
     #if os(iOS)
@@ -50,17 +51,15 @@ struct MainContentView: View {
         }
         .navigationTitle(viewModel.selectedConversation?.title ?? "New Conversation")
         .toolbar {
-            ToolbarItem(placement: .automatic) {
-                Button {
-                    showBatch = true
-                } label: {
-                    Image(systemName: "square.grid.3x3.fill.square")
-                }
-                .help("批量执行 / 提示词队列")
+            #if os(iOS)
+            ToolbarItem(placement: .topBarTrailing) {
+                sessionActionsMenu
             }
+            #else
             ToolbarItem(placement: .automatic) {
                 exportMenu
             }
+            #endif
         }
         .sheet(isPresented: $showBatch) {
             BatchView(viewModel: viewModel)
@@ -88,6 +87,14 @@ struct MainContentView: View {
             // 让用户点输入框自然唤起键盘
             inputFocused = true
             #endif
+        }
+        .onChange(of: viewModel.showFind) { _, showing in
+            if showing {
+                DispatchQueue.main.async { findFocused = true }
+            } else {
+                findQuery = ""
+                findFocused = false
+            }
         }
     }
 
@@ -213,24 +220,18 @@ struct MainContentView: View {
 
     private var findBar: some View {
         let matches = findMatches
-        return HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-            TextField("在本会话内查找", text: $findQuery)
-                .textFieldStyle(.plain)
-                .onChange(of: findQuery) { _, _ in
-                    findIndex = 0
-                    if let first = findMatches.first { scrollTarget = first }
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                findInput
+                findControls(matches: matches)
+            }
+            VStack(spacing: 7) {
+                findInput
+                HStack {
+                    Spacer(minLength: 0)
+                    findControls(matches: matches)
                 }
-                .onSubmit { jumpFind(+1, matches) }
-            Text(matches.isEmpty ? (findQuery.isEmpty ? "" : "无匹配") : "\(min(findIndex + 1, matches.count))/\(matches.count)")
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
-            Button { jumpFind(-1, matches) } label: { Image(systemName: "chevron.up") }
-                .buttonStyle(.borderless).disabled(matches.isEmpty)
-            Button { jumpFind(+1, matches) } label: { Image(systemName: "chevron.down") }
-                .buttonStyle(.borderless).disabled(matches.isEmpty)
-            Button { viewModel.showFind = false; findQuery = "" } label: { Image(systemName: "xmark.circle.fill") }
-                .buttonStyle(.borderless).foregroundStyle(.secondary)
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -238,10 +239,79 @@ struct MainContentView: View {
         .overlay(alignment: .bottom) { Divider() }
     }
 
+    private var findInput: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            TextField("在本会话内查找", text: $findQuery)
+                .textFieldStyle(.plain)
+                .focused($findFocused)
+                #if os(iOS)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .submitLabel(.search)
+                #endif
+                .onChange(of: findQuery) { _, _ in
+                    findIndex = 0
+                    if let first = findMatches.first { scrollTarget = first }
+                }
+                .onSubmit { jumpFind(+1, findMatches) }
+            if !findQuery.isEmpty {
+                Button {
+                    findQuery = ""
+                    findFocused = true
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("清空查找关键词")
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(Color.platformControlBackground.opacity(0.55), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .frame(minWidth: 160)
+    }
+
+    private func findControls(matches: [UUID]) -> some View {
+        HStack(spacing: 6) {
+            Text(findStatus(matches: matches))
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .frame(minWidth: 54, alignment: .trailing)
+            Button { jumpFind(-1, matches) } label: { Image(systemName: "chevron.up") }
+                .buttonStyle(.borderless)
+                .disabled(matches.isEmpty)
+                .accessibilityLabel("上一处匹配")
+            Button { jumpFind(+1, matches) } label: { Image(systemName: "chevron.down") }
+                .buttonStyle(.borderless)
+                .disabled(matches.isEmpty)
+                .accessibilityLabel("下一处匹配")
+            Button { closeFind() } label: { Image(systemName: "xmark.circle.fill") }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+                .accessibilityLabel("关闭会话内查找")
+        }
+    }
+
+    private func findStatus(matches: [UUID]) -> String {
+        if findQuery.isEmpty { return "" }
+        if matches.isEmpty { return "无匹配" }
+        return "\(min(findIndex + 1, matches.count))/\(matches.count)"
+    }
+
     private func jumpFind(_ delta: Int, _ matches: [UUID]) {
         guard !matches.isEmpty else { return }
         findIndex = (findIndex + delta + matches.count) % matches.count
         scrollTarget = matches[findIndex]
+    }
+
+    private func closeFind() {
+        viewModel.showFind = false
+        findQuery = ""
+        findFocused = false
     }
 
     /// 打开「编辑并重发」sheet,初值用该轮原始 prompt。
@@ -298,42 +368,84 @@ struct MainContentView: View {
     private var exportMenu: some View {
         let conv = viewModel.selectedConversation
         Menu {
-            ForEach(ConversationExporter.Format.allCases, id: \.self) { format in
-                Button {
-                    if let conv { export(conv, as: format) }
-                } label: {
-                    Label(format.menuTitle, systemImage: format.symbol)
-                }
-            }
-            Divider()
-            Button {
-                shareSessionImage()
-            } label: {
-                Label("复制整会话为图片", systemImage: "photo.on.rectangle.angled")
-            }
-            Button {
-                if let conv { exportSessionPDF(conv) }
-            } label: {
-                Label("导出会话为 PDF", systemImage: "doc.richtext")
-            }
-            .disabled(conv?.turns.isEmpty != false)
-            Button {
-                if let conv { Platform.copyText(ConversationExporter.markdown(for: conv)) }
-            } label: {
-                Label("复制为 Markdown", systemImage: "doc.on.doc")
-            }
-            Button {
-                let all = ConversationExporter.markdownForAll(viewModel.activeConversations)
-                saveText(all, fileName: "Kown-全部会话.md")
-            } label: {
-                Label("导出全部会话(Markdown)", systemImage: "tray.full")
-            }
-            .disabled(viewModel.conversations.isEmpty)
+            exportMenuItems(conversation: conv)
         } label: {
             Image(systemName: "square.and.arrow.up")
         }
         .disabled(conv == nil)
         .help("导出 / 复制")
+    }
+
+    #if os(iOS)
+    private var sessionActionsMenu: some View {
+        Menu {
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    viewModel.showFind.toggle()
+                    if !viewModel.showFind { findQuery = "" }
+                }
+            } label: {
+                Label(viewModel.showFind ? "关闭会话内查找" : "会话内查找",
+                      systemImage: viewModel.showFind ? "xmark.circle" : "magnifyingglass")
+            }
+            Button {
+                showBatch = true
+            } label: {
+                Label("批量执行 / 提示词队列", systemImage: "square.grid.3x3.fill.square")
+            }
+            Divider()
+            exportMenuItems(conversation: viewModel.selectedConversation)
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(.primary)
+                .frame(width: 36, height: 36)
+                .background(.thinMaterial, in: Circle())
+                .overlay {
+                    Circle().strokeBorder(viewModel.currentMode.kownTint.opacity(0.12), lineWidth: 1)
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("会话操作")
+    }
+    #endif
+
+    @ViewBuilder
+    private func exportMenuItems(conversation conv: Conversation?) -> some View {
+        ForEach(ConversationExporter.Format.allCases, id: \.self) { format in
+            Button {
+                if let conv { export(conv, as: format) }
+            } label: {
+                Label(format.menuTitle, systemImage: format.symbol)
+            }
+            .disabled(conv == nil)
+        }
+        Divider()
+        Button {
+            shareSessionImage()
+        } label: {
+            Label("复制整会话为图片", systemImage: "photo.on.rectangle.angled")
+        }
+        .disabled(conv?.turns.isEmpty != false)
+        Button {
+            if let conv { exportSessionPDF(conv) }
+        } label: {
+            Label("导出会话为 PDF", systemImage: "doc.richtext")
+        }
+        .disabled(conv?.turns.isEmpty != false)
+        Button {
+            if let conv { Platform.copyText(ConversationExporter.markdown(for: conv)) }
+        } label: {
+            Label("复制为 Markdown", systemImage: "doc.on.doc")
+        }
+        .disabled(conv == nil)
+        Button {
+            let all = ConversationExporter.markdownForAll(viewModel.activeConversations)
+            saveText(all, fileName: "Kown-全部会话.md")
+        } label: {
+            Label("导出全部会话(Markdown)", systemImage: "tray.full")
+        }
+        .disabled(viewModel.conversations.isEmpty)
     }
 
     /// 把会话导出成指定格式:复用 saveText 的存盘 / 分享管线。
@@ -647,8 +759,40 @@ struct MainContentView: View {
                 .scrollDismissesKeyboard(.interactively)
                 .contentMargins(.bottom, 14, for: .scrollContent)
                 #endif
+                .overlay(alignment: .bottomTrailing) {
+                    if shouldOfferJumpToBottom(conversation: conv, hasLive: hasLive) {
+                        jumpToBottomButton {
+                            withAnimation(.easeInOut(duration: 0.22)) {
+                                proxy.scrollTo("bottom", anchor: .bottom)
+                            }
+                        }
+                        .padding(.trailing, 18)
+                        .padding(.bottom, 18)
+                    }
+                }
             }
         }
+    }
+
+    private func shouldOfferJumpToBottom(conversation: Conversation?, hasLive: Bool) -> Bool {
+        (conversation?.turns.count ?? 0) >= 3 || hasLive
+    }
+
+    private func jumpToBottomButton(action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label("到底部", systemImage: "arrow.down.to.line.compact")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(modeTint)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(.regularMaterial, in: Capsule())
+                .overlay {
+                    Capsule().strokeBorder(modeTint.opacity(0.22), lineWidth: 1)
+                }
+                .shadow(color: modeTint.opacity(0.14), radius: 14, x: 0, y: 7)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("跳到会话底部")
     }
 
     /// Workspace 路径条 — 设置了 working folder 时在会话顶端显示完整路径。
@@ -744,8 +888,23 @@ struct MainContentView: View {
 
     #if os(iOS)
     private var mobileModeBar: some View {
-        HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 4) {
             ModeTabsView(viewModel: viewModel)
+            HStack(spacing: 5) {
+                Text("当前")
+                    .font(.caption2.weight(.black))
+                    .foregroundStyle(modeTint)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(modeTint.opacity(0.12), in: Capsule())
+                Text("\(viewModel.currentMode.displayName) · \(viewModel.currentMode.kownModeDescription)")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("当前模式 \(viewModel.currentMode.displayName)，\(viewModel.currentMode.kownModeDescription)")
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 5)

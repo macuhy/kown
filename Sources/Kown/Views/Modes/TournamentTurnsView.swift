@@ -157,22 +157,7 @@ struct TournamentTurnsView: View {
         let aWon = match.winnerProviderID == match.aProviderID
         let bWon = match.bProviderID != nil && match.winnerProviderID == match.bProviderID
         return VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center, spacing: 10) {
-                contenderChip(providerID: match.aProviderID, snapshot: snapshot, won: aWon)
-                Text("VS")
-                    .font(.system(.caption2, design: .monospaced).weight(.heavy))
-                    .foregroundStyle(.secondary)
-                if let bID = match.bProviderID {
-                    contenderChip(providerID: bID, snapshot: snapshot, won: bWon)
-                } else {
-                    Text("轮空")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 10).padding(.vertical, 6)
-                        .background(Color.platformControlBackground.opacity(0.4), in: Capsule())
-                }
-                Spacer(minLength: 0)
-            }
+            matchParticipants(match, snapshot: snapshot, aWon: aWon, bWon: bWon)
             if let err = match.error, !err.isEmpty {
                 Text("裁判调用失败:\(err)")
                     .font(.caption)
@@ -194,6 +179,68 @@ struct TournamentTurnsView: View {
         }
     }
 
+    @ViewBuilder
+    private func matchParticipants(
+        _ match: TournamentRound.Match,
+        snapshot: [String: ProviderConfig],
+        aWon: Bool,
+        bWon: Bool
+    ) -> some View {
+        if stacksVertically {
+            stackedMatchParticipants(match, snapshot: snapshot, aWon: aWon, bWon: bWon)
+        } else {
+            ViewThatFits(in: .horizontal) {
+                wideMatchParticipants(match, snapshot: snapshot, aWon: aWon, bWon: bWon)
+                stackedMatchParticipants(match, snapshot: snapshot, aWon: aWon, bWon: bWon)
+            }
+        }
+    }
+
+    private func wideMatchParticipants(
+        _ match: TournamentRound.Match,
+        snapshot: [String: ProviderConfig],
+        aWon: Bool,
+        bWon: Bool
+    ) -> some View {
+        HStack(alignment: .center, spacing: 10) {
+            contenderChip(providerID: match.aProviderID, snapshot: snapshot, won: aWon)
+            vsLabel
+            secondContender(match, snapshot: snapshot, bWon: bWon)
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func stackedMatchParticipants(
+        _ match: TournamentRound.Match,
+        snapshot: [String: ProviderConfig],
+        aWon: Bool,
+        bWon: Bool
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            contenderChip(providerID: match.aProviderID, snapshot: snapshot, won: aWon)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            vsLabel
+                .padding(.leading, 8)
+            secondContender(match, snapshot: snapshot, bWon: bWon)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private func secondContender(_ match: TournamentRound.Match, snapshot: [String: ProviderConfig], bWon: Bool) -> some View {
+        if let bID = match.bProviderID {
+            contenderChip(providerID: bID, snapshot: snapshot, won: bWon)
+        } else {
+            byeChip()
+        }
+    }
+
+    private var vsLabel: some View {
+        Text("VS")
+            .font(.system(.caption2, design: .monospaced).weight(.heavy))
+            .foregroundStyle(.secondary)
+    }
+
     private func contenderChip(providerID: String, snapshot: [String: ProviderConfig], won: Bool) -> some View {
         let name = snapshot[providerID].map { PromptBuilders.providerLabel($0) } ?? "选手"
         return HStack(spacing: 6) {
@@ -205,6 +252,7 @@ struct TournamentTurnsView: View {
             Text(name)
                 .font(.caption.weight(won ? .bold : .semibold))
                 .lineLimit(1)
+                .truncationMode(.middle)
                 .foregroundStyle(won ? Color.primary : Color.secondary)
         }
         .padding(.horizontal, 10).padding(.vertical, 6)
@@ -212,6 +260,16 @@ struct TournamentTurnsView: View {
         .overlay {
             Capsule().strokeBorder((won ? championGold : Color.primary).opacity(won ? 0.4 : 0.08), lineWidth: 1)
         }
+        .frame(maxWidth: stacksVertically ? .infinity : 220, alignment: .leading)
+    }
+
+    private func byeChip() -> some View {
+        Text("轮空")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.platformControlBackground.opacity(0.4), in: Capsule())
     }
 
     private func championBanner(_ cfg: ProviderConfig) -> some View {
@@ -228,6 +286,7 @@ struct TournamentTurnsView: View {
                     .font(.headline.weight(.bold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
+                    .truncationMode(.middle)
             }
             Spacer(minLength: 0)
         }

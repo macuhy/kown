@@ -7,6 +7,7 @@ struct KnowledgeView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var newFolderName = ""
+    @State private var confirmDeleteFolderID: UUID?
     private let tint = Color(red: 0.10, green: 0.58, blue: 0.52)
 
     var body: some View {
@@ -23,6 +24,9 @@ struct KnowledgeView: View {
                 .padding(.bottom, 28)
             }
             .scrollIndicators(.hidden)
+            #if os(iOS)
+            .scrollDismissesKeyboard(.interactively)
+            #endif
             .background(KnowledgeBackdrop())
             .navigationTitle("知识库")
             #if os(iOS)
@@ -33,6 +37,23 @@ struct KnowledgeView: View {
                     Button("完成") { dismiss() }
                 }
             }
+        }
+        .confirmationDialog(
+            "删除资料夹「\(folderName(confirmDeleteFolderID))」?",
+            isPresented: Binding(
+                get: { confirmDeleteFolderID != nil },
+                set: { if !$0 { confirmDeleteFolderID = nil } }
+            )
+        ) {
+            Button("删除资料夹", role: .destructive) {
+                if let id = confirmDeleteFolderID {
+                    viewModel.deleteKnowledgeFolder(id)
+                }
+                confirmDeleteFolderID = nil
+            }
+            Button("取消", role: .cancel) { confirmDeleteFolderID = nil }
+        } message: {
+            Text("其中的文档也会一起移除。此操作不可恢复。")
         }
         #if os(macOS)
         .frame(minWidth: 460, minHeight: 520)
@@ -46,37 +67,14 @@ struct KnowledgeView: View {
         let chars = viewModel.knowledgeFolders.reduce(0) { $0 + $1.totalChars }
 
         VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top, spacing: 12) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [tint.opacity(0.28), Color.orange.opacity(0.18)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                    Image(systemName: "books.vertical.fill")
-                        .font(.system(size: 26, weight: .bold))
-                        .foregroundStyle(tint)
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: 12) {
+                    knowledgeHeroIcon
+                    heroCopy
                 }
-                .frame(width: 58, height: 58)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.32), lineWidth: 1)
-                }
-
-                VStack(alignment: .leading, spacing: 5) {
-                    HStack(spacing: 8) {
-                        Text("把资料变成当前会话的离线大脑")
-                            .font(.system(.title3, design: .rounded).weight(.bold))
-                            .fixedSize(horizontal: false, vertical: true)
-                        Spacer(minLength: 0)
-                    }
-                    Text("导入文档后,Kown 会在本地检索相关片段,随每次提问一起注入上下文。")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 10) {
+                    knowledgeHeroIcon
+                    heroCopy
                 }
             }
 
@@ -94,6 +92,42 @@ struct KnowledgeView: View {
                 .strokeBorder(tint.opacity(0.16), lineWidth: 1)
         }
         .shadow(color: tint.opacity(0.08), radius: 18, x: 0, y: 10)
+    }
+
+    private var knowledgeHeroIcon: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [tint.opacity(0.28), Color.orange.opacity(0.18)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+            Image(systemName: "books.vertical.fill")
+                .font(.system(size: 26, weight: .bold))
+                .foregroundStyle(tint)
+        }
+        .frame(width: 58, height: 58)
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.32), lineWidth: 1)
+        }
+    }
+
+    private var heroCopy: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 8) {
+                Text("把资料变成当前会话的离线大脑")
+                    .font(.system(.title3, design: .rounded).weight(.bold))
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+            }
+            Text("导入文档后,Kown 会在本地检索相关片段,随每次提问一起注入上下文。")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     private func statPill(title: String, value: String, icon: String, color: Color) -> some View {
@@ -206,7 +240,7 @@ struct KnowledgeView: View {
                             .buttonStyle(.plain)
 
                             Button(role: .destructive) {
-                                viewModel.deleteKnowledgeFolder(folder.id)
+                                confirmDeleteFolderID = folder.id
                             } label: {
                                 Image(systemName: "trash")
                                     .font(.system(size: 13, weight: .bold))
@@ -216,6 +250,7 @@ struct KnowledgeView: View {
                             }
                             .buttonStyle(.plain)
                             .help("删除资料夹")
+                            .accessibilityLabel("删除资料夹 \(folder.name)")
                         }
                     }
                 }
@@ -263,25 +298,39 @@ struct KnowledgeView: View {
         cardContainer {
             VStack(alignment: .leading, spacing: 12) {
                 sectionTitle("新建资料夹", icon: "plus.rectangle.on.folder.fill", color: tint)
-                HStack(spacing: 10) {
-                    TextField("例如: 产品手册 / API 规范", text: $newFolderName)
-                        .textFieldStyle(.plain)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 10)
-                        .background(Color.platformControlBackground.opacity(0.65), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        .onSubmit(createFolder)
-
-                    Button {
-                        createFolder()
-                    } label: {
-                        Label("新建", systemImage: "plus")
-                            .labelStyle(.titleAndIcon)
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 10) {
+                        folderNameField
+                        createFolderButton
                     }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(newFolderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    VStack(alignment: .leading, spacing: 10) {
+                        folderNameField
+                        createFolderButton
+                    }
                 }
             }
         }
+    }
+
+    private var folderNameField: some View {
+        TextField("例如: 产品手册 / API 规范", text: $newFolderName)
+            .textFieldStyle(.plain)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(Color.platformControlBackground.opacity(0.65), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .frame(maxWidth: .infinity)
+            .onSubmit(createFolder)
+    }
+
+    private var createFolderButton: some View {
+        Button {
+            createFolder()
+        } label: {
+            Label("新建", systemImage: "plus")
+                .labelStyle(.titleAndIcon)
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(newFolderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 
     private func sectionTitle(_ text: String, icon: String, color: Color) -> some View {
@@ -311,6 +360,14 @@ struct KnowledgeView: View {
         guard !trimmed.isEmpty else { return }
         _ = viewModel.createKnowledgeFolder(name: trimmed)
         newFolderName = ""
+    }
+
+    private func folderName(_ id: UUID?) -> String {
+        guard let id,
+              let folder = viewModel.knowledgeFolders.first(where: { $0.id == id }) else {
+            return "资料夹"
+        }
+        return folder.name
     }
 }
 

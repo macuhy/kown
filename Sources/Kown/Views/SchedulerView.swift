@@ -19,21 +19,7 @@ struct SchedulerView: View {
             LazyVStack(alignment: .leading, spacing: 12) {
                 infoBanner
 
-                HStack {
-                    Text(scheduler.tasks.isEmpty ? "还没有定时任务" : "\(scheduler.tasks.count) 个任务")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button {
-                        editing = ScheduledTask(mode: viewModel.activeMode)
-                        isNew = true
-                    } label: {
-                        Label("新建任务", systemImage: "plus")
-                            .font(.caption.weight(.semibold))
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                }
+                taskListHeader
 
                 if scheduler.tasks.isEmpty {
                     emptyState
@@ -73,6 +59,41 @@ struct SchedulerView: View {
         }
     }
 
+    private var taskListHeader: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                taskCountText
+                Spacer(minLength: 12)
+                newTaskButton
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                taskCountText
+                newTaskButton
+            }
+        }
+    }
+
+    private var taskCountText: some View {
+        Text(scheduler.tasks.isEmpty ? "还没有定时任务" : "\(scheduler.tasks.count) 个任务")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+    }
+
+    private var newTaskButton: some View {
+        Button {
+            editing = ScheduledTask(mode: viewModel.activeMode)
+            isNew = true
+        } label: {
+            Label("新建任务", systemImage: "plus")
+                .font(.caption.weight(.semibold))
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.small)
+        .accessibilityLabel("新建定时任务")
+    }
+
     private var infoBanner: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "info.circle.fill")
@@ -106,33 +127,14 @@ struct SchedulerView: View {
     }
 
     private func row(_ task: ScheduledTask) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Image(systemName: "clock.fill")
-                    .font(.caption)
-                    .foregroundStyle(task.enabled ? .blue : .secondary)
-                Text(task.timeText)
-                    .font(.system(.subheadline, design: .rounded).weight(.bold))
-                    .monospacedDigit()
-                Text(modeLabel(task.mode))
-                    .font(.caption2.weight(.bold))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Color.blue.opacity(0.12), in: Capsule())
-                    .foregroundStyle(.blue)
-                Spacer(minLength: 6)
-                Toggle("", isOn: Binding(
-                    get: { task.enabled },
-                    set: { scheduler.setEnabled(task.id, enabled: $0) }
-                ))
-                .labelsHidden()
-                .toggleStyle(.switch)
-            }
+        VStack(alignment: .leading, spacing: 10) {
+            taskHeader(task)
 
             if !task.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Text(task.title)
                     .font(.callout.weight(.semibold))
-                    .lineLimit(1)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Text(task.prompt)
                 .font(.caption)
@@ -140,31 +142,7 @@ struct SchedulerView: View {
                 .lineLimit(3)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            HStack(spacing: 10) {
-                if let last = task.lastRun {
-                    Text("上次:\(Self.dateFmt.string(from: last))")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                } else {
-                    Text("尚未触发")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                }
-                Spacer()
-                Button {
-                    editing = task
-                    isNew = false
-                } label: {
-                    Label("编辑", systemImage: "pencil").font(.caption2.weight(.semibold))
-                }
-                .buttonStyle(.borderless)
-                Button(role: .destructive) {
-                    confirmDeleteID = task.id
-                } label: {
-                    Label("删除", systemImage: "trash").font(.caption2.weight(.semibold)).foregroundStyle(.red)
-                }
-                .buttonStyle(.borderless)
-            }
+            taskFooter(task)
         }
         .padding(14)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -173,6 +151,139 @@ struct SchedulerView: View {
                 .strokeBorder(Color.primary.opacity(task.enabled ? 0.10 : 0.05), lineWidth: 1)
         }
         .opacity(task.enabled ? 1 : 0.6)
+    }
+
+    private func taskHeader(_ task: ScheduledTask) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                taskMetadata(task)
+                Spacer(minLength: 8)
+                taskEnabledToggle(task, labeled: false)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                taskMetadata(task)
+                taskEnabledToggle(task, labeled: true)
+                    .fixedSize()
+            }
+        }
+    }
+
+    private func taskMetadata(_ task: ScheduledTask) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "clock.fill")
+                .font(.caption)
+                .foregroundStyle(task.enabled ? .blue : .secondary)
+            Text(task.timeText)
+                .font(.system(.subheadline, design: .rounded).weight(.bold))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+            Text(modeLabel(task.mode))
+                .font(.caption2.weight(.bold))
+                .lineLimit(1)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Color.blue.opacity(0.12), in: Capsule())
+                .foregroundStyle(.blue)
+                .fixedSize()
+        }
+    }
+
+    @ViewBuilder
+    private func taskEnabledToggle(_ task: ScheduledTask, labeled: Bool) -> some View {
+        if labeled {
+            Toggle("启用", isOn: taskEnabledBinding(task))
+                .font(.caption.weight(.semibold))
+                .accessibilityLabel(task.enabled ? "停用定时任务" : "启用定时任务")
+        } else {
+            Toggle("", isOn: taskEnabledBinding(task))
+                .labelsHidden()
+                .accessibilityLabel(task.enabled ? "停用定时任务" : "启用定时任务")
+        }
+    }
+
+    private func taskEnabledBinding(_ task: ScheduledTask) -> Binding<Bool> {
+        Binding(
+            get: { task.enabled },
+            set: { scheduler.setEnabled(task.id, enabled: $0) }
+        )
+    }
+
+    private func taskFooter(_ task: ScheduledTask) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) {
+                lastRunText(task)
+                Spacer(minLength: 10)
+                editTaskButton(task)
+                deleteTaskButton(task)
+            }
+
+            HStack(spacing: 8) {
+                lastRunText(task)
+                Spacer(minLength: 8)
+                taskActionsMenu(task)
+            }
+        }
+    }
+
+    private func lastRunText(_ task: ScheduledTask) -> some View {
+        Group {
+            if let last = task.lastRun {
+                Text("上次:\(Self.dateFmt.string(from: last))")
+            } else {
+                Text("尚未触发")
+            }
+        }
+        .font(.caption2)
+        .foregroundStyle(.tertiary)
+        .lineLimit(1)
+    }
+
+    private func editTaskButton(_ task: ScheduledTask) -> some View {
+        Button {
+            beginEditing(task)
+        } label: {
+            Label("编辑", systemImage: "pencil").font(.caption2.weight(.semibold))
+        }
+        .buttonStyle(.borderless)
+    }
+
+    private func deleteTaskButton(_ task: ScheduledTask) -> some View {
+        Button(role: .destructive) {
+            confirmDeleteID = task.id
+        } label: {
+            Label("删除", systemImage: "trash")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.red)
+        }
+        .buttonStyle(.borderless)
+    }
+
+    private func taskActionsMenu(_ task: ScheduledTask) -> some View {
+        Menu {
+            Button {
+                beginEditing(task)
+            } label: {
+                Label("编辑", systemImage: "pencil")
+            }
+            Button(role: .destructive) {
+                confirmDeleteID = task.id
+            } label: {
+                Label("删除", systemImage: "trash")
+            }
+        } label: {
+            Label("操作", systemImage: "ellipsis.circle")
+                .font(.caption.weight(.semibold))
+        }
+        .menuStyle(.button)
+        .controlSize(.small)
+        .accessibilityLabel("定时任务操作")
+    }
+
+    private func beginEditing(_ task: ScheduledTask) {
+        editing = task
+        isNew = false
     }
 }
 
@@ -234,7 +345,7 @@ private struct SchedulerTaskEditor: View {
             }
             .padding(16)
         }
-        .frame(width: 460, height: 540)
+        .frame(minWidth: 420, idealWidth: 460, maxWidth: 560, minHeight: 500, idealHeight: 560)
         #endif
     }
 
@@ -257,6 +368,7 @@ private struct SchedulerTaskEditor: View {
             }
         }
         #if os(iOS)
+        .scrollDismissesKeyboard(.interactively)
         .navigationTitle(isNew ? "新建定时任务" : "编辑定时任务")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

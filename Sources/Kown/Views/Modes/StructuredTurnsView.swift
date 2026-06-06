@@ -252,6 +252,15 @@ private struct StructuredResultCard: View {
     let symbol: String
     var onRetry: (() -> Void)? = nil
     var isRetrying: Bool = false
+    @Environment(\.horizontalSizeClass) private var hSizeClass
+
+    private var isCompact: Bool {
+        #if os(iOS)
+        return hSizeClass == .compact
+        #else
+        return false
+        #endif
+    }
 
     private var validation: StructuredOutput.ValidationResult? {
         // 流式过程中不校验(JSON 还没拼完),只在完成且有内容时算。
@@ -305,26 +314,50 @@ private struct StructuredResultCard: View {
     }
 
     private var header: some View {
-        HStack(spacing: 8) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(LinearGradient(colors: [tint.opacity(0.9), tint.opacity(0.5)],
-                                         startPoint: .topLeading, endPoint: .bottomTrailing))
-                Image(systemName: symbol)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(.white)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                providerGlyph
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(config.displayName)
+                        .font(.caption.weight(.bold))
+                        .lineLimit(1)
+                    Text(config.model)
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Spacer(minLength: 6)
+                statusBadge
             }
-            .frame(width: 26, height: 26)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(config.displayName).font(.caption.weight(.bold))
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    providerGlyph
+                    Text(config.displayName)
+                        .font(.caption.weight(.bold))
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                    statusBadge
+                }
                 Text(config.model)
                     .font(.system(.caption2, design: .monospaced))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    .truncationMode(.middle)
             }
-            Spacer(minLength: 6)
-            statusBadge
         }
+    }
+
+    private var providerGlyph: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(LinearGradient(colors: [tint.opacity(0.9), tint.opacity(0.5)],
+                                     startPoint: .topLeading, endPoint: .bottomTrailing))
+            Image(systemName: symbol)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(.white)
+        }
+        .frame(width: isCompact ? 24 : 26, height: isCompact ? 24 : 26)
     }
 
     @ViewBuilder
@@ -336,6 +369,7 @@ private struct StructuredResultCard: View {
             }
             .font(.caption2.weight(.semibold))
             .foregroundStyle(tint)
+            .fixedSize()
         } else if error != nil {
             badge("失败", color: .red, symbol: "xmark.octagon.fill")
         } else if let v = validation {
@@ -354,6 +388,7 @@ private struct StructuredResultCard: View {
             .padding(.horizontal, 7)
             .padding(.vertical, 3)
             .background(color.opacity(0.12), in: Capsule())
+            .fixedSize()
     }
 
     @ViewBuilder

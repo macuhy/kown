@@ -59,7 +59,7 @@ struct SettingsView: View {
             case .providers:   return "square.stack.3d.up"
             case .prompts:     return "text.badge.plus"
             case .skills:      return "wand.and.stars"
-            case .deviceTools: return "checklist.checked"
+            case .deviceTools: return "wrench.and.screwdriver.fill"
             case .github:      return "chevron.left.forwardslash.chevron.right"
             case .chains:      return "arrow.triangle.branch"
             case .webSearch:   return "globe"
@@ -549,20 +549,24 @@ struct SettingsView: View {
                 }
             }
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text("导航")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.tertiary)
-                    .padding(.horizontal, 10)
-                    .padding(.top, 4)
-                ForEach(availableTabs) { t in
-                    desktopTabButton(t)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("导航")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.tertiary)
+                            .padding(.horizontal, 10)
+                            .padding(.top, 4)
+                        ForEach(availableTabs) { t in
+                            desktopTabButton(t)
+                        }
+                    }
+
+                    sidebarStatusCard
                 }
+                .padding(.bottom, 4)
             }
-
-            Spacer(minLength: 0)
-
-            sidebarStatusCard
+            .scrollIndicators(.automatic)
         }
         // macOS sheet 会压在宿主窗口工具栏下方,这里额外下移,避免顶部控件贴边或被裁。
         .padding(.top, Self.desktopSheetTopPadding)
@@ -999,10 +1003,11 @@ struct SettingsView: View {
                 .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                Spacer(minLength: 0)
             }
             .padding(20)
+            .frame(maxWidth: 760, alignment: .topLeading)
         }
+        .scrollIndicators(.automatic)
     }
 
     private var headerSubtitle: String {
