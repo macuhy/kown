@@ -111,7 +111,7 @@ struct SettingsView: View {
     #endif
     private static let desktopWidth: CGFloat = 960
     private static let desktopHeight: CGFloat = 660
-    private static let desktopSheetTopPadding: CGFloat = 78
+    private static let desktopSheetTopPadding: CGFloat = 14
 
     /// 实际展示的 tab — 「软件更新」(Sparkle) 仅 macOS 有,iOS 过滤掉。
     private var availableTabs: [Tab] {
@@ -533,8 +533,22 @@ struct SettingsView: View {
     }
     #endif
 
+    private var desktopTabSections: [(title: String, tabs: [Tab])] {
+        [
+            ("基础", [.providers, .prompts, .skills, .deviceTools, .github]),
+            ("工作流", [.chains, .webSearch, .tts, .scheduler, .performance]),
+            ("数据", [.sync, .backup, .memory, .favorites]),
+            ("洞察", [.usage, .dashboard, .leaderboard, .eval]),
+            ("版本", [.updates, .changelog])
+        ]
+        .map { section in
+            (title: section.0, tabs: section.1.filter { availableTabs.contains($0) })
+        }
+        .filter { !$0.tabs.isEmpty }
+    }
+
     private var desktopSidebar: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 13) {
             HStack(spacing: 12) {
                 SettingsAppIcon()
                 .frame(width: 40, height: 40)
@@ -550,16 +564,9 @@ struct SettingsView: View {
             }
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("导航")
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(.tertiary)
-                            .padding(.horizontal, 10)
-                            .padding(.top, 4)
-                        ForEach(availableTabs) { t in
-                            desktopTabButton(t)
-                        }
+                VStack(alignment: .leading, spacing: 13) {
+                    ForEach(Array(desktopTabSections.enumerated()), id: \.offset) { _, section in
+                        desktopTabSection(title: section.title, tabs: section.tabs)
                     }
 
                     sidebarStatusCard
@@ -577,6 +584,18 @@ struct SettingsView: View {
         .background(.ultraThinMaterial)
     }
 
+    private func desktopTabSection(title: String, tabs: [Tab]) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.tertiary)
+                .padding(.horizontal, 10)
+            ForEach(tabs) { t in
+                desktopTabButton(t)
+            }
+        }
+    }
+
     private func desktopTabButton(_ t: Tab) -> some View {
         let selected = tab == t
         return Button {
@@ -587,7 +606,7 @@ struct SettingsView: View {
             HStack(spacing: 10) {
                 Image(systemName: t.symbol)
                     .font(.system(size: 14, weight: .semibold))
-                    .frame(width: 24, height: 24)
+                    .frame(width: 22, height: 22)
                     .foregroundStyle(selected ? t.tint : .secondary)
                 Text(t.label)
                     .font(.callout.weight(selected ? .semibold : .medium))
@@ -600,7 +619,7 @@ struct SettingsView: View {
                 }
             }
             .padding(.horizontal, 10)
-            .padding(.vertical, 9)
+            .padding(.vertical, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -620,7 +639,7 @@ struct SettingsView: View {
     private var sidebarStatusCard: some View {
         let enabled = viewModel.providers.filter(\.enabled).count
         let total = viewModel.providers.count
-        return VStack(alignment: .leading, spacing: 10) {
+        return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Image(systemName: enabled == 0 ? "exclamationmark.triangle.fill" : "checkmark.seal.fill")
                     .foregroundStyle(enabled == 0 ? .orange : .green)
@@ -639,7 +658,7 @@ struct SettingsView: View {
                     .lineLimit(1)
             }
         }
-        .padding(12)
+        .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.platformControlBackground.opacity(0.58), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay {
@@ -649,9 +668,9 @@ struct SettingsView: View {
     }
 
     private var desktopHeader: some View {
-        HStack(alignment: .center, spacing: 16) {
+        HStack(alignment: .center, spacing: 14) {
             ZStack {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(
                         LinearGradient(
                             colors: [tab.tint.opacity(0.24), tab.tint.opacity(0.10)],
@@ -660,22 +679,22 @@ struct SettingsView: View {
                         )
                     )
                 Image(systemName: tab.symbol)
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(.system(size: 19, weight: .semibold))
                     .foregroundStyle(tab.tint)
             }
-            .frame(width: 52, height: 52)
+            .frame(width: 44, height: 44)
             .overlay {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .strokeBorder(tab.tint.opacity(0.22), lineWidth: 1)
             }
 
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(tab.label)
-                    .font(.system(.title2, design: .rounded).weight(.bold))
+                    .font(.system(.title3, design: .rounded).weight(.bold))
                 Text(headerSubtitle)
-                    .font(.callout)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                    .lineLimit(1)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -695,10 +714,10 @@ struct SettingsView: View {
                 .buttonStyle(.bordered)
                 .controlSize(.large)
         }
-        .padding(.horizontal, 24)
+        .padding(.horizontal, 20)
         // 与侧栏一致:避开宿主窗口工具栏下缘,给顶部标题和按钮留出呼吸感。
         .padding(.top, Self.desktopSheetTopPadding)
-        .padding(.bottom, 18)
+        .padding(.bottom, 13)
         .background(.thinMaterial)
     }
 
@@ -807,6 +826,7 @@ struct SettingsView: View {
     private var providersList: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
+                providerSetupCard
                 providerDashboard
                 HStack(alignment: .firstTextBaseline) {
                     VStack(alignment: .leading, spacing: 4) {
@@ -844,6 +864,98 @@ struct SettingsView: View {
             }
             .padding(24)
             .frame(maxWidth: 1040, alignment: .topLeading)
+        }
+    }
+
+    private var providerSetupCard: some View {
+        let enabled = viewModel.providers.filter(\.enabled).count
+        let total = viewModel.providers.count
+        let tint = enabled == 0 ? Color.orange : Color.green
+        return ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: 16) {
+                providerSetupTitle(enabled: enabled, total: total, tint: tint)
+                Spacer(minLength: 8)
+                providerSetupSteps(tint: tint)
+                addProviderMenu
+                    .buttonStyle(.borderedProminent)
+                    .fixedSize()
+            }
+
+            VStack(alignment: .leading, spacing: 14) {
+                providerSetupTitle(enabled: enabled, total: total, tint: tint)
+                providerSetupSteps(tint: tint)
+                addProviderMenu
+                    .buttonStyle(.borderedProminent)
+                    .fixedSize()
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            ZStack {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(.regularMaterial)
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [tint.opacity(0.11), Color.platformControlBackground.opacity(0.20), Color.clear],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(tint.opacity(0.18), lineWidth: 1)
+        }
+    }
+
+    private func providerSetupTitle(enabled: Int, total: Int, tint: Color) -> some View {
+        HStack(alignment: .top, spacing: 11) {
+            Image(systemName: enabled == 0 ? "wand.and.rays" : "checkmark.seal.fill")
+                .font(.system(size: 17, weight: .bold))
+                .foregroundStyle(tint)
+                .frame(width: 36, height: 36)
+                .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(enabled == 0 ? "三步完成模型配置" : "模型配置已就绪")
+                    .font(.headline.weight(.bold))
+                Text(enabled == 0 ? "先添加厂商,再填 Model / API Key,最后保存并测试。" : "\(enabled)/\(total) 家 Provider 已启用,仍可继续补充备用模型。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(minWidth: 220, alignment: .leading)
+    }
+
+    private func providerSetupSteps(tint: Color) -> some View {
+        HStack(spacing: 8) {
+            setupStep("1", "添加厂商", tint: tint)
+            setupStep("2", "填模型和 Key", tint: tint)
+            setupStep("3", "保存后测试", tint: tint)
+        }
+    }
+
+    private func setupStep(_ number: String, _ title: String, tint: Color) -> some View {
+        HStack(spacing: 7) {
+            Text(number)
+                .font(.caption2.weight(.black))
+                .foregroundStyle(.white)
+                .frame(width: 18, height: 18)
+                .background(tint, in: Circle())
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 7)
+        .background(Color.platformControlBackground.opacity(0.58), in: Capsule(style: .continuous))
+        .overlay {
+            Capsule(style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.07), lineWidth: 1)
         }
     }
 
