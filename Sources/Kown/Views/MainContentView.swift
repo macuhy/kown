@@ -55,10 +55,6 @@ struct MainContentView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 sessionActionsMenu
             }
-            #else
-            ToolbarItem(placement: .automatic) {
-                exportMenu
-            }
             #endif
         }
         .sheet(isPresented: $showBatch) {
@@ -361,20 +357,6 @@ struct MainContentView: View {
     }
 
     // MARK: - 整会话导出
-
-    /// 会话区工具栏的「导出」菜单 — 导出当前会话为 Markdown / JSON。
-    /// 无当前会话时整个菜单禁用。
-    @ViewBuilder
-    private var exportMenu: some View {
-        let conv = viewModel.selectedConversation
-        Menu {
-            exportMenuItems(conversation: conv)
-        } label: {
-            Image(systemName: "square.and.arrow.up")
-        }
-        .disabled(conv == nil)
-        .help("导出 / 复制")
-    }
 
     #if os(iOS)
     private var sessionActionsMenu: some View {
