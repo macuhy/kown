@@ -177,6 +177,23 @@ struct GitHubClient: Sendable {
         }
     }
 
+    /// 列出仓库某分支的全部文件路径(blob),递归。用于让模型在改文件前知道仓库里有什么。
+    /// 截断到 `limit` 条避免大仓库把上下文撑爆;失败 / 空仓库返回空数组(调用方据此降级)。
+    func listTree(owner: String, repo: String, branch: String, limit: Int = 300) async throws -> [String] {
+        let url = URL(string: "\(Self.api)/repos/\(owner)/\(repo)/git/trees/\(Self.escape(branch))?recursive=1")!
+        let data = try await get(url)
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let tree = json["tree"] as? [[String: Any]] else {
+            return []
+        }
+        var paths: [String] = []
+        for node in tree where (node["type"] as? String) == "blob" {
+            if let p = node["path"] as? String { paths.append(p) }
+            if paths.count >= limit { break }
+        }
+        return paths
+    }
+
     /// 读文件,拿 sha + 旧内容(用于更新时回传 sha + 算 diff)。文件不存在返回空。
     func getFile(owner: String, repo: String, path: String, branch: String) async throws -> GitHubFile {
         let p = path.split(separator: "/").map { Self.escape(String($0)) }.joined(separator: "/")
@@ -295,8 +312,21 @@ extension GitHubClient {
     }
 
     /// 注入到 system prompt 的写入说明:告诉模型本会话已连到某 GitHub 仓库,改文件要用 kown:write 块。
-    static func writeInstructions(repo: String, branch: String) -> String {
-        """
+    /// `paths` 非空时附上仓库文件树,并提示可用 `github_read_file` 先读现状再改(避免盲写覆盖)。
+    static func writeInstructions(repo: String, branch: String, paths: [String]? = nil) -> String {
+        var treeBlock = ""
+        if let paths, !paths.isEmpty {
+            let listed = paths.prefix(300).map { "- \($0)" }.joined(separator: "\n")
+            let more = paths.count > 300 ? "\n…(还有更多文件未列出)" : ""
+            treeBlock = """
+
+            <files>
+            \(listed)\(more)
+            </files>
+            **改已有文件前,先用 `github_read_file` 工具读到它的当前内容**,在此基础上修改,再输出整文件新版本 —— 不要凭空重写导致覆盖丢失原有内容。新建文件则无需先读。
+            """
+        }
+        return """
         <github_workspace repo="\(repo)" branch="\(branch)">
         本会话已连接 GitHub 仓库 `\(repo)`(分支 `\(branch)`)。
         如果用户要求你创建 / 修改 / 重写文件,你 **必须** 输出下面格式的代码块,系统会自动提交到该仓库:
@@ -309,7 +339,7 @@ extension GitHubClient {
         - 第一行必须是 ` ```kown:write ` 后跟一个空格再跟仓库内相对路径(不能有前导 `/`,不能用 `..`)。
         - 块里写**整个文件的新内容**,系统会读取远端旧版本算出改动行数后提交。
         - 多个文件 = 多个块。提交后会在聊天里显示每个文件的 +/- 行数与 commit 链接。
-        - 只是讨论 / 回答问题时不要输出 kown:write 块。
+        - 只是讨论 / 回答问题时不要输出 kown:write 块。\(treeBlock)
         </github_workspace>
         """
     }

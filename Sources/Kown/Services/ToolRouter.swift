@@ -93,18 +93,40 @@ enum ToolCatalog {
         )
     )
 
+    static let githubReadFile = LLMTool(
+        name: "github_read_file",
+        description: """
+        Read the current content of a file in the connected GitHub repository (the conversation is \
+        bound to a specific repo + branch). Use this BEFORE rewriting an existing file with a \
+        ```kown:write``` block, so you edit on top of the real current content instead of guessing \
+        and overwriting it. No need to read when creating a brand-new file.
+        """,
+        parameters: ToolParameters(
+            properties: [
+                "path": ToolParameterSchema(
+                    type: "string",
+                    description: "Repo-relative file path, e.g. 'docs/plan.md'. No leading slash."
+                )
+            ],
+            required: ["path"]
+        )
+    )
+
     /// 按 context + 技能白名单拼出本次暴露给模型的工具集合。
     /// - webSearch:配置就绪才暴露 `web_search`。
     /// - deviceTools:用户开了「设备工具」总开关时暴露提醒/备忘。
     /// - extraToolNames:当前技能额外点名要的工具(让技能不依赖全局开关即可用其声明的工具)。
     static func enabledTools(webSearch: WebSearchSession?,
                              deviceTools: Bool,
-                             extraToolNames: Set<String>) -> [LLMTool] {
+                             extraToolNames: Set<String>,
+                             gitHub: Bool = false) -> [LLMTool] {
         var tools: [LLMTool] = []
         if webSearch != nil { tools.append(ToolCatalog.webSearch) }
         if deviceTools || extraToolNames.contains(ToolCatalog.createReminder.name) { tools.append(ToolCatalog.createReminder) }
         if deviceTools || extraToolNames.contains(ToolCatalog.listReminders.name) { tools.append(ToolCatalog.listReminders) }
         if deviceTools || extraToolNames.contains(ToolCatalog.createNote.name) { tools.append(ToolCatalog.createNote) }
+        // 本会话绑定了 GitHub 仓库时,暴露「读文件」工具,让模型改文件前先看现状。
+        if gitHub { tools.append(ToolCatalog.githubReadFile) }
         return tools
     }
 }
@@ -130,6 +152,8 @@ struct WebSearchSession: Sendable {
 /// `nil` 表示本次不带任何工具 —— 客户端据此跳过工具循环、且不注入当前时间。
 struct ToolContext: Sendable {
     var webSearch: WebSearchSession?
+    /// 本会话绑定的 GitHub 写入目标;非 nil 时 `github_read_file` 工具可用。
+    var github: GitHubWriteTarget?
 }
 
 /// 执行模型发出的 ToolCall。线程安全,无可变状态。
@@ -165,6 +189,8 @@ struct ToolRouter: Sendable {
             return await runListReminders(call)
         case ToolCatalog.createNote.name:
             return await runCreateNote(call)
+        case ToolCatalog.githubReadFile.name:
+            return await runGitHubReadFile(call)
         default:
             return ToolResult(
                 callID: call.id,
@@ -294,6 +320,39 @@ struct ToolRouter: Sendable {
         } catch {
             let msg = error.localizedDescription
             return Self.errorResult(call, summary: "⚠ 写入备忘录失败: \(msg)", message: msg)
+        }
+    }
+
+    // MARK: - github_read_file
+
+    private func runGitHubReadFile(_ call: ToolCall) async -> ToolResult {
+        guard let gh = context.github else {
+            return Self.errorResult(call, summary: "⚠ 未连接 GitHub 仓库", message: "no github repo bound")
+        }
+        let args = (try? JSONSerialization.jsonObject(with: Data(call.argumentsJSON.utf8)) as? [String: Any]) ?? [:]
+        let path = ((args["path"] as? String) ?? "").trimmingCharacters(in: CharacterSet(charactersIn: "/ \t\n"))
+        guard !path.isEmpty, !path.contains("..") else {
+            return Self.errorResult(call, summary: "⚠ 路径为空或非法", message: "empty or invalid path")
+        }
+        do {
+            let file = try await GitHubClient(token: gh.token).getFile(
+                owner: gh.owner, repo: gh.repo, path: path, branch: gh.branch)
+            guard let content = file.content else {
+                let payload: [String: Any] = ["exists": false, "path": path,
+                                              "note": "文件在该分支不存在,可视为新建。"]
+                return ToolResult(callID: call.id, name: call.name,
+                                  content: Self.jsonString(payload),
+                                  summary: "✓ \(path) 不存在(新建)",
+                                  isError: false)
+            }
+            let payload: [String: Any] = ["exists": true, "path": path, "content": content]
+            return ToolResult(callID: call.id, name: call.name,
+                              content: Self.jsonString(payload),
+                              summary: "✓ 已读取 \(path)(\(content.count) 字)",
+                              isError: false)
+        } catch {
+            let msg = error.localizedDescription
+            return Self.errorResult(call, summary: "⚠ 读取失败: \(msg)", message: msg)
         }
     }
 

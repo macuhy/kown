@@ -96,9 +96,6 @@ extension AppViewModel {
                 branch: conversations[convIdx].gitHubBranch,
                 token: GitHubAuth.token())
             : nil
-        let gitHubInstructionsForSend = gitHubTargetForSend.map {
-            GitHubClient.writeInstructions(repo: $0.fullName, branch: $0.branch)
-        }
         let knowledgeFolderForSend = currentKnowledgeFolder
         // memory items 取一份快照(O(1) COW),供后台 BM25 打分,避免触碰 @MainActor 的 MemoryStore。
         let memoryItemsForSend: [MemoryItem] = memoryInjectionEnabled ? MemoryStore.shared.items : []
@@ -133,10 +130,11 @@ extension AppViewModel {
         let toolsSnapshot: [LLMTool] = ToolCatalog.enabledTools(
             webSearch: webSessionSnapshot,
             deviceTools: deviceToolsEnabledForNextSend,
-            extraToolNames: skillToolNames)
+            extraToolNames: skillToolNames,
+            gitHub: gitHubTargetForSend != nil)
         // 有任一工具才建 context;否则 nil(客户端据此跳过工具循环、不注入当前时间)。
         let toolContextSnapshot: ToolContext? = toolsSnapshot.isEmpty
-            ? nil : ToolContext(webSearch: webSessionSnapshot)
+            ? nil : ToolContext(webSearch: webSessionSnapshot, github: gitHubTargetForSend)
         let modeSnapshot = currentMode
         let debateRoundsSnapshot = debateRoundsForNextSend
         // Summary 只在 Council 模式跑
@@ -162,7 +160,6 @@ extension AppViewModel {
             debateRoundsCount: debateRoundsSnapshot, workspaceURL: workspaceURLForSend,
             structuredSchema: structuredSchemaSnapshot,
             gitHubTarget: gitHubTargetForSend,
-            gitHubInstructions: gitHubInstructionsForSend,
             workspaceContextURL: workspaceURLForSend,
             knowledgeFolder: knowledgeFolderForSend,
             knowledgeQuery: trimmed,
@@ -179,7 +176,7 @@ extension AppViewModel {
     nonisolated private static func assembleSystemPrompt(
         base: String,
         workspaceContextURL: URL?,
-        gitHubInstructions: String?,
+        gitHubTarget: GitHubWriteTarget?,
         knowledgeFolder: KnowledgeFolder?,
         knowledgeQuery: String,
         memoryItems: [MemoryItem],
@@ -189,8 +186,12 @@ extension AppViewModel {
         if let url = workspaceContextURL, let ctx = WorkspaceManager.buildContext(workspaceURL: url) {
             parts.append(ctx)
         }
-        if let gh = gitHubInstructions, !gh.isEmpty {
-            parts.append(gh)
+        if let gh = gitHubTarget {
+            // 拉一次文件树注入指令块(让模型知道仓库里有什么 + 改前先 github_read_file 读现状)。
+            // 失败 / 大仓库降级:listTree 返回空 → 指令块不带文件树,功能不受影响。
+            let paths = (try? await GitHubClient(token: gh.token)
+                .listTree(owner: gh.owner, repo: gh.repo, branch: gh.branch)) ?? []
+            parts.append(GitHubClient.writeInstructions(repo: gh.fullName, branch: gh.branch, paths: paths))
         }
         if let folder = knowledgeFolder {
             let hits = await LocalRAG.retrieve(query: knowledgeQuery, folder: folder, topK: 4)
@@ -229,7 +230,6 @@ extension AppViewModel {
         structuredSchema: String? = nil,
         // GitHub 写入目标(本会话绑定了仓库时才传);kown:write 块提交到该仓库而非本地 workspace。
         gitHubTarget: GitHubWriteTarget? = nil,
-        gitHubInstructions: String? = nil,
         // 上下文来源(主发送路径才传;edit/retry 用默认空值 → 不二次注入,沿用 systemPromptText 原样)。
         // 在后台 assembleSystemPrompt 里前置到 systemPromptText 前面。
         workspaceContextURL: URL? = nil,
@@ -315,7 +315,7 @@ extension AppViewModel {
             let sysSnapshot = await Self.assembleSystemPrompt(
                 base: systemPromptText,
                 workspaceContextURL: workspaceContextURL,
-                gitHubInstructions: gitHubInstructions,
+                gitHubTarget: gitHubTarget,
                 knowledgeFolder: knowledgeFolder,
                 knowledgeQuery: knowledgeQuery,
                 memoryItems: memoryItems,
