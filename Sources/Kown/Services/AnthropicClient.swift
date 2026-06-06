@@ -60,16 +60,13 @@ struct AnthropicClient: LLMClient {
                     // 扩展思考:仅在本轮不带工具时开(避免 thinking 块跨工具轮 echo 的复杂度)。
                     let thinkingOn = Self.claudeThinkingEnabled && options.tools.isEmpty
 
-                    for round in 0..<Self.maxToolRounds {
-                        let isLast = round == Self.maxToolRounds - 1
-                        if isLast, options.toolContext != nil, !options.tools.isEmpty {
-                            messages.append([
-                                "role": "user",
-                                "content": "工具调用次数已达上限,请基于以上工具结果直接给出完整答案,本轮不要再调用工具。"
-                            ])
-                        }
-                        let toolsForThisRound: [LLMTool] = isLast ? [] : options.tools
-                        let result = try await Self.streamOnce(
+                    // 新版 Claude 模型已弃用 temperature / top_p,带上会报 invalid_request。
+                    // 这两个值用 var 持有:一旦某轮因此报错,去掉后重试,并对后续轮次同样省略。
+                    var effTemperature = options.temperature
+                    var effTopP = options.topP
+                    func runStreamOnce(messages: [[String: Any]], tools: [LLMTool],
+                                       temperature: Double?, topP: Double?) async throws -> RoundResult {
+                        try await Self.streamOnce(
                             url: try Self.makeURL(config: config),
                             apiKey: apiKey,
                             model: config.model,
@@ -79,14 +76,37 @@ struct AnthropicClient: LLMClient {
                                 summary: options.contextSummary,
                                 includeCurrentTime: options.toolContext != nil
                             ),
-                            tools: toolsForThisRound,
-                            temperature: options.temperature,
-                            topP: options.topP,
+                            tools: tools,
+                            temperature: temperature,
+                            topP: topP,
                             maxTokens: options.maxTokens ?? Self.defaultMaxTokens,
                             thinkingEnabled: thinkingOn,
                             yieldText: { continuation.yield(.text($0)) },
                             yieldReasoning: { continuation.yield(.reasoning($0)) }
                         )
+                    }
+
+                    for round in 0..<Self.maxToolRounds {
+                        let isLast = round == Self.maxToolRounds - 1
+                        if isLast, options.toolContext != nil, !options.tools.isEmpty {
+                            messages.append([
+                                "role": "user",
+                                "content": "工具调用次数已达上限,请基于以上工具结果直接给出完整答案,本轮不要再调用工具。"
+                            ])
+                        }
+                        let toolsForThisRound: [LLMTool] = isLast ? [] : options.tools
+                        let result: RoundResult
+                        do {
+                            result = try await runStreamOnce(messages: messages, tools: toolsForThisRound,
+                                                             temperature: effTemperature, topP: effTopP)
+                        } catch let e as LLMError where Self.isDeprecatedSamplingParam(e)
+                                && (effTemperature != nil || effTopP != nil) {
+                            // 模型不接受 temperature / top_p —— 去掉后重试一次(错误在出文前发生,无半截内容)。
+                            effTemperature = nil
+                            effTopP = nil
+                            result = try await runStreamOnce(messages: messages, tools: toolsForThisRound,
+                                                             temperature: nil, topP: nil)
+                        }
 
                         cumulativeInput += result.inputTokens
                         cumulativeOutput += result.outputTokens
@@ -155,6 +175,17 @@ struct AnthropicClient: LLMClient {
     }
 
     // MARK: - Helpers
+
+    /// 命中「该模型已弃用 / 不支持 temperature 或 top_p」类报错 → 调用方去掉采样参数重试。
+    /// 兼容直连 Anthropic 与中转代理(代理常把 400 包成 HTTP 200 + JSON 信封,文案里仍含原始 message)。
+    private static func isDeprecatedSamplingParam(_ error: LLMError) -> Bool {
+        guard case .httpError(_, let body) = error else { return false }
+        let b = body.lowercased()
+        let mentionsParam = b.contains("temperature") || b.contains("top_p") || b.contains("top-p")
+        let mentionsReject = b.contains("deprecated") || b.contains("not supported")
+            || b.contains("unsupported") || b.contains("not allowed") || b.contains("does not support")
+        return mentionsParam && mentionsReject
+    }
 
     private static func makeURL(config: ProviderConfig) throws -> URL {
         let urlString = joinURL(config.baseURL, "/messages")
