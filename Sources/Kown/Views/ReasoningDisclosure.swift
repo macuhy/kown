@@ -11,6 +11,14 @@ struct ReasoningDisclosure: View {
 
     @State private var expanded = false
 
+    /// 渲染用文本:实时流式已在 ResponseState.flushPending 封顶,但更早落盘的历史 reasoning 可能超长。
+    /// 再兜一层,避免单个 Text(reasoning) 整段测量烧 CPU(与 ResponseState.maxReasoningChars 对齐)。
+    private var displayReasoning: String {
+        reasoning.count > ResponseState.maxReasoningChars
+            ? String(reasoning.prefix(ResponseState.maxReasoningChars)) + "…"
+            : reasoning
+    }
+
     var body: some View {
         if !reasoning.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
@@ -46,7 +54,7 @@ struct ReasoningDisclosure: View {
 
                 if expanded {
                     ScrollView {
-                        Text(reasoning)
+                        Text(displayReasoning)
                             .font(.system(.caption, design: .default))
                             .foregroundStyle(.secondary)
                             .textSelection(.enabled)

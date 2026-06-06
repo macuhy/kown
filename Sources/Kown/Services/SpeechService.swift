@@ -270,6 +270,10 @@ final class SpeechService: NSObject, ObservableObject, AVSpeechSynthesizerDelega
 
     /// 停掉当前播放(合成器 + mp3 player),但不动 speakingText/synthTask/队列。
     private func stopPlaybackOnly() {
+        // 兜底:进度定时器原本只在 audioPlayerDidFinishPlaying 委托里(经 resetKaraoke)失效;
+        // 若播放被打断 / 新 speak() 抢占导致委托不触发,定时器会变成孤儿一直 tick。每条 stop 路径都先关掉它。
+        progressTimer?.invalidate()
+        progressTimer = nil
         if synth.isSpeaking { synth.stopSpeaking(at: .immediate) }
         player?.stop()
         player = nil

@@ -239,6 +239,15 @@ struct AnthropicClient: LLMClient {
             guard let data = event.data.data(using: .utf8) else { continue }
             guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
 
+            // Anthropic 在 HTTP 200 的流上以 SSE `event: error` 回报错误(overloaded / invalid_request 等)。
+            // 不处理会被 default 静默吞掉 → 整条流空手收尾、不抛异常,上层只看到「没返回内容」。
+            if event.event == "error" {
+                let err = json["error"] as? [String: Any]
+                let type = err?["type"] as? String ?? "error"
+                let msg = err?["message"] as? String ?? event.data
+                throw LLMError.httpError(status: 200, body: "\(type): \(msg)")
+            }
+
             switch event.event {
             case "message_start":
                 // message.usage.input_tokens 是 prompt 用量

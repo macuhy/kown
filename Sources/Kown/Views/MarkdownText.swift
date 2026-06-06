@@ -47,22 +47,37 @@ struct MarkdownText: View {
 /// 就有几十上百个定时器每 150ms 全部触发,渲染和切换都卡。静态历史卡现在零定时器。
 private struct StreamingMarkdownText: View {
     let text: String
-    /// 节流快照:每 ~150ms 取一次 text,把"每 chunk 重 parse 整段"(O(N²))降为按时间节流。
+    /// 节流快照:每 ~200ms 取一次 text,把"每 chunk 重 parse 整段"(O(N²))降为按时间节流。
     @State private var snapshot: String = ""
-    private let tick = Timer.publish(every: 0.15, on: .main, in: .common).autoconnect()
+    /// 对 snapshot 做完 stylizeMath+balancedFences 的结果,**只在快照更新时**(onAppear/onReceive)算一次。
+    /// 关键:body 会因父级/兄弟卡片(Council 多列)重渲染而被反复求值;若每次 body 都重跑这条
+    /// 转换链(stylizeMath 2 条正则 + balancedFences 整段扫描),N 路并发时主线程被烧满。
+    /// 缓存后 body 只读结果,转换频率被钉在节流 tick 上。
+    @State private var styledSnapshot: String = ""
+    private let tick = Timer.publish(every: 0.20, on: .main, in: .common).autoconnect()
 
     var body: some View {
         let src = snapshot.isEmpty ? text : snapshot
-        Group {
+        return Group {
             if src.count > MD.maxLiveChars {
                 MD.rawText(src)
             } else {
                 // 节流快照 + 数学样式 + 补全未闭合代码围栏;不开 textSelection 更轻。
-                MD.rendered(for: MD.balancedFences(MD.stylizeMath(src)), selectable: false)
+                // styledSnapshot 为空仅出现在 onAppear 之前的首帧,退化为即时计算一次。
+                MD.rendered(for: styledSnapshot.isEmpty ? MD.balancedFences(MD.stylizeMath(src)) : styledSnapshot,
+                            selectable: false)
             }
         }
-        .onAppear { snapshot = text }
-        .onReceive(tick) { _ in if snapshot != text { snapshot = text } }
+        .onAppear { commitSnapshot(text) }
+        .onReceive(tick) { _ in if snapshot != text { commitSnapshot(text) } }
+    }
+
+    /// 推进快照并同步重算转换结果(仅在事件回调里,不在 body 内改 @State)。
+    private func commitSnapshot(_ newText: String) {
+        snapshot = newText
+        styledSnapshot = newText.count > MD.maxLiveChars
+            ? ""    // 超长走 rawText,不需要 styled
+            : MD.balancedFences(MD.stylizeMath(newText))
     }
 }
 
@@ -167,8 +182,22 @@ enum MD {
         return result
     }
 
+    /// hasBlockLevelExtras 记忆表:MD.rendered 每次渲染都调它(跑最多 5 条正则整段扫描),
+    /// 完成卡折叠/展开会一帧内把所有可见卡重渲一遍 → 同一段文本被反复扫。按内容 hash 记忆最近结果。
+    /// 哈希碰撞最坏只让某次渲染走错 inline/block 分支一帧,可接受;到 128 条清空封顶,防无限增长。
+    private static var blockExtrasMemo: [Int: Bool] = [:]
+
     /// 含代码块 / 表格 / 任务列表 — 这些 block 用 AttributedString 渲染体验差,继续走 MarkdownUI。
     static func hasBlockLevelExtras(_ text: String) -> Bool {
+        let key = text.hashValue
+        if let cached = blockExtrasMemo[key] { return cached }
+        let result = computeHasBlockLevelExtras(text)
+        if blockExtrasMemo.count >= 128 { blockExtrasMemo.removeAll(keepingCapacity: true) }
+        blockExtrasMemo[key] = result
+        return result
+    }
+
+    private static func computeHasBlockLevelExtras(_ text: String) -> Bool {
         text.contains("```")
         || text.contains("~~~")
         || text.range(of: #"^\|.+\|"#, options: [.regularExpression, .anchored]) != nil

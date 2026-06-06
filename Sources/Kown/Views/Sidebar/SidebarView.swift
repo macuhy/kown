@@ -33,8 +33,12 @@ struct SidebarView: View {
         !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    /// 搜索命中(会话 id → 片段)。无 query 时为空。
-    private var hitsByID: [UUID: ConversationSearchHit] {
+    /// 搜索命中(会话 id → 片段)缓存。每次按键只在 onChange 里算一次,避免
+    /// 每个可见行(conversationRow)各自再 search 一遍整段索引(O(可见行数 × 全文))。
+    @State private var cachedHitsByID: [UUID: ConversationSearchHit] = [:]
+
+    /// 跑一次索引搜索得到命中表。无 query 时为空。仅由 searchText 的 onChange 调用。
+    private func computeHitsByID() -> [UUID: ConversationSearchHit] {
         guard isSearching else { return [:] }
         var map: [UUID: ConversationSearchHit] = [:]
         for hit in searchIndex.search(searchText) {
@@ -54,7 +58,7 @@ struct SidebarView: View {
             list = list.filter { $0.tags.contains(tag) }
         }
         if isSearching {
-            let hits = hitsByID
+            let hits = cachedHitsByID
             list = list.filter { hits[$0.id] != nil }
         }
         // 置顶优先,其余保持原数组序(已是改动顶到最前的 updatedAt 序)
@@ -84,8 +88,14 @@ struct SidebarView: View {
         // 懒重建:索引只在搜索时用到,所以仅在开始搜索(空→非空)那一刻建一次,
         // 而不是每次会话数组变动都全量重扫 + 对整个大数组做相等性比较(都 O(全部文本))。
         .onChange(of: searchText) { old, new in
+            // 仅「空→非空」那一刻才重建索引(后台跑),建好后再算命中;其余按键直接用现成索引算命中。
             if old.isEmpty && !new.isEmpty {
-                searchIndex.rebuild(viewModel.conversations)
+                Task {
+                    await searchIndex.rebuild(viewModel.conversations)
+                    cachedHitsByID = computeHitsByID()
+                }
+            } else {
+                cachedHitsByID = computeHitsByID()
             }
         }
         .sheet(item: $promptEditTarget) { target in
@@ -499,7 +509,7 @@ struct SidebarView: View {
                 folders: viewModel.conversationFolders,
                 onMoveToFolder: { viewModel.setFolder(conv.id, folderID: $0) }
             )
-            if !isViewingTrash, let hit = hitsByID[conv.id], let snippet = highlightedSnippet(hit) {
+            if !isViewingTrash, let hit = cachedHitsByID[conv.id], let snippet = highlightedSnippet(hit) {
                 snippet
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -608,6 +618,8 @@ struct SidebarView: View {
         case .direct:  return Color(red: 0.16, green: 0.48, blue: 0.94)
         case .compare: return Color(red: 0.91, green: 0.55, blue: 0.20)
         case .debate:  return Color(red: 0.88, green: 0.35, blue: 0.22)
+        case .structured: return Color(red: 0.36, green: 0.42, blue: 0.92)
+        case .tournament: return Color(red: 0.85, green: 0.62, blue: 0.13)
         }
     }
 

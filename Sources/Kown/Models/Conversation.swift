@@ -5,6 +5,8 @@ enum ConversationMode: String, Codable, CaseIterable, Sendable {
     case direct
     case compare
     case debate
+    case structured
+    case tournament
 
     var displayName: String {
         switch self {
@@ -12,6 +14,8 @@ enum ConversationMode: String, Codable, CaseIterable, Sendable {
         case .direct:  return "Direct"
         case .compare: return "Compare"
         case .debate:  return "Debate"
+        case .structured: return "Structured"
+        case .tournament: return "Tournament"
         }
     }
 
@@ -21,6 +25,8 @@ enum ConversationMode: String, Codable, CaseIterable, Sendable {
         case .direct:  return "bubble.left.fill"
         case .compare: return "rectangle.split.2x1.fill"
         case .debate:  return "quote.bubble.fill"
+        case .structured: return "curlybraces"
+        case .tournament: return "trophy"
         }
     }
 
@@ -30,6 +36,8 @@ enum ConversationMode: String, Codable, CaseIterable, Sendable {
         case .direct:  return "Start a Direct Chat"
         case .compare: return "Compare Two Models"
         case .debate:  return "Start a Model Debate"
+        case .structured: return "Define a JSON Schema"
+        case .tournament: return "Start a Model Tournament"
         }
     }
 
@@ -39,6 +47,8 @@ enum ConversationMode: String, Codable, CaseIterable, Sendable {
         case .direct:  return "Have a focused conversation with one model"
         case .compare: return "Send the same question to two models and compare answers side-by-side"
         case .debate:  return "Let enabled models argue, rebut each other, then produce a moderated conclusion"
+        case .structured: return "让所有启用的模型都按你定义的 JSON Schema 返回严格 JSON,自动校验后并排对比各家的结构化结果"
+        case .tournament: return "让所有启用的模型先各自回答,再由裁判用单淘汰赛两两对决,逐轮决出最终冠军"
         }
     }
 }
@@ -67,6 +77,58 @@ struct DebateRound: Identifiable, Codable, Hashable, Sendable {
         self.responses = responses
         self.errors = errors
         self.panelOrder = panelOrder
+    }
+}
+
+/// Tournament(擂台 / 淘汰赛)模式中的一轮对决。一个 Turn 包含若干 TournamentRound,
+/// 每一轮里有若干两两对决(Match),裁判逐对裁定胜者,胜者晋级下一轮,直到决出冠军。
+/// 作法对齐 `DebateRound`:Codable / Hashable / Sendable,key 全用 providerID(uuidString)。
+struct TournamentRound: Identifiable, Codable, Hashable, Sendable {
+    /// 一场两两对决:裁判读 A、B 两家的回答,给出胜者 + 理由。
+    struct Match: Identifiable, Codable, Hashable, Sendable {
+        let id: UUID
+        /// 选手 A 的 providerID(uuidString)。
+        var aProviderID: String
+        /// 选手 B 的 providerID(uuidString)。轮空(bye)时为 nil,A 直接晋级。
+        var bProviderID: String?
+        /// 胜者 providerID(uuidString)。裁判未给出 / 失败时为 nil。
+        var winnerProviderID: String?
+        /// 裁判给出的判决理由。
+        var rationale: String
+        /// 裁判调用失败时的错误信息。
+        var error: String?
+
+        init(id: UUID = UUID(),
+             aProviderID: String,
+             bProviderID: String? = nil,
+             winnerProviderID: String? = nil,
+             rationale: String = "",
+             error: String? = nil) {
+            self.id = id
+            self.aProviderID = aProviderID
+            self.bProviderID = bProviderID
+            self.winnerProviderID = winnerProviderID
+            self.rationale = rationale
+            self.error = error
+        }
+    }
+
+    let id: UUID
+    /// 第几轮(1 起)。
+    var index: Int
+    /// 轮标题(如「四分之一决赛」「半决赛」「决赛」)。
+    var title: String
+    /// 本轮的对决列表。
+    var matches: [Match]
+
+    init(id: UUID = UUID(),
+         index: Int,
+         title: String,
+         matches: [Match] = []) {
+        self.id = id
+        self.index = index
+        self.title = title
+        self.matches = matches
     }
 }
 
@@ -128,6 +190,34 @@ struct CouncilVote: Codable, Hashable, Sendable {
     var rationale: String
 }
 
+/// Compare 模式的裁判判定结果:裁判模型读两家回答后给出「胜者 + 理由」。
+/// 随 Turn 一起存盘/同步,并在 Compare 回答下方以徽章展示。
+struct CompareVerdict: Codable, Hashable, Sendable {
+    /// 胜者 providerID(uuidString)。对应 Turn.responses / orderedPanelConfigs 里的某一家。
+    var winnerProviderID: String
+    /// 判定理由(一句话说明为什么这家更好)。
+    var rationale: String
+
+    init(winnerProviderID: String, rationale: String) {
+        self.winnerProviderID = winnerProviderID
+        self.rationale = rationale
+    }
+}
+
+/// 各家答案差异分析:共識(各模型一致点)/ 分歧(意见分歧点)。
+/// 由小模型抽取(`ConsensusAnalyzer`),opt-in「分析分歧」按钮触发,随 Turn 存盘/同步。
+struct ConsensusAnalysis: Codable, Hashable, Sendable {
+    /// 各模型一致认同的要点。
+    var agreements: [String]
+    /// 意见分歧点(尽量带「哪个模型怎么不同」)。
+    var disagreements: [String]
+
+    init(agreements: [String] = [], disagreements: [String] = []) {
+        self.agreements = agreements
+        self.disagreements = disagreements
+    }
+}
+
 /// 一轮问答：用户的 prompt + 各模型最终文本 + 可选的 Chair 综合
 struct Turn: Identifiable, Codable, Hashable, Sendable {
     let id: UUID
@@ -156,6 +246,8 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
     var panelOrder: [String]
     /// Debate 模式下的多轮辩论记录。旧会话没有该字段,所以保持 optional 兼容旧 JSON。
     var debateRounds: [DebateRound]?
+    /// Tournament(擂台 / 淘汰赛)模式下的逐轮对决记录。旧会话没有该字段,保持 optional 兼容旧 JSON。
+    var tournamentRounds: [TournamentRound]?
     /// 本轮被 model 提议 + 自动 apply 到 workspace 的文件改动(从 `kown:write` 代码块解析出)。
     /// 仅当 Conversation 设置了 workspaceBookmark 时才会有内容。
     var appliedWrites: [AppliedWrite]?
@@ -175,7 +267,18 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
     /// 旧会话没有,保持 optional;与全轮合并的 `sources` 并存。
     var sourcesByProvider: [String: [SourceRef]]?
     /// 本轮由图像生成产出的图片(引用,字节单独存盘)。旧会话没有,保持 optional。
+    /// 单模型出图时用这个;多模型对比出图时各家图片改放 `generatedImagesByProvider`。
     var generatedImages: [TurnImage]?
+    /// Compare 模式裁判判定结果(胜者 + 理由)。仅 Compare 模式且点过「让裁判评判」时有。
+    /// 旧会话没有,保持 optional 兼容旧 JSON。
+    var compareVerdict: CompareVerdict?
+    /// 各家答案差异分析(共識 / 分歧),opt-in「分析分歧」按钮触发后写入。旧会话没有,保持 optional。
+    var consensusAnalysis: ConsensusAnalysis?
+    /// 图像生成对比:providerID(uuidString) → 该模型产出的图片。旧会话没有,保持 optional。
+    /// 各家用哪个 model 出图、按什么顺序展示,沿用 `providerSnapshot` / `panelOrder`。
+    var generatedImagesByProvider: [String: [TurnImage]]?
+    /// 图像生成对比里各家失败原因:providerID(uuidString) → 错误文案。旧会话没有,保持 optional。
+    var imageGenErrors: [String: String]?
 
     init(id: UUID = UUID(),
          timestamp: Date = Date(),
@@ -192,6 +295,7 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
          providerSnapshot: [String: ProviderConfig] = [:],
          panelOrder: [String] = [],
          debateRounds: [DebateRound]? = nil,
+         tournamentRounds: [TournamentRound]? = nil,
          appliedWrites: [AppliedWrite]? = nil,
          images: [TurnImage]? = nil,
          sources: [SourceRef]? = nil,
@@ -199,7 +303,11 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
          tokenUsage: [String: TurnTokenUsage]? = nil,
          councilVotes: CouncilVote? = nil,
          sourcesByProvider: [String: [SourceRef]]? = nil,
-         generatedImages: [TurnImage]? = nil) {
+         generatedImages: [TurnImage]? = nil,
+         compareVerdict: CompareVerdict? = nil,
+         consensusAnalysis: ConsensusAnalysis? = nil,
+         generatedImagesByProvider: [String: [TurnImage]]? = nil,
+         imageGenErrors: [String: String]? = nil) {
         self.id = id
         self.timestamp = timestamp
         self.prompt = prompt
@@ -215,6 +323,7 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
         self.providerSnapshot = providerSnapshot
         self.panelOrder = panelOrder
         self.debateRounds = debateRounds
+        self.tournamentRounds = tournamentRounds
         self.appliedWrites = appliedWrites
         self.images = images
         self.sources = sources
@@ -223,6 +332,10 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
         self.councilVotes = councilVotes
         self.sourcesByProvider = sourcesByProvider
         self.generatedImages = generatedImages
+        self.compareVerdict = compareVerdict
+        self.consensusAnalysis = consensusAnalysis
+        self.generatedImagesByProvider = generatedImagesByProvider
+        self.imageGenErrors = imageGenErrors
     }
 
     // 兼容旧 JSON(缺新字段时 sources 等以 decodeIfPresent 解码,默认 nil),不破坏现有存档/同步。
@@ -230,9 +343,9 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
         case id, timestamp, prompt, systemPrompt, responses, errors
         case chairProviderID, chairSummary, chairError
         case summaryProviderID, summaryText, summaryError
-        case providerSnapshot, panelOrder, debateRounds, appliedWrites, images, sources
+        case providerSnapshot, panelOrder, debateRounds, tournamentRounds, appliedWrites, images, sources
         case reasoningByProvider, tokenUsage, councilVotes, sourcesByProvider
-        case generatedImages
+        case generatedImages, compareVerdict, consensusAnalysis, generatedImagesByProvider, imageGenErrors
     }
 
     init(from decoder: Decoder) throws {
@@ -252,6 +365,7 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
         self.providerSnapshot = try c.decodeIfPresent([String: ProviderConfig].self, forKey: .providerSnapshot) ?? [:]
         self.panelOrder = try c.decodeIfPresent([String].self, forKey: .panelOrder) ?? []
         self.debateRounds = try c.decodeIfPresent([DebateRound].self, forKey: .debateRounds)
+        self.tournamentRounds = try c.decodeIfPresent([TournamentRound].self, forKey: .tournamentRounds)
         self.appliedWrites = try c.decodeIfPresent([AppliedWrite].self, forKey: .appliedWrites)
         self.images = try c.decodeIfPresent([TurnImage].self, forKey: .images)
         self.sources = try c.decodeIfPresent([SourceRef].self, forKey: .sources)
@@ -260,6 +374,10 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
         self.councilVotes = try c.decodeIfPresent(CouncilVote.self, forKey: .councilVotes)
         self.sourcesByProvider = try c.decodeIfPresent([String: [SourceRef]].self, forKey: .sourcesByProvider)
         self.generatedImages = try c.decodeIfPresent([TurnImage].self, forKey: .generatedImages)
+        self.compareVerdict = try c.decodeIfPresent(CompareVerdict.self, forKey: .compareVerdict)
+        self.consensusAnalysis = try c.decodeIfPresent(ConsensusAnalysis.self, forKey: .consensusAnalysis)
+        self.generatedImagesByProvider = try c.decodeIfPresent([String: [TurnImage]].self, forKey: .generatedImagesByProvider)
+        self.imageGenErrors = try c.decodeIfPresent([String: String].self, forKey: .imageGenErrors)
     }
 
     /// 取顺序化的 panel 配置（按发送顺序，Chair 不在内）
@@ -311,6 +429,9 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
     var contextSummary: String?
     /// 摘要已覆盖的 turn 数量(turns[0..<summarizedThroughTurnCount] 都已并入 summary)。
     var summarizedThroughTurnCount: Int
+    /// 跨会话长期记忆已抽取到的 turn 水位(turns[0..<memoryExtractedThroughTurnCount] 已被 `MemoryExtractor` 处理过)。
+    /// 与 `summarizedThroughTurnCount` 是两套独立水位:前者沉淀进 `MemoryStore`,后者维护本会话滚动摘要。
+    var memoryExtractedThroughTurnCount: Int = 0
     /// 本会话锁定的 provider ID 集合(Direct 1 个 / Compare 2 个),空=回退到 first N enabled。
     /// Council 模式忽略此字段(用全部 enabled)。
     /// 已被 `activeModelChoices` 取代,仅保留向后兼容用。
@@ -337,6 +458,9 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
     var knowledgeFolderID: UUID?
     /// 所属会话文件夹 ID(侧栏分组用)。nil = 未分组。
     var folderID: UUID?
+    /// Structured 模式下本会话使用的 JSON Schema(纯文本)。各模型被要求严格按此 schema 返回 JSON。
+    /// 旧会话/非 structured 模式为 nil,保持 optional 兼容旧 JSON。
+    var structuredSchema: String?
 
     init(id: UUID = UUID(),
          title: String = "New Conversation",
@@ -347,6 +471,7 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
          turns: [Turn] = [],
          contextSummary: String? = nil,
          summarizedThroughTurnCount: Int = 0,
+         memoryExtractedThroughTurnCount: Int = 0,
          activeProviderIDs: [UUID] = [],
          activeModelChoices: [ProviderModelChoice] = [],
          workspaceBookmark: Data? = nil,
@@ -358,7 +483,8 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
          pinned: Bool = false,
          tags: [String] = [],
          knowledgeFolderID: UUID? = nil,
-         folderID: UUID? = nil) {
+         folderID: UUID? = nil,
+         structuredSchema: String? = nil) {
         self.id = id
         self.title = title
         self.mode = mode
@@ -368,6 +494,7 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
         self.turns = turns
         self.contextSummary = contextSummary
         self.summarizedThroughTurnCount = summarizedThroughTurnCount
+        self.memoryExtractedThroughTurnCount = memoryExtractedThroughTurnCount
         self.activeProviderIDs = activeProviderIDs
         self.activeModelChoices = activeModelChoices
         self.workspaceBookmark = workspaceBookmark
@@ -380,6 +507,7 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
         self.tags = tags
         self.knowledgeFolderID = knowledgeFolderID
         self.folderID = folderID
+        self.structuredSchema = structuredSchema
     }
 
     // 兼容旧 JSON(缺新字段)
@@ -394,6 +522,7 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
         self.turns = try c.decode([Turn].self, forKey: .turns)
         self.contextSummary = try c.decodeIfPresent(String.self, forKey: .contextSummary)
         self.summarizedThroughTurnCount = try c.decodeIfPresent(Int.self, forKey: .summarizedThroughTurnCount) ?? 0
+        self.memoryExtractedThroughTurnCount = try c.decodeIfPresent(Int.self, forKey: .memoryExtractedThroughTurnCount) ?? 0
         self.activeProviderIDs = try c.decodeIfPresent([UUID].self, forKey: .activeProviderIDs) ?? []
         self.activeModelChoices = try c.decodeIfPresent([ProviderModelChoice].self, forKey: .activeModelChoices) ?? []
         self.workspaceBookmark = try c.decodeIfPresent(Data.self, forKey: .workspaceBookmark)
@@ -406,6 +535,7 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
         self.tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []
         self.knowledgeFolderID = try c.decodeIfPresent(UUID.self, forKey: .knowledgeFolderID)
         self.folderID = try c.decodeIfPresent(UUID.self, forKey: .folderID)
+        self.structuredSchema = try c.decodeIfPresent(String.self, forKey: .structuredSchema)
     }
 
     var lastPromptPreview: String {

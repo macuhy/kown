@@ -7,6 +7,9 @@ struct ResponseColumnView: View {
     // 折叠/展开:超长「已完成」回答默认折叠,点按展开。
     // 仅作用于 finished 阶段的纯展示;streaming 期间不折叠,保证自动滚动正常。
     @State private var expanded = false
+    /// 自动滚底节流闸:flush 每 ~50ms 触发一次 text 变更,N 列 Council 并发时 = N×20Hz 次 scrollTo,
+    /// 每次都强制一次 anchor 解析 + 布局。用它把每列 scrollTo 合并到 ~8Hz。
+    @State private var scrollPending = false
     @Environment(\.horizontalSizeClass) private var hSizeClass
 
     /// 超过该字符数的已完成回答默认折叠。
@@ -297,14 +300,20 @@ struct ResponseColumnView: View {
                 }
             )
             .frame(minHeight: isCompact ? 220 : 280)
-            .onChange(of: state.text) { _, _ in
-                guard case .streaming = state.phase else { return }
-                proxy.scrollTo("bottom")
-            }
-            .onChange(of: state.events.count) { _, _ in
-                guard case .streaming = state.phase else { return }
-                proxy.scrollTo("bottom")
-            }
+            .onChange(of: state.text) { _, _ in scheduleScrollToBottom(proxy) }
+            .onChange(of: state.events.count) { _, _ in scheduleScrollToBottom(proxy) }
+        }
+    }
+
+    /// 节流自动滚底:首次变更后 ~120ms 内的连续 flush 合并为一次 scrollTo(尾沿取当前底部)。
+    /// 仅 streaming 期间生效;把多列并发下的 scrollTo 频率从 N×20Hz 降到每列 ~8Hz。
+    private func scheduleScrollToBottom(_ proxy: ScrollViewProxy) {
+        guard case .streaming = state.phase, !scrollPending else { return }
+        scrollPending = true
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 120_000_000)
+            scrollPending = false
+            if case .streaming = state.phase { proxy.scrollTo("bottom") }
         }
     }
 
@@ -421,7 +430,7 @@ struct ResponseColumnView: View {
     /// 是否具备折叠能力:已完成且文本超过阈值(streaming 期间不折叠,避免影响自动滚动)。
     private var canCollapse: Bool {
         guard case .finished = state.phase else { return false }
-        return state.text.count > collapseThreshold
+        return state.charCount > collapseThreshold
     }
 
     /// 当前是否处于折叠态。
@@ -445,7 +454,7 @@ struct ResponseColumnView: View {
             HStack(spacing: 5) {
                 Image(systemName: expanded ? "chevron.up" : "chevron.down")
                     .font(.system(size: 10, weight: .bold))
-                Text(expanded ? "收起" : "展开全部 (\(state.text.count) 字)")
+                Text(expanded ? "收起" : "展开全部 (\(state.charCount) 字)")
                     .font(.caption.weight(.semibold))
             }
             .foregroundStyle(accentColor)
@@ -488,7 +497,7 @@ struct ResponseColumnView: View {
             footerPill(String(format: "%.1fs", s), icon: "clock")
         }
         if !state.text.isEmpty, case .finished = state.phase {
-            footerPill("\(state.text.count) 字", icon: "text.alignleft")
+            footerPill("\(state.charCount) 字", icon: "text.alignleft")
         }
         if state.inputTokens > 0 || state.outputTokens > 0 {
             TokenCostPill(

@@ -397,4 +397,69 @@ enum PromptBuilders {
         lines.append("中文输出。")
         return lines.joined(separator: "\n")
     }
+
+    // MARK: - Tournament(擂台 / 淘汰赛)
+
+    /// 单淘汰赛某一轮的标题:从决赛倒推(决赛 / 半决赛 / 四分之一决赛 / 第 N 轮)。
+    /// `matchCount` 是这一轮的对决场数;`isFinalRound` 标记本轮是否决出冠军。
+    static func tournamentRoundTitle(matchCount: Int, isFinalRound: Bool) -> String {
+        if isFinalRound { return "决赛" }
+        switch matchCount {
+        case 2: return "半决赛"
+        case 3...4: return "四分之一决赛"
+        default: return "晋级赛"
+        }
+    }
+
+    /// Tournament 模式的"对决裁判" prompt — 让裁判在 A、B 两份回答里挑出**胜者**(必须二选一,不能平局)。
+    /// 用 `parseTournamentVerdict` 解析返回的 JSON,映射回 winner 是 A 还是 B。
+    static func buildTournamentMatchPrompt(
+        originalPrompt: String,
+        aLabel: String,
+        aResponse: String,
+        aError: String?,
+        bLabel: String,
+        bResponse: String,
+        bError: String?
+    ) -> String {
+        var lines: [String] = []
+        lines.append("你是淘汰赛裁判。同一个问题下,两位选手各给了答案,你必须判定哪一方胜出晋级——**必须二选一,不允许平局**。")
+        lines.append("")
+        lines.append("【问题】")
+        lines.append(originalPrompt)
+        lines.append("")
+        lines.append("【选手 A — \(aLabel)】")
+        if let aError, !aError.isEmpty {
+            lines.append("(调用失败:\(aError))")
+        } else {
+            lines.append(shorten(aResponse.isEmpty ? "(空响应)" : aResponse, max: 1600))
+        }
+        lines.append("")
+        lines.append("【选手 B — \(bLabel)】")
+        if let bError, !bError.isEmpty {
+            lines.append("(调用失败:\(bError))")
+        } else {
+            lines.append(shorten(bResponse.isEmpty ? "(空响应)" : bResponse, max: 1600))
+        }
+        lines.append("")
+        lines.append("评判标准:准确性、完整性、可执行性、逻辑严谨,而不是文笔华丽。若一方调用失败/空响应,另一方直接获胜。")
+        lines.append("")
+        lines.append("**只输出一个 JSON 对象**,不要任何额外文字 / 解释 / Markdown 代码围栏,格式严格如下:")
+        lines.append("{\"winner\":\"A\",\"rationale\":\"一句话理由\"}")
+        lines.append("winner 只能是 \"A\" 或 \"B\";rationale 用中文,不超过 80 字。")
+        return lines.joined(separator: "\n")
+    }
+
+    /// 解析裁判对决返回:返回 (winnerIsA, rationale)。解析失败返回 nil(调用方据此降级)。
+    static func parseTournamentVerdict(from text: String) -> (winnerIsA: Bool, rationale: String)? {
+        guard let jsonString = extractJSONObject(from: text),
+              let data = jsonString.data(using: .utf8) else { return nil }
+        struct DTO: Decodable { let winner: String?; let rationale: String? }
+        guard let dto = try? JSONDecoder().decode(DTO.self, from: data) else { return nil }
+        let w = (dto.winner ?? "").trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let rationale = (dto.rationale ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if w.hasPrefix("A") { return (true, rationale) }
+        if w.hasPrefix("B") { return (false, rationale) }
+        return nil
+    }
 }

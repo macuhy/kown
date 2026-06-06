@@ -62,6 +62,8 @@ struct KownApp: App {
                 }
             }
             .task {
+                // 启动简易定时任务调度器(仅 app 运行期间发火;后台常驻执行受 OS 限制)。
+                SchedulerService.shared.start(viewModel: viewModel)
                 #if os(macOS)
                 // 注册全局热键 ⌃⌥K(唤起主窗口 + 聚焦输入框)。
                 MacQuickAsk.registerHotKey(viewModel: viewModel)

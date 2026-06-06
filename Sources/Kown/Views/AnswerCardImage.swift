@@ -402,8 +402,10 @@ enum AnswerImageExporter {
     /// 整会话 → 多页 PDF(矢量文字、全文不截断)。失败返回 nil。
     /// **按块分页**:会话头 + 每轮卡片 + 页脚各为一块,分页只发生在块之间(不切到行),
     /// 只有单块本身比整页还高时才按页切。块用 ImageRenderer 矢量画进 PDF 上下文。
+    /// ImageRenderer 必须在主线程跑(SwiftUI 渲染不可挪后台),所以改成 `async` 并在**块之间 `Task.yield()`**:
+    /// 让主线程在两块渲染之间喘口气、能响应点击/刷新进度,把原来一口气 3–5s 的卡死摊成可响应的逐块渲染。
     @MainActor
-    static func sessionPDF(conversation: Conversation) -> Data? {
+    static func sessionPDF(conversation: Conversation) async -> Data? {
         var map: [UUID: [PlatformImage]] = [:]
         for turn in conversation.turns {
             let imgs = preloadImages(turn)
@@ -438,6 +440,7 @@ enum AnswerImageExporter {
         var top = margin   // 当前块顶距页顶的偏移
 
         for block in blocks {
+            await Task.yield()   // 两块之间让出主线程,渲染本身仍在主线程(ImageRenderer 要求)
             let renderer = ImageRenderer(content: block)
             var size: CGSize = .zero
             renderer.render { s, _ in size = s }

@@ -124,6 +124,10 @@ enum ConversationExporter {
                 out += renderCouncil(turn)
             case .debate:
                 out += renderDebate(turn)
+            case .structured:
+                out += renderCompare(turn)
+            case .tournament:
+                out += renderTournament(turn)
             }
 
             out += "\n---\n"
@@ -147,6 +151,8 @@ enum ConversationExporter {
         case .compare: out += renderCompare(turn)
         case .council: out += renderCouncil(turn)
         case .debate:  out += renderDebate(turn)
+        case .structured: out += renderCompare(turn)
+        case .tournament: out += renderTournament(turn)
         }
         out += "\n"
         return out
@@ -321,6 +327,55 @@ enum ConversationExporter {
             out += "### ⚖️ 结论\n\n> 错误: \(err)\n\n"
         }
 
+        return out
+    }
+
+    /// Tournament:种子回答(各家原始回答)+ 逐轮对决(胜者 + 理由)+ 冠军。
+    private static func renderTournament(_ turn: Turn) -> String {
+        var out = ""
+        let rounds = (turn.tournamentRounds ?? []).sorted { $0.index < $1.index }
+
+        // 冠军(最后一轮唯一对决的胜者)。
+        if let champKey = rounds.last?.matches.last?.winnerProviderID {
+            out += "### 🏆 冠军 · \(name(champKey, in: turn))\n\n"
+        }
+
+        // 种子回答。
+        let order = orderedIDs(turn)
+        if !order.isEmpty {
+            out += "### 种子回答\n\n"
+            for pid in order {
+                out += "**\(name(pid, in: turn))**\n\n"
+                out += body(for: pid, responses: turn.responses, errors: turn.errors)
+                out += "\n"
+            }
+        }
+
+        // 赛程。
+        for round in rounds {
+            let roundTitle = round.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            out += "### ROUND \(round.index) · \(roundTitle.isEmpty ? "对决" : roundTitle)\n\n"
+            for match in round.matches {
+                let aName = name(match.aProviderID, in: turn)
+                let bName = match.bProviderID.map { name($0, in: turn) } ?? "轮空"
+                out += "- **\(aName)** vs **\(bName)** → "
+                if let err = match.error, !err.isEmpty {
+                    out += "_(裁判失败: \(err))_\n"
+                } else if let w = match.winnerProviderID {
+                    out += "胜者 **\(name(w, in: turn))**"
+                    let r = match.rationale.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !r.isEmpty { out += " — \(r)" }
+                    out += "\n"
+                } else {
+                    out += "_(未裁定)_\n"
+                }
+            }
+            out += "\n"
+        }
+
+        if rounds.isEmpty && order.isEmpty {
+            out += "_(无对决记录)_\n"
+        }
         return out
     }
 

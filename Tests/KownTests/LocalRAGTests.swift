@@ -49,7 +49,7 @@ final class LocalRAGTests: XCTestCase {
     }
 
     @MainActor
-    func testRetrieveRanksRelevantChunkFirst() throws {
+    func testRetrieveRanksRelevantChunkFirst() async throws {
         // 注意:语料里放足够多的「干扰文档」。仅 2 篇时 BM25 的 IDF 退化——只在一篇出现的词
         // idf=log((2-1+0.5)/(1+0.5))=0,得分为 0 被过滤,排序就只能靠 NLEmbedding 向量模型,
         // 而该模型在 CI 上加载/可用性不稳 → 测试时绿时红。多放几篇让「光合作用」IDF 转正,
@@ -61,14 +61,15 @@ final class LocalRAGTests: XCTestCase {
             KnowledgeDoc(name: "D", text: "钢琴是一种键盘乐器,用琴槌敲击琴弦发声。"),
             KnowledgeDoc(name: "E", text: "长城是中国古代修建的军事防御工程,绵延万里。"),
         ])
-        let hits = LocalRAG.retrieve(query: "植物的光合作用是什么", folder: folder, topK: 1)
+        let hits = await LocalRAG.retrieve(query: "植物的光合作用是什么", folder: folder, topK: 1)
         let first = try XCTUnwrap(hits.first)
         XCTAssertTrue(first.contains("光合作用"))
     }
 
     @MainActor
-    func testRetrieveEmptyOnNoMatchTokens() {
+    func testRetrieveEmptyOnNoMatchTokens() async {
         let folder = KnowledgeFolder(name: "空", docs: [])
-        XCTAssertTrue(LocalRAG.retrieve(query: "任何", folder: folder, topK: 3).isEmpty)
+        let hits = await LocalRAG.retrieve(query: "任何", folder: folder, topK: 3)
+        XCTAssertTrue(hits.isEmpty)
     }
 }

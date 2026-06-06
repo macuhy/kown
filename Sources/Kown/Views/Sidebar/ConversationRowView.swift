@@ -222,6 +222,8 @@ struct ConversationRowView: View {
         case .direct:  return Color(red: 0.55, green: 0.45, blue: 0.78)
         case .compare: return Color(red: 0.83, green: 0.38, blue: 0.18)
         case .debate:  return Color.indigo
+        case .structured: return Color(red: 0.36, green: 0.42, blue: 0.92)
+        case .tournament: return Color(red: 0.85, green: 0.62, blue: 0.13)
         }
     }
 
@@ -231,6 +233,8 @@ struct ConversationRowView: View {
         case .direct:  return "Direct"
         case .compare: return "Compare"
         case .debate:  return "Debate"
+        case .structured: return "Structured"
+        case .tournament: return "Tournament"
         }
     }
 

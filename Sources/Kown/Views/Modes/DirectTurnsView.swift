@@ -50,22 +50,31 @@ struct DirectTurnsView: View {
                        onFollowUp: onFollowUpTurn.map { f in { f(turn.id) } },
                        onExportReport: onExportTurn.map { f in { f(turn.id) } },
                        onShareImage: onShareTurn.map { f in { f(turn.id) } })
-            if let cfg = turn.orderedPanelConfigs.first {
-                let key = cfg.id.uuidString
-                assistantBubble(
-                    config: cfg,
-                    text: turn.responses[key] ?? "",
-                    error: turn.errors[key],
-                    streaming: false,
-                    reasoning: turn.reasoningByProvider?[key],
-                    tokenUsage: turn.tokenUsage?[key],
-                    showActions: true,
-                    sources: turn.sourcesByProvider?[key] ?? (turn.sources ?? []),
-                    onRegenerate: onRegenerate.map { f in { pid in f(turn.id, pid) } }
+            if isImageComparisonTurn(turn) {
+                GeneratedImageComparison(
+                    order: turn.panelOrder,
+                    snapshot: turn.providerSnapshot,
+                    imagesByProvider: turn.generatedImagesByProvider ?? [:],
+                    errors: turn.imageGenErrors ?? [:]
                 )
-            }
-            if let gen = turn.generatedImages, !gen.isEmpty {
-                ConversationImagesRow(images: gen)
+            } else {
+                if let cfg = turn.orderedPanelConfigs.first {
+                    let key = cfg.id.uuidString
+                    assistantBubble(
+                        config: cfg,
+                        text: turn.responses[key] ?? "",
+                        error: turn.errors[key],
+                        streaming: false,
+                        reasoning: turn.reasoningByProvider?[key],
+                        tokenUsage: turn.tokenUsage?[key],
+                        showActions: true,
+                        sources: turn.sourcesByProvider?[key] ?? (turn.sources ?? []),
+                        onRegenerate: onRegenerate.map { f in { pid in f(turn.id, pid) } }
+                    )
+                }
+                if let gen = turn.generatedImages, !gen.isEmpty {
+                    ConversationImagesRow(images: gen)
+                }
             }
             if let writes = turn.appliedWrites, !writes.isEmpty {
                 AppliedWritesStrip(writes: writes, onUndo: onUndoWrite.map { cb in { cb(turn.id, $0) } })
@@ -372,6 +381,11 @@ struct DirectTurnsView: View {
     private func errorMessage(_ phase: ResponsePhase) -> String? {
         if case .failed(let m) = phase { return m }
         return nil
+    }
+
+    /// 多模型图像生成对比的轮:有按 provider 分组的出图或出图错误。
+    private func isImageComparisonTurn(_ turn: Turn) -> Bool {
+        !(turn.generatedImagesByProvider?.isEmpty ?? true) || !(turn.imageGenErrors?.isEmpty ?? true)
     }
 
     private func accentColor(_ cfg: ProviderConfig) -> Color {

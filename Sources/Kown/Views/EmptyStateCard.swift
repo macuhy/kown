@@ -68,6 +68,20 @@ struct EmptyStateCard: View {
                 "辩一辩:团队是否值得为了类型安全全面迁移到 TypeScript",
                 "辩一辩:AI 编程助手会让初级工程师更强还是更弱"
             ]
+        case .structured:
+            return [
+                "评估 SwiftUI 作为跨平台 UI 框架的优缺点并打分",
+                "从这段文字里抽取人物、地点、时间等实体",
+                "把「上线一个待办 App」拆解成可执行步骤",
+                "分析这条用户评论的情感倾向"
+            ]
+        case .tournament:
+            return [
+                "写一首关于秋天的现代诗,让各家比拼谁写得更好",
+                "用一句话解释什么是闭包,看哪家讲得最清楚",
+                "给「程序员的一天」写一个 100 字微小说,擂台决出冠军",
+                "设计一个 App 启动页的文案,各家 PK 选最佳"
+            ]
         }
     }
 
@@ -625,6 +639,8 @@ struct EmptyStateCard: View {
         case .compare: return "对比模型"
         case .council: return "Your council"
         case .debate: return "Your debaters"
+        case .structured: return "结构化模型"
+        case .tournament: return "Your contenders"
         }
     }
 
@@ -634,6 +650,8 @@ struct EmptyStateCard: View {
         case .compare: return "rectangle.split.2x1.fill"
         case .council: return "person.3.fill"
         case .debate: return "quote.bubble.fill"
+        case .structured: return "curlybraces"
+        case .tournament: return "trophy"
         }
     }
 
@@ -805,6 +823,8 @@ private extension ConversationMode {
         case .direct:  return Color(red: 0.16, green: 0.48, blue: 0.94)
         case .compare: return Color(red: 0.91, green: 0.55, blue: 0.20)
         case .debate:  return Color(red: 0.88, green: 0.35, blue: 0.22)
+        case .structured: return Color(red: 0.36, green: 0.42, blue: 0.92)
+        case .tournament: return Color(red: 0.85, green: 0.62, blue: 0.13)
         }
     }
 }

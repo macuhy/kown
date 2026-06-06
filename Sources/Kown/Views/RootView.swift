@@ -253,6 +253,8 @@ struct RootView: View {
         case .direct:  return Color(red: 0.16, green: 0.48, blue: 0.94)
         case .compare: return Color(red: 0.91, green: 0.55, blue: 0.20)
         case .debate:  return Color(red: 0.88, green: 0.35, blue: 0.22)
+        case .structured: return Color(red: 0.36, green: 0.44, blue: 0.88)
+        case .tournament: return Color(red: 0.85, green: 0.62, blue: 0.13)
         }
     }
     #endif

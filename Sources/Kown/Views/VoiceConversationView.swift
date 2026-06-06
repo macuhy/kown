@@ -177,7 +177,18 @@ final class VoiceLoopController: ObservableObject {
             let lastRound = turn.debateRounds?.sorted { $0.index < $1.index }.last
             let lastRoundReply = lastRound?.responses.values.first { !$0.isEmpty }
             return nonEmpty(turn.chairSummary) ?? lastRoundReply ?? firstResponse(turn)
+        case .structured: return firstResponse(turn)
+        case .tournament:
+            // 朗读冠军(最后一轮对决胜者)的回答;无冠军时退回第一份非空回答。
+            if let champ = tournamentChampionKey(turn), let t = turn.responses[champ], !t.isEmpty { return t }
+            return firstResponse(turn)
         }
+    }
+
+    /// 取冠军 providerID(最后一轮唯一对决的胜者);无则 nil。
+    private func tournamentChampionKey(_ turn: Turn) -> String? {
+        guard let last = (turn.tournamentRounds ?? []).max(by: { $0.index < $1.index }) else { return nil }
+        return last.matches.last?.winnerProviderID
     }
 
     private func firstResponse(_ turn: Turn) -> String? {
@@ -205,7 +216,6 @@ struct VoiceConversationView: View {
     @StateObject private var controller: VoiceLoopController
     @ObservedObject private var speech = SpeechService.shared
     @Environment(\.dismiss) private var dismiss
-    @State private var pulse = false
 
     init(viewModel: AppViewModel) {
         self.viewModel = viewModel
@@ -232,7 +242,7 @@ struct VoiceConversationView: View {
         #if os(macOS)
         .frame(minWidth: 460, minHeight: 600)
         #endif
-        .onAppear { pulse = true; controller.start() }
+        .onAppear { controller.start() }
         .onDisappear { controller.stop() }
     }
 
@@ -244,11 +254,21 @@ struct VoiceConversationView: View {
                 Circle()
                     .fill(tint.opacity(0.16))
                     .frame(width: 54, height: 54)
-                    .scaleEffect(animating ? 1.12 : 0.9)
-                    .animation(animating ? .easeInOut(duration: 0.9).repeatForever(autoreverses: true) : .default,
-                               value: pulse)
+                    // 一次性进出过渡,**不再用 repeatForever**:后者在 macOS 窗口切到后台后仍持续 tick,
+                    // 烧满一个核(同 ResponseColumnView.statusDot 既有修复)。活动态改由系统 ProgressView 表达。
+                    .scaleEffect(animating ? 1.08 : 1.0)
+                    .animation(.easeInOut(duration: 0.25), value: animating)
                 if case .thinking = controller.phase {
                     ProgressView().tint(tint)
+                } else if animating {
+                    // 聆听 / 回答中:系统圈圈表示活动(自动随窗口可见性暂停),叠一个状态图标。
+                    ZStack {
+                        ProgressView().tint(tint).controlSize(.small)
+                        Image(systemName: orbIcon)
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(tint)
+                            .offset(y: 13)
+                    }
                 } else {
                     Image(systemName: orbIcon)
                         .font(.system(size: 20, weight: .bold))
@@ -394,6 +414,11 @@ struct VoiceConversationView: View {
         case .debate:
             let last = turn.debateRounds?.sorted { $0.index < $1.index }.last?.responses.values.first { !$0.isEmpty }
             return nonEmpty(turn.chairSummary) ?? last ?? firstResponse()
+        case .structured: return firstResponse()
+        case .tournament:
+            let champ = (turn.tournamentRounds ?? []).max(by: { $0.index < $1.index })?.matches.last?.winnerProviderID
+            if let champ, let t = turn.responses[champ], !t.isEmpty { return t }
+            return firstResponse()
         }
     }
 

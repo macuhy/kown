@@ -82,6 +82,7 @@ struct CompareTurnsView: View {
                     .frame(maxWidth: .infinity)
                 }
             }
+            compareVerdictSection(turn)
             if let judge = turn.chairConfig {
                 ChairSummaryCard(
                     config: judge,
@@ -101,6 +102,13 @@ struct CompareTurnsView: View {
                     onRegenerate: { viewModel.regenerateChairWithModel(turnID: turn.id, target: .chair, newProviderID: $0) }
                 )
             }
+            // 答案差异分析(共識/分歧)—— opt-in「分析分歧」按钮 + 结果面板。
+            ConsensusSection(
+                analysis: turn.consensusAnalysis,
+                isAnalyzing: viewModel.isAnalyzingConsensus(turnID: turn.id),
+                error: viewModel.consensusErrors[turn.id],
+                onAnalyze: { viewModel.analyzeConsensus(turnID: turn.id) }
+            )
             if let writes = turn.appliedWrites, !writes.isEmpty {
                 AppliedWritesStrip(writes: writes, onUndo: { viewModel.undoWrite(turnID: turn.id, write: $0) })
             }
@@ -147,6 +155,106 @@ struct CompareTurnsView: View {
         } else {
             AdaptivePanelGrid(minColumnWidth: 520, count: count) { content() }
         }
+    }
+
+    // MARK: - 裁判评判(verdict badge + 「让裁判评判」按钮)
+
+    /// 已有判定 → 显示胜者徽章 + 理由;否则(两家回答都齐了)→ 显示「让裁判评判」按钮。
+    @ViewBuilder
+    private func compareVerdictSection(_ turn: Turn) -> some View {
+        if let verdict = turn.compareVerdict {
+            verdictBadge(turn: turn, verdict: verdict)
+        } else if canJudge(turn) {
+            judgeButton(turn: turn)
+        }
+    }
+
+    /// 是否具备评判条件:取前两列、两家都有非空回答。
+    private func canJudge(_ turn: Turn) -> Bool {
+        let panel = Array(turn.orderedPanelConfigs.prefix(2))
+        guard panel.count == 2 else { return false }
+        return panel.allSatisfy { cfg in
+            !(turn.responses[cfg.id.uuidString] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+    }
+
+    private func judgeButton(turn: Turn) -> some View {
+        let judging = viewModel.isJudgingCompare(turnID: turn.id)
+        return VStack(alignment: .leading, spacing: 6) {
+            Button {
+                viewModel.judgeCompare(turnID: turn.id)
+            } label: {
+                HStack(spacing: 7) {
+                    if judging {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Image(systemName: "scalemass.fill")
+                    }
+                    Text(judging ? "裁判评判中…" : "让裁判评判")
+                        .font(.caption.weight(.semibold))
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(compareTint.opacity(0.12), in: Capsule())
+                .foregroundStyle(compareTint)
+                .overlay { Capsule().strokeBorder(compareTint.opacity(0.28), lineWidth: 1) }
+            }
+            .buttonStyle(.plain)
+            .disabled(judging)
+
+            if let err = viewModel.judgeCompareErrors[turn.id] {
+                Text(err)
+                    .font(.caption2)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func verdictBadge(turn: Turn, verdict: CompareVerdict) -> some View {
+        let winner = turn.providerSnapshot[verdict.winnerProviderID]
+        let winnerName = winner?.displayName ?? "未知模型"
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "trophy.fill")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(verdictTint)
+                Text("裁判判定")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+                Text(winnerName)
+                    .font(.caption.weight(.heavy))
+                    .foregroundStyle(verdictTint)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(verdictTint.opacity(0.14), in: Capsule())
+                    .lineLimit(1).truncationMode(.middle)
+                Text("胜")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+            }
+            if !verdict.rationale.isEmpty {
+                Text(verdict.rationale)
+                    .font(.caption)
+                    .foregroundStyle(.primary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(verdictTint.opacity(0.07), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(verdictTint.opacity(0.22), lineWidth: 1)
+        }
+    }
+
+    private var verdictTint: Color {
+        Color(red: 0.85, green: 0.60, blue: 0.14)
     }
 
     private var compareTint: Color {

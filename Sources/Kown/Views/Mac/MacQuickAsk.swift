@@ -7,6 +7,8 @@ import Carbon.HIToolbox
 struct QuickAskView: View {
     @Bindable var viewModel: AppViewModel
     @State private var text = ""
+    /// 菜单栏剪贴板动作(翻译/总结/解释)的运行状态。
+    @State private var clipboardRunner = ClipboardActionRunner()
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -39,6 +41,10 @@ struct QuickAskView: View {
                     .buttonStyle(.borderedProminent)
                     .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
+
+            Divider()
+
+            ClipboardActionsSection(viewModel: viewModel, runner: clipboardRunner)
         }
         .padding(14)
         .frame(width: 340)

@@ -10,12 +10,18 @@ struct SettingsView: View {
     enum Tab: String, CaseIterable, Identifiable {
         case providers
         case prompts
+        case chains
         case webSearch
         case tts
         case sync
         case backup
         case usage
+        case dashboard
+        case memory
         case favorites
+        case leaderboard
+        case eval
+        case scheduler
         case performance
         case updates
         case changelog
@@ -25,12 +31,18 @@ struct SettingsView: View {
             switch self {
             case .providers:   return "厂商"
             case .prompts:     return "Prompt 库"
+            case .chains:      return "工作流"
             case .webSearch:   return "Web Search"
             case .tts:         return "朗读"
             case .sync:        return "iCloud 同步"
             case .backup:      return "导入/导出"
             case .usage:       return "Token 用量"
+            case .dashboard:   return "仪表盘"
+            case .memory:      return "记忆"
             case .favorites:   return "收藏"
+            case .leaderboard: return "排行榜"
+            case .eval:        return "评测台"
+            case .scheduler:   return "定时任务"
             case .performance: return "性能"
             case .updates:     return "软件更新"
             case .changelog:   return "更新日志"
@@ -40,12 +52,18 @@ struct SettingsView: View {
             switch self {
             case .providers:   return "square.stack.3d.up"
             case .prompts:     return "text.badge.plus"
+            case .chains:      return "arrow.triangle.branch"
             case .webSearch:   return "globe"
             case .tts:         return "waveform"
             case .sync:        return "icloud"
             case .backup:      return "square.and.arrow.up.on.square"
             case .usage:       return "chart.bar.xaxis"
+            case .dashboard:   return "chart.line.uptrend.xyaxis"
+            case .memory:      return "brain"
             case .favorites:   return "star"
+            case .leaderboard: return "trophy.fill"
+            case .eval:        return "checklist"
+            case .scheduler:   return "clock.badge"
             case .performance: return "speedometer"
             case .updates:     return "arrow.down.circle"
             case .changelog:   return "sparkles"
@@ -55,12 +73,18 @@ struct SettingsView: View {
             switch self {
             case .providers:   return Color(red: 0.10, green: 0.66, blue: 0.56)
             case .prompts:     return Color(red: 0.56, green: 0.40, blue: 0.86)
+            case .chains:      return Color(red: 0.30, green: 0.52, blue: 0.88)
             case .webSearch:   return Color(red: 0.16, green: 0.48, blue: 0.94)
             case .tts:         return Color(red: 0.36, green: 0.46, blue: 0.92)
             case .sync:        return Color(red: 0.18, green: 0.58, blue: 0.92)
             case .backup:      return Color(red: 0.91, green: 0.55, blue: 0.20)
             case .usage:       return Color(red: 0.24, green: 0.63, blue: 0.36)
+            case .dashboard:   return Color(red: 0.18, green: 0.52, blue: 0.92)
+            case .memory:      return Color(red: 0.56, green: 0.40, blue: 0.86)
             case .favorites:   return Color(red: 0.92, green: 0.70, blue: 0.18)
+            case .leaderboard: return Color(red: 0.85, green: 0.60, blue: 0.14)
+            case .eval:        return Color(red: 0.40, green: 0.52, blue: 0.92)
+            case .scheduler:   return Color(red: 0.20, green: 0.56, blue: 0.78)
             case .performance: return Color(red: 0.88, green: 0.35, blue: 0.22)
             case .updates:     return Color(red: 0.57, green: 0.42, blue: 0.82)
             case .changelog:   return Color(red: 0.95, green: 0.57, blue: 0.16)
@@ -134,6 +158,8 @@ struct SettingsView: View {
                         mobileProvidersList
                     case .prompts:
                         PromptLibraryView(viewModel: promptLibrary)
+                    case .chains:
+                        ChainView()
                     case .webSearch:
                         WebSearchSettingsView(viewModel: viewModel)
                     case .tts:
@@ -144,8 +170,18 @@ struct SettingsView: View {
                         BackupSettingsView(viewModel: viewModel)
                     case .usage:
                         UsageSettingsView()
+                    case .dashboard:
+                        UsageDashboardView()
+                    case .memory:
+                        MemorySettingsView(viewModel: viewModel)
                     case .favorites:
                         FavoritesSettingsView()
+                    case .leaderboard:
+                        LeaderboardView()
+                    case .eval:
+                        EvalView(viewModel: viewModel)
+                    case .scheduler:
+                        SchedulerView(viewModel: viewModel)
                     case .performance:
                         PerformanceSettingsView()
                     case .updates:
@@ -652,6 +688,8 @@ struct SettingsView: View {
                 providersList
             case .prompts:
                 PromptLibraryView(viewModel: promptLibrary)
+            case .chains:
+                ChainView()
             case .webSearch:
                 WebSearchSettingsView(viewModel: viewModel)
             case .tts:
@@ -662,8 +700,18 @@ struct SettingsView: View {
                 BackupSettingsView(viewModel: viewModel)
             case .usage:
                 UsageSettingsView()
+            case .dashboard:
+                UsageDashboardView()
+            case .memory:
+                MemorySettingsView(viewModel: viewModel)
             case .favorites:
                 FavoritesSettingsView()
+            case .leaderboard:
+                LeaderboardView()
+            case .eval:
+                EvalView(viewModel: viewModel)
+            case .scheduler:
+                SchedulerView(viewModel: viewModel)
             case .performance:
                 PerformanceSettingsView()
             case .updates:
@@ -907,12 +955,18 @@ struct SettingsView: View {
         switch tab {
         case .providers:   return "管理连接、密钥和每个模型的默认生成参数。"
         case .prompts:     return "保存可复用的 Prompt 模板,用 {{变量}} 占位,填充后一键复制。"
+        case .chains:      return "把多个「模型 + 指示」步骤串成流水线,用 {{prev}} / {{input}} 接力,逐步执行。"
         case .webSearch:   return "配置 Firecrawl 让模型在需要时调用 web_search。"
         case .tts:         return "选择朗读引擎与音色:硅基流动 CosyVoice、讯飞语音(均国内直连)或系统语音。"
         case .sync:        return "iCloud 同步 会话、Provider 配置、Web Search 配置 与 API Key。容器对 Files app 隐藏。"
         case .backup:      return "把当前配置(不含会话)导出成 JSON 文件,或从备份恢复。可作为多设备同步的离线备选。"
         case .usage:       return "按天 + 模型查看 token 用量。input / output 分别计,辅助估算成本。"
+        case .dashboard:   return "用图表对比各模型的用量与成本:成本排行、每日 token 走势与输入/输出内訳。"
+        case .memory:      return "管理跨会话长期记忆:开关注入、查看与删除已抽取的记忆条目。默认关闭(隐私优先)。"
         case .favorites:   return "收藏过的回答片段,点星可在回答卡上收藏 / 取消。"
+        case .leaderboard: return "Compare 模式裁判判定累计出的模型胜率榜:按胜率排名,看哪家模型更常赢。"
+        case .eval:        return "保存「问题 + 期望关键词」评测集,在多个模型上重跑比对,检测版本更新后的回归漂移。"
+        case .scheduler:   return "让指定提问在每天固定时刻自动发送、结果存成新会话并发通知。仅在 app 运行期间触发。"
         case .performance: return "流式响应的渲染节奏。机器卡可以拉长刷新间隔降 CPU。"
         case .updates:     return "通过 Sparkle 检查、下载并自动安装最新版本。"
         case .changelog:   return "查看每个版本的新功能、修复和改进。"

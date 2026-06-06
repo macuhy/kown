@@ -16,6 +16,8 @@ struct MainContentView: View {
     @State private var findQuery: String = ""
     @State private var findIndex: Int = 0
     @State private var scrollTarget: UUID?
+    /// 批量执行 / 提示词队列 sheet 开关。
+    @State private var showBatch = false
     #if os(iOS)
     /// iOS 导出时待分享的文件(包成 Identifiable 以驱动 .sheet(item:))。
     @State private var shareSheet: ShareSheetPayload?
@@ -47,8 +49,19 @@ struct MainContentView: View {
         .navigationTitle(viewModel.selectedConversation?.title ?? "New Conversation")
         .toolbar {
             ToolbarItem(placement: .automatic) {
+                Button {
+                    showBatch = true
+                } label: {
+                    Image(systemName: "square.grid.3x3.fill.square")
+                }
+                .help("批量执行 / 提示词队列")
+            }
+            ToolbarItem(placement: .automatic) {
                 exportMenu
             }
+        }
+        .sheet(isPresented: $showBatch) {
+            BatchView(viewModel: viewModel)
         }
         #if os(iOS)
         .sheet(item: $shareSheet) { payload in
@@ -223,13 +236,16 @@ struct MainContentView: View {
     }
 
     /// 导出当前会话为多页 PDF(矢量、全文),复用 saveData 的存盘 / 分享管线。
+    /// sessionPDF 现在是 async(块之间让出主线程),包进 Task 里跑,导出期间 UI 不卡死。
     private func exportSessionPDF(_ conversation: Conversation) {
-        guard let pdf = AnswerImageExporter.sessionPDF(conversation: conversation) else { return }
-        let safeTitle = conversation.title
-            .replacingOccurrences(of: "/", with: "-")
-            .replacingOccurrences(of: ":", with: "-")
-        let name = safeTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Kown 会话" : safeTitle
-        saveData(pdf, fileName: "\(name).pdf")
+        Task { @MainActor in
+            guard let pdf = await AnswerImageExporter.sessionPDF(conversation: conversation) else { return }
+            let safeTitle = conversation.title
+                .replacingOccurrences(of: "/", with: "-")
+                .replacingOccurrences(of: ":", with: "-")
+            let name = safeTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Kown 会话" : safeTitle
+            saveData(pdf, fileName: "\(name).pdf")
+        }
     }
 
     /// 存二进制到文件:macOS 弹 NSSavePanel,iOS 落临时文件后系统分享(PDF / 图片等)。
@@ -289,18 +305,27 @@ struct MainContentView: View {
     @ViewBuilder
     private var followUpBar: some View {
         if viewModel.followUpSuggestions.isEmpty {
-            HStack {
-                Spacer()
-                Button { viewModel.suggestFollowUps() } label: {
-                    Label(viewModel.suggestingFollowUps ? "生成中…" : "追问建议", systemImage: "sparkles")
-                        .font(.callout.weight(.semibold))
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
+            VStack(spacing: 6) {
+                HStack {
+                    Spacer()
+                    Button { viewModel.suggestFollowUps() } label: {
+                        Label(viewModel.suggestingFollowUps ? "生成中…" : "追问建议", systemImage: "sparkles")
+                            .font(.callout.weight(.semibold))
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                    }
+                    .buttonStyle(.bordered)
+                    .clipShape(Capsule())
+                    .disabled(viewModel.suggestingFollowUps)
+                    Spacer()
                 }
-                .buttonStyle(.bordered)
-                .clipShape(Capsule())
-                .disabled(viewModel.suggestingFollowUps)
-                Spacer()
+                if let err = viewModel.followUpError {
+                    Text(err)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 18)
+                }
             }
             .padding(.bottom, 6)
         } else {
@@ -342,7 +367,26 @@ struct MainContentView: View {
         let conv = viewModel.selectedConversation
         let hasTurns = conv?.turns.isEmpty == false
         let hasLive = viewModel.liveTurnPrompt != nil
-        if !hasTurns && !hasLive {
+        if !hasTurns && !hasLive && viewModel.currentMode == .structured {
+            // Structured 模式即使还没有任何 turn,也要让用户先编辑 / 校验 JSON Schema。
+            ScrollView {
+                StructuredTurnsView(
+                    viewModel: viewModel,
+                    conversation: conv ?? Conversation(),
+                    liveStates: [:],
+                    livePrompt: nil,
+                    livePanel: viewModel.providersForCurrentSend().panel,
+                    onEditTurn: { requestEdit($0) },
+                    onFollowUpTurn: { requestFollowUp($0) },
+                    onExportTurn: { exportTurnReport($0) },
+                    onShareTurn: { shareTurnImage($0) }
+                )
+            }
+            #if os(iOS)
+            .scrollDismissesKeyboard(.interactively)
+            .contentMargins(.bottom, 10, for: .scrollContent)
+            #endif
+        } else if !hasTurns && !hasLive {
             ScrollView {
                 EmptyStateCard(
                     mode: viewModel.currentMode,
@@ -370,6 +414,7 @@ struct MainContentView: View {
                     let lPrompt = showLive ? viewModel.liveTurnPrompt : nil
                     let lImages = showLive ? viewModel.liveTurnImages : []
                     let lDebateRounds = showLive ? viewModel.liveDebateRounds : []
+                    let lTournamentRounds = showLive ? viewModel.liveTournamentRounds : []
                     let lIsRunning = showLive && viewModel.isRunning
                     Group {
                         switch viewModel.currentMode {
@@ -434,6 +479,34 @@ struct MainContentView: View {
                                 isRunning: lIsRunning,
                                 livePanel: viewModel.providersForCurrentSend().panel,
                                 liveChair: viewModel.chairProvider,
+                                onEditTurn: { requestEdit($0) },
+                                onFollowUpTurn: { requestFollowUp($0) },
+                                onExportTurn: { exportTurnReport($0) },
+                                onShareTurn: { shareTurnImage($0) }
+                            )
+                        case .structured:
+                            StructuredTurnsView(
+                                viewModel: viewModel,
+                                conversation: conv ?? Conversation(),
+                                liveStates: lStates,
+                                livePrompt: lPrompt,
+                                liveImages: lImages,
+                                livePanel: viewModel.providersForCurrentSend().panel,
+                                onEditTurn: { requestEdit($0) },
+                                onFollowUpTurn: { requestFollowUp($0) },
+                                onExportTurn: { exportTurnReport($0) },
+                                onShareTurn: { shareTurnImage($0) }
+                            )
+                        case .tournament:
+                            TournamentTurnsView(
+                                viewModel: viewModel,
+                                conversation: conv ?? Conversation(),
+                                liveStates: lStates,
+                                liveTournamentRounds: lTournamentRounds,
+                                livePrompt: lPrompt,
+                                liveImages: lImages,
+                                isRunning: lIsRunning,
+                                livePanel: viewModel.providersForCurrentSend().panel,
                                 onEditTurn: { requestEdit($0) },
                                 onFollowUpTurn: { requestFollowUp($0) },
                                 onExportTurn: { exportTurnReport($0) },
@@ -618,6 +691,8 @@ struct MainContentView: View {
         case .direct:  return Color(red: 0.16, green: 0.48, blue: 0.94)
         case .compare: return Color(red: 0.91, green: 0.55, blue: 0.20)
         case .debate:  return Color(red: 0.88, green: 0.35, blue: 0.22)
+        case .structured: return Color(red: 0.36, green: 0.42, blue: 0.92)
+        case .tournament: return Color(red: 0.85, green: 0.62, blue: 0.13)
         }
     }
     #endif
@@ -681,6 +756,8 @@ private struct MainWorkspaceBackdrop: View {
         case .direct:  return Color(red: 0.16, green: 0.48, blue: 0.94)
         case .compare: return Color(red: 0.91, green: 0.55, blue: 0.20)
         case .debate:  return Color(red: 0.88, green: 0.35, blue: 0.22)
+        case .structured: return Color(red: 0.36, green: 0.42, blue: 0.92)
+        case .tournament: return Color(red: 0.85, green: 0.62, blue: 0.13)
         }
     }
 }

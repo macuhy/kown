@@ -63,8 +63,9 @@ enum LocalRAG {
     }
 
     /// 检索:BM25 + 向量混合(RRF),返回 top-K 片段文本(带文档名)。
-    @MainActor
-    static func retrieve(query: String, folder: KnowledgeFolder, topK: Int = 4) -> [String] {
+    /// `nonisolated async`:切块 / BM25 是纯计算,向量走 `RAGVectorCache`(actor)—— 整段在后台线程跑,
+    /// 不再卡发送时的主线程(扫块 + NLEmbedding 在大知识库上可达 0.5–2s)。
+    nonisolated static func retrieve(query: String, folder: KnowledgeFolder, topK: Int = 4) async -> [String] {
         var seen = Set<String>()
         var chunks: [Chunk] = []
         for doc in folder.docs {
@@ -86,17 +87,16 @@ enum LocalRAG {
         // --- 向量排名(语义)---
         var vecOrder: [Int] = []
         let cache = RAGVectorCache.shared
-        if let (model, lang) = cache.model(forQuery: query),
-           let qv = cache.queryVector(query, model: model) {
+        if let (qv, lang) = await cache.queryVector(forQuery: query) {
             var sims: [(Int, Float)] = []
             for (i, c) in chunks.enumerated() {
-                if let v = cache.vector(for: c.text, lang: lang, model: model), v.count == qv.count {
+                if let v = await cache.vector(forText: c.text, lang: lang), v.count == qv.count {
                     let s = dot(qv, v)
                     if s > 0 { sims.append((i, s)) }
                 }
             }
             vecOrder = sims.sorted { $0.1 > $1.1 }.map { $0.0 }
-            cache.persistIfDirty()
+            await cache.persistIfDirty()
         }
 
         // --- RRF 融合;某一信号缺失时退回另一信号 ---
@@ -232,8 +232,11 @@ enum LocalRAG {
 
 /// 句向量缓存:NLEmbedding 模型按需加载;向量按「语言:内容哈希」缓存,
 /// 单位化 + Float16 量化后存内存,二进制 plist 落本地目录(不进 iCloud)。
-@MainActor
-final class RAGVectorCache {
+///
+/// `actor`:把可变缓存 + 非 Sendable 的 NLEmbedding 模型隔离在 actor 内,让 `LocalRAG.retrieve`
+/// 能在后台线程安全地访问(不再钉死在主线程)。NLEmbedding 不跨 actor 边界 —— 句向量在 actor 内算完
+/// 只把 Sendable 的 `[Float]` 返出去。
+actor RAGVectorCache {
     static let shared = RAGVectorCache()
 
     private var memory: [String: [Float]] = [:]
@@ -247,8 +250,28 @@ final class RAGVectorCache {
 
     private var fileURL: URL { Platform.localDataDir.appendingPathComponent("rag-vectors.plist") }
 
-    /// 按查询语言选句向量模型;返回 (模型, 语言标签)。中英都拿不到则 nil(退回纯 BM25)。
-    func model(forQuery query: String) -> (NLEmbedding, String)? {
+    /// 按查询语言选句向量模型并直接算出 query 向量;返回 (向量, 语言标签)。
+    /// 中英都拿不到则 nil(退回纯 BM25)。模型不外泄,只在 actor 内部用掉。
+    func queryVector(forQuery query: String) -> (vec: [Float], lang: String)? {
+        guard let (model, lang) = pickModel(forQuery: query),
+              let v = model.vector(for: query) else { return nil }
+        return (normalizeQuantize(v), lang)
+    }
+
+    /// 取(或计算并缓存)某块在指定语言模型下的句向量。
+    func vector(forText text: String, lang: String) -> [Float]? {
+        load()
+        let key = lang + ":" + String(Self.stableHash(text))
+        if let cached = memory[key] { return cached }
+        guard let model = model(for: lang), let v = model.vector(for: text) else { return nil }
+        let q = normalizeQuantize(v)
+        memory[key] = q
+        dirty = true
+        return q
+    }
+
+    /// 按查询语言挑句向量模型(actor 内部用,不外泄 NLEmbedding)。
+    private func pickModel(forQuery query: String) -> (NLEmbedding, String)? {
         if LocalRAG.isCJKHeavy(query) {
             if let m = zh() { return (m, "zh") }
             if let m = en() { return (m, "en") }
@@ -259,6 +282,10 @@ final class RAGVectorCache {
         return nil
     }
 
+    private func model(for lang: String) -> NLEmbedding? {
+        lang == "zh" ? zh() : en()
+    }
+
     private func zh() -> NLEmbedding? {
         if !zhTried { zhTried = true; zhModel = NLEmbedding.sentenceEmbedding(for: .simplifiedChinese) }
         return zhModel
@@ -266,23 +293,6 @@ final class RAGVectorCache {
     private func en() -> NLEmbedding? {
         if !enTried { enTried = true; enModel = NLEmbedding.sentenceEmbedding(for: .english) }
         return enModel
-    }
-
-    func queryVector(_ query: String, model: NLEmbedding) -> [Float]? {
-        guard let v = model.vector(for: query) else { return nil }
-        return normalizeQuantize(v)
-    }
-
-    /// 取(或计算并缓存)某块的句向量。
-    func vector(for text: String, lang: String, model: NLEmbedding) -> [Float]? {
-        load()
-        let key = lang + ":" + String(Self.stableHash(text))
-        if let cached = memory[key] { return cached }
-        guard let v = model.vector(for: text) else { return nil }
-        let q = normalizeQuantize(v)
-        memory[key] = q
-        dirty = true
-        return q
     }
 
     /// 单位化 + Float16 量化(余弦即点积)。

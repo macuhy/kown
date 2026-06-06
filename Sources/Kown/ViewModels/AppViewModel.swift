@@ -24,6 +24,19 @@ final class AppViewModel {
     var followUpSuggestions: [String] = []
     /// 正在生成追问建议。
     var suggestingFollowUps = false
+    /// 追问建议生成失败时的原因(给用户看;成功或重置时清空)。
+    var followUpError: String?
+    /// Structured 模式:JSON Schema 发送前校验失败的原因(给用户看;校验通过或重置时清空)。
+    var structuredSchemaError: String?
+    /// Compare 模式:正在裁判评判的 turnID 集合(独立于 follow-up state,互不影响)。
+    var judgingCompareTurnIDs: Set<UUID> = []
+    /// Compare 裁判评判失败时的错误信息,key = turnID。
+    var judgeCompareErrors: [UUID: String] = [:]
+    /// 正在做差异分析(共識/分歧)的 turn 集合 —— UI 据此显示该轮的加载态。
+    /// 与 follow-up state 完全独立(不复用 suggestingFollowUps),允许多轮并行。
+    var analyzingConsensusTurns: Set<UUID> = []
+    /// 差异分析失败时的原因,key = turnID(给用户看;成功或重试时清空)。
+    var consensusErrors: [UUID: String] = [:]
     /// ⌘K 命令面板是否打开(macOS 菜单命令与 RootView sheet 共用此开关)。
     var showCommandPalette = false
     /// 会话内查找条是否显示(⌘F)。
@@ -41,6 +54,10 @@ final class AppViewModel {
     /// Direct 模式:按问题难度在当前 provider 的 vendor 内自动选模型(便宜↔旗舰)。默认关。
     var autoRouteEnabled: Bool {
         didSet { UserDefaults.standard.set(autoRouteEnabled, forKey: Self.autoRouteKey) }
+    }
+    /// 跨会话长期记忆:开启后发送时注入相关长期记忆,并在会话进行中自动抽取。默认关(隐私优先)。
+    var memoryInjectionEnabled: Bool {
+        didSet { UserDefaults.standard.set(memoryInjectionEnabled, forKey: Self.memoryInjectionKey) }
     }
     var systemPrompt: String {
         didSet { UserDefaults.standard.set(systemPrompt, forKey: Self.systemPromptKey) }
@@ -102,6 +119,8 @@ final class AppViewModel {
     var liveSummaryState: ResponseState?
     /// Debate 模式下已经完成的临时辩论轮次；当前正在流式的轮次仍在 liveStates。
     var liveDebateRounds: [DebateRound] = []
+    /// Tournament 模式下逐轮对决的临时进度(裁判逐场裁定时累积更新,turn 落盘后由 turn.tournamentRounds 接管)。
+    var liveTournamentRounds: [TournamentRound] = []
     /// 本轮发出的 prompt（用于 turn 渲染时取最新一行）
     var liveTurnPrompt: String?
     /// 本轮附带的图片（直播期间也展示,等 Turn 落盘后由 turn.images 接管）
@@ -120,9 +139,12 @@ final class AppViewModel {
     private static let autoFailoverKey = "kown.autoFailover.v1"
     private static let councilVotingKey = "kown.councilVoting.v1"
     private static let autoRouteKey = "kown.autoRoute.v1"
+    private static let memoryInjectionKey = "kown.memory.injection.v1"
     // 发送编排已移到 AppViewModel+Send.swift,以下原 private 状态降为 internal 供其访问。
     var runningTask: Task<Void, Never>?
     var summarizingTasks: [UUID: Task<Void, Never>] = [:]
+    /// 跨会话长期记忆抽取任务(防同一会话重复抽取),key = convID。
+    var memoryExtractionTasks: [UUID: Task<Void, Never>] = [:]
     /// 正在自动起标题的会话(防重复触发)。
     var autoTitleTasks: Set<UUID> = []
 
@@ -132,7 +154,7 @@ final class AppViewModel {
         // 启动时异步清一次旧 log 文件(保留最近 14 天),后台 queue 跑,毫秒级
         ResponseLogger.rotateOldLogsIfNeeded()
         self.providers = ProviderConfigStore.load()
-        self.conversations = ConversationStore.loadAll()
+        self.conversations = []   // 冷启动改后台解码(见下方 Task),避免一启动就在主线程解码上百个 JSON
         self.webSearchConfig = WebSearchConfigStore.load()
         self.knowledgeFolders = KnowledgeStore.loadAll()
         self.conversationFolders = ConversationFolderStore.load()
@@ -147,9 +169,22 @@ final class AppViewModel {
         self.autoFailoverEnabled = UserDefaults.standard.bool(forKey: Self.autoFailoverKey)
         self.councilVotingEnabled = UserDefaults.standard.bool(forKey: Self.councilVotingKey)
         self.autoRouteEnabled = UserDefaults.standard.bool(forKey: Self.autoRouteKey)
+        self.memoryInjectionEnabled = UserDefaults.standard.bool(forKey: Self.memoryInjectionKey)
 
-        // 清理被删超过 30 天的会话(回收站自动过期)。
-        purgeExpiredTrash()
+        // 冷启动:会话 JSON 解码挪到后台线程(避免一启动就在主线程解码上百个文件 → 白屏/卡顿),
+        // 解码完回主线程赋值,再清理过期回收站(purge 依赖已加载的 conversations)。
+        // 加载窗口内用户若已新建会话,按 id 去重并入(内存优先),不丢已建会话。
+        Task { @MainActor [weak self] in
+            let loaded = await ConversationStore.loadAllAsync()
+            guard let self else { return }
+            if self.conversations.isEmpty {
+                self.conversations = loaded
+            } else {
+                let knownIDs = Set(self.conversations.map(\.id))
+                self.conversations.append(contentsOf: loaded.filter { !knownIDs.contains($0.id) })
+            }
+            self.purgeExpiredTrash()
+        }
 
         // iCloud 容器探测是异步后台进行的(ICloudSync.init 里 Task.detached)。
         // 冷启动时 init() 跑 loadAll 那一刻容器可能还没就绪,iPhone 端尤甚。
@@ -206,6 +241,7 @@ final class AppViewModel {
         selectedConversationID = conv.id
         prompt = ""
         followUpSuggestions = []
+        followUpError = nil
         activeMode = mode
         ConversationStore.save(conv)
         applyAlwaysEnableWebSearchIfNeeded()
@@ -245,6 +281,7 @@ final class AppViewModel {
         selectedConversationID = fork.id
         prompt = ""
         followUpSuggestions = []
+        followUpError = nil
         activeMode = fork.mode
         ConversationStore.save(fork)
         applyAlwaysEnableWebSearchIfNeeded()
@@ -270,6 +307,7 @@ final class AppViewModel {
         selectedConversationID = id
         prompt = drafts[id] ?? ""
         followUpSuggestions = []
+        followUpError = nil
         applyAlwaysEnableWebSearchIfNeeded()
         if let conv = conversations.first(where: { $0.id == id }) {
             activeMode = conv.mode
@@ -305,6 +343,7 @@ final class AppViewModel {
         guard let convID = selectedConversationID else { return }
         prompt = ""
         followUpSuggestions = []
+        followUpError = nil
         isGeneratingImage = true
         Task { @MainActor [weak self] in
             guard let self else { return }
@@ -334,6 +373,71 @@ final class AppViewModel {
                             providerSnapshot: [cfg.id.uuidString: cfg],
                             panelOrder: [cfg.id.uuidString])
             }
+            if let idx = self.conversations.firstIndex(where: { $0.id == convID }) {
+                self.conversations[idx].turns.append(turn)
+                self.conversations[idx].updatedAt = Date()
+                ConversationStore.save(self.conversations[idx])
+            }
+        }
+    }
+
+    /// 可用于图像生成对比的 provider(已启用、非 CLI;CLI 不支持 /images/generations)。
+    /// 用户在编辑页给某些 provider 选好出图模型即可纳入对比。
+    var imageGenComparableProviders: [ProviderConfig] {
+        providers.filter { $0.enabled && !$0.kind.isCLI }
+    }
+
+    /// 图像生成对比:让多个支持出图的模型用同一 prompt 各自出图,产出一轮按模型分组的对比结果。
+    /// 逐个串行调用(出图慢且各家限速不一,串行更稳)。某家失败只记该家错误,不影响其他家。
+    /// 至少需要 2 个可用 provider;不足时回退到单模型 `generateImage()`。
+    func generateImageComparison() {
+        let p = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !p.isEmpty, !isGeneratingImage, !isRunning else { return }
+        let panel = imageGenComparableProviders
+        guard panel.count >= 2 else { generateImage(); return }
+        if selectedConversationID == nil { newConversation(mode: currentMode) }
+        guard let convID = selectedConversationID else { return }
+        prompt = ""
+        followUpSuggestions = []
+        followUpError = nil
+        isGeneratingImage = true
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.isGeneratingImage = false }
+            var imagesByProvider: [String: [TurnImage]] = [:]
+            var errorsByProvider: [String: String] = [:]
+            var snapshot: [String: ProviderConfig] = [:]
+            var order: [String] = []
+            for cfg in panel {
+                let pid = cfg.id.uuidString
+                snapshot[pid] = cfg
+                order.append(pid)
+                let key = (try? KeychainStore.load(id: cfg.id)) ?? ""
+                do {
+                    let datas = try await ImageGenerationClient.generate(
+                        baseURL: cfg.baseURL, apiKey: key, model: cfg.model, prompt: p)
+                    var imgs: [TurnImage] = []
+                    for d in datas {
+                        let fileName = "\(UUID().uuidString).png"
+                        if ConversationImageStore.save(d, fileName: fileName) {
+                            imgs.append(TurnImage(fileName: fileName, mimeType: "image/png",
+                                                  pixelWidth: 1024, pixelHeight: 1024))
+                        }
+                    }
+                    if imgs.isEmpty {
+                        errorsByProvider[pid] = "未返回图片"
+                    } else {
+                        imagesByProvider[pid] = imgs
+                    }
+                } catch {
+                    errorsByProvider[pid] = error.localizedDescription
+                }
+            }
+            let turn = Turn(prompt: p, systemPrompt: "",
+                            providerSnapshot: snapshot,
+                            panelOrder: order,
+                            generatedImagesByProvider: imagesByProvider,
+                            imageGenErrors: errorsByProvider)
             if let idx = self.conversations.firstIndex(where: { $0.id == convID }) {
                 self.conversations[idx].turns.append(turn)
                 self.conversations[idx].updatedAt = Date()
@@ -415,16 +519,30 @@ final class AppViewModel {
 
     /// 按需生成 3 条追问建议(基于最近一轮问答),用便宜的小调用。
     func suggestFollowUps() {
-        guard !suggestingFollowUps, !isRunning,
-              let turn = selectedConversation?.turns.last,
-              let cfg = chairProvider ?? providers.first(where: { $0.enabled && !$0.kind.isCLI }) else { return }
+        guard !suggestingFollowUps else { return }
+        guard !isRunning else {
+            followUpError = "正在生成回答(isRunning),等这一轮跑完再点。"
+            return
+        }
+        guard let turn = selectedConversation?.turns.last else {
+            followUpError = "当前会话还没有可用的问答轮次。"
+            return
+        }
+        guard let cfg = chairProvider ?? providers.first(where: { $0.enabled && !$0.kind.isCLI }) else {
+            followUpError = "没有可用的 API provider:追问建议只能用带 API key 的 provider 生成(CLI 不支持)。到配置里启用一个。"
+            return
+        }
         let answer = turn.chairSummary ?? turn.summaryText
             ?? turn.responses.values.first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) ?? ""
-        guard !answer.isEmpty else { return }
+        guard !answer.isEmpty else {
+            followUpError = "最近一轮还没有可用的回答,无法生成追问。"
+            return
+        }
         let q = String(turn.prompt.prefix(800))
         let a = String(answer.prefix(1200))
         suggestingFollowUps = true
         followUpSuggestions = []
+        followUpError = nil
         Task { @MainActor [weak self] in
             guard let self else { return }
             defer { self.suggestingFollowUps = false }
@@ -432,12 +550,24 @@ final class AppViewModel {
             let prompt = "基于下面的问答,提出 3 个简短、具体、互不相同的后续追问(中文)。每行一个,不要编号、引号或解释。\n\n问:\(q)\n答:\(a)"
             let options = ChatOptions(systemPrompt: nil, temperature: 0.7, maxTokens: 200)
             var collected = ""
+            var reasoningLen = 0
+            var chunkCount = 0
+            var usageNote = ""
             do {
                 let client = ProviderRegistry.client(for: cfg.kind)
                 for try await chunk in client.stream(prompt: prompt, options: options, config: cfg, apiKey: apiKey) {
-                    if case .text(let t) = chunk { collected += t }
+                    chunkCount += 1
+                    switch chunk {
+                    case .text(let t): collected += t
+                    case .reasoning(let r): reasoningLen += r.count
+                    case .usage(let i, let o, _): usageNote = " in=\(i) out=\(o)"
+                    default: break
+                    }
                 }
-            } catch { return }
+            } catch {
+                self.followUpError = "生成失败(\(cfg.displayName)):\(error.localizedDescription)"
+                return
+            }
             let lines = collected.split(whereSeparator: \.isNewline).map { raw -> String in
                 var s = raw.trimmingCharacters(in: .whitespaces)
                 while let f = s.first, f == "-" || f == "*" || f == "•" || f == "." || f == "、" || f == ")" || f == ")" || f.isNumber || f == " " {
@@ -445,15 +575,159 @@ final class AppViewModel {
                 }
                 return s.trimmingCharacters(in: .whitespaces)
             }.filter { !$0.isEmpty }
-            self.followUpSuggestions = Array(lines.prefix(3))
+            let parsed = Array(lines.prefix(3))
+            if parsed.isEmpty {
+                self.followUpError = "诊断:text=\(collected.count)字 reasoning=\(reasoningLen)字 chunks=\(chunkCount)\(usageNote) | \(cfg.displayName) thinking=\(AnthropicClient.claudeThinkingEnabled)"
+            } else {
+                self.followUpSuggestions = parsed
+            }
         }
     }
 
     /// 点某条追问建议 → 直接发送。
     func askFollowUp(_ question: String) {
         followUpSuggestions = []
+        followUpError = nil
         prompt = question
         send()
+    }
+
+    // MARK: - Compare 裁判评判(opt-in)
+
+    /// 指定 turn 是否正在裁判评判中(UI 转圈用)。
+    func isJudgingCompare(turnID: UUID) -> Bool {
+        judgingCompareTurnIDs.contains(turnID)
+    }
+
+    /// Compare 模式:让裁判模型读两家回答,判出胜者 + 理由,写回 Turn 并记进胜率榜。
+    /// opt-in —— 由 Compare 回答完成后用户点「让裁判评判」触发(默认手动,省成本)。
+    /// 裁判优先 `chairProvider`,否则第一家 enabled 非 CLI provider(尽量避开参赛两家)。
+    /// 结构仿 `suggestFollowUps`,但用独立 state(`judgingCompareTurnIDs` / `judgeCompareErrors`),
+    /// 不触碰 follow-up 相关状态。
+    func judgeCompare(turnID: UUID) {
+        guard !judgingCompareTurnIDs.contains(turnID) else { return }
+        guard let convID = selectedConversationID,
+              let convIdx = conversations.firstIndex(where: { $0.id == convID }),
+              let turnIdx = conversations[convIdx].turns.firstIndex(where: { $0.id == turnID }) else { return }
+        let turn = conversations[convIdx].turns[turnIdx]
+
+        // 取参赛两家(Compare 取前两列)。
+        let panel = Array(turn.orderedPanelConfigs.prefix(2))
+        guard panel.count == 2 else {
+            judgeCompareErrors[turnID] = "需要两家回答才能评判。"
+            return
+        }
+        let aCfg = panel[0], bCfg = panel[1]
+        let aKey = aCfg.id.uuidString, bKey = bCfg.id.uuidString
+        let aText = (turn.responses[aKey] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let bText = (turn.responses[bKey] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !aText.isEmpty, !bText.isEmpty else {
+            judgeCompareErrors[turnID] = "有一家回答为空,无法评判。"
+            return
+        }
+
+        // 裁判:chair 优先;否则第一家 enabled 非 CLI(尽量避开参赛两家,实在没有就允许)。
+        let participantIDs: Set<UUID> = [aCfg.id, bCfg.id]
+        let preferred = chairProvider.flatMap { c in (c.enabled && !c.kind.isCLI) ? c : nil }
+        let judge: ProviderConfig?
+        if let p = preferred, !participantIDs.contains(p.id) {
+            judge = p
+        } else if let neutral = providers.first(where: { $0.enabled && !$0.kind.isCLI && !participantIDs.contains($0.id) }) {
+            judge = neutral
+        } else {
+            judge = preferred ?? providers.first(where: { $0.enabled && !$0.kind.isCLI })
+        }
+        guard let judgeCfg = judge else {
+            judgeCompareErrors[turnID] = "没有可用的 API provider 当裁判(CLI 不支持)。到配置里启用一个。"
+            return
+        }
+
+        let q = String(turn.prompt.prefix(1200))
+        let aName = aCfg.displayName, bName = bCfg.displayName
+        let a = String(aText.prefix(2400))
+        let b = String(bText.prefix(2400))
+
+        judgingCompareTurnIDs.insert(turnID)
+        judgeCompareErrors[turnID] = nil
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.judgingCompareTurnIDs.remove(turnID) }
+            let apiKey = (try? KeychainStore.load(id: judgeCfg.id)) ?? ""
+            let prompt = """
+            你是严谨中立的评审。下面是同一个问题的两份回答(A / B)。判断哪份整体更好(更准确、更完整、更有用),只能二选一。
+            第一行只输出胜者字母:`A` 或 `B`。第二行起用一两句中文说明理由,不要复述原文。
+
+            【问题】
+            \(q)
+
+            【回答 A · \(aName)】
+            \(a)
+
+            【回答 B · \(bName)】
+            \(b)
+            """
+            let options = ChatOptions(systemPrompt: nil, temperature: 0.2, maxTokens: 400)
+            var collected = ""
+            do {
+                let client = ProviderRegistry.client(for: judgeCfg.kind)
+                for try await chunk in client.stream(prompt: prompt, options: options, config: judgeCfg, apiKey: apiKey) {
+                    if case .text(let t) = chunk { collected += t }
+                }
+            } catch {
+                self.judgeCompareErrors[turnID] = "评判失败(\(judgeCfg.displayName)):\(error.localizedDescription)"
+                return
+            }
+
+            // 解析:首个出现的 A / B 当胜者,剩余文本当理由。
+            let trimmed = collected.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let parsed = Self.parseVerdict(trimmed) else {
+                self.judgeCompareErrors[turnID] = "评判结果无法解析(\(judgeCfg.displayName)):\(trimmed.prefix(80))"
+                return
+            }
+            let winnerCfg = parsed.winnerIsA ? aCfg : bCfg
+            let loserCfg  = parsed.winnerIsA ? bCfg : aCfg
+            let rationale = parsed.rationale.isEmpty ? "裁判未给出理由。" : parsed.rationale
+
+            // 写回 Turn(只前进到 live 索引,防竞态)。
+            guard let liveConvIdx = self.conversations.firstIndex(where: { $0.id == convID }),
+                  let liveTurnIdx = self.conversations[liveConvIdx].turns.firstIndex(where: { $0.id == turnID }) else { return }
+            self.conversations[liveConvIdx].turns[liveTurnIdx].compareVerdict =
+                CompareVerdict(winnerProviderID: winnerCfg.id.uuidString, rationale: rationale)
+            self.conversations[liveConvIdx].updatedAt = Date()
+            ConversationStore.save(self.conversations[liveConvIdx])
+
+            // 记进胜率榜(模型键 = providerKind::model)。
+            let winnerKey = ModelLeaderboardStore.key(providerKind: winnerCfg.kind, model: winnerCfg.model)
+            let loserKey  = ModelLeaderboardStore.key(providerKind: loserCfg.kind, model: loserCfg.model)
+            ModelLeaderboardStore.shared.record(winnerKey: winnerKey, loserKey: loserKey)
+        }
+    }
+
+    /// 解析裁判输出:取首个独立出现的 A/B 当胜者,其余非空行拼成理由。
+    private static func parseVerdict(_ text: String) -> (winnerIsA: Bool, rationale: String)? {
+        let lines = text.split(whereSeparator: \.isNewline).map {
+            $0.trimmingCharacters(in: .whitespaces)
+        }
+        var winnerIsA: Bool?
+        var rationaleLines: [String] = []
+        for line in lines where !line.isEmpty {
+            if winnerIsA == nil {
+                // 去掉常见前缀符号后看首字符是不是 A / B。
+                let cleaned = line.trimmingCharacters(in: CharacterSet(charactersIn: "：: 。.-*#`【】[]()() "))
+                if let first = cleaned.first {
+                    if first == "A" || first == "a" { winnerIsA = true; continue }
+                    if first == "B" || first == "b" { winnerIsA = false; continue }
+                }
+                // 没在首字符命中:退一步扫整行有没有「胜者 A/B」字样。
+                if line.contains("A") && !line.contains("B") { winnerIsA = true; continue }
+                if line.contains("B") && !line.contains("A") { winnerIsA = false; continue }
+            } else {
+                rationaleLines.append(line)
+            }
+        }
+        guard let isA = winnerIsA else { return nil }
+        return (isA, rationaleLines.joined(separator: " ").trimmingCharacters(in: .whitespaces))
     }
 
     /// 把当前输入暂存为当前会话的草稿(切换/新建前调用)。
@@ -520,6 +794,7 @@ final class AppViewModel {
             liveChairState = nil
             liveSummaryState = nil
             liveDebateRounds.removeAll()
+            liveTournamentRounds.removeAll()
         }
     }
 
@@ -545,6 +820,7 @@ final class AppViewModel {
             liveChairState = nil
             liveSummaryState = nil
             liveDebateRounds.removeAll()
+            liveTournamentRounds.removeAll()
         }
     }
 
@@ -781,6 +1057,8 @@ final class AppViewModel {
             self.refreshHasWebSearchKey()
             // 用量也跟着同步刷新 — 其他设备的 usage-*.json 文件可能刚被 iCloud 拉到本地
             UsageStore.shared.reload()
+            // 胜率榜同理 — leaderboard.json 可能刚被 iCloud 拉下来
+            ModelLeaderboardStore.shared.reload()
             // 选中的会话可能在切换后不存在(空目录或不同设备状态),清掉
             if let id = self.selectedConversationID,
                !self.conversations.contains(where: { $0.id == id }) {
@@ -809,6 +1087,7 @@ final class AppViewModel {
             // 用量也要 reload — 别的设备的 usage-*.json 可能刚被 iCloud 拉下来。
             // 启动 2s 后会自动走到这里,所以多端用量累加在 app 启动后短延迟就能看到。
             UsageStore.shared.reload()
+            ModelLeaderboardStore.shared.reload()
             if let id = self.selectedConversationID,
                !self.conversations.contains(where: { $0.id == id }) {
                 self.selectedConversationID = self.conversations.first?.id
@@ -1044,6 +1323,97 @@ final class AppViewModel {
         enhancerProvider = nil
     }
 
+    // MARK: - Prompt Improver(提示词润色)
+    // 注:与 follow-up(suggestFollowUps / followUpError / followUpSuggestions)以及 Prompt Enhancer
+    // (enhancePrompt / enhancerOutput…)完全独立——独立 state + 独立方法。本功能在输入栏内联预览,
+    // 用小模型把当前输入润色成更清晰、具体、结构化的 prompt,点「采用」即替换输入框。
+    /// 润色结果(改写后的 prompt);nil = 没有可展示的结果。
+    var promptImprovement: String?
+    /// 正在润色(供按钮 loading 态)。
+    var improvingPrompt: Bool = false
+    /// 润色失败原因(给用户看;成功或重置时清空)。
+    var promptImproveError: String?
+    private var promptImproveTask: Task<Void, Never>?
+
+    /// 用小模型把当前 `prompt` 润色成更清晰、具体、结构化的提问,结果存进 `promptImprovement`。
+    /// 仿 suggestFollowUps 的写法,但独立 state/方法,不碰 follow-up / enhancer。
+    func improvePrompt() {
+        guard !improvingPrompt else { return }
+        let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            promptImproveError = "输入框是空的,先写点东西再润色。"
+            return
+        }
+        guard !isRunning else {
+            promptImproveError = "正在生成回答,等这一轮跑完再润色。"
+            return
+        }
+        // chair 优先,否则第一个 enabled 的非 CLI provider(CLI 沙箱差异大,小调用不可靠)。
+        guard let cfg = chairProvider ?? providers.first(where: { $0.enabled && !$0.kind.isCLI }) else {
+            promptImproveError = "没有可用的 API provider:润色只能用带 API key 的 provider(CLI 不支持)。到配置里启用一个。"
+            return
+        }
+        promptImprovement = nil
+        promptImproveError = nil
+        improvingPrompt = true
+        let original = String(trimmed.prefix(4000))
+        let snapshot = cfg
+        promptImproveTask?.cancel()
+        promptImproveTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.improvingPrompt = false }
+            let apiKey = snapshot.kind.isCLI ? "" : ((try? KeychainStore.load(id: snapshot.id)) ?? "")
+            let meta = """
+            请把下面的「原提问」润色成一个更清晰、更具体、结构更好的 prompt,目标是让大模型更准确地理解并作答。规则:
+            1) 保持原语言(中文/英文按原文)。
+            2) 保留原意,补足隐含的背景、约束和期望输出形式,但不要替用户回答问题、不要编造事实。
+            3) 必要时用简短的分点或小标题组织,使要求清楚。
+            4) 直接输出润色后的提问本身,不要任何前后缀、引号、解释或「润色后:」之类的标注。
+
+            原提问:
+            \(original)
+            """
+            let options = ChatOptions(systemPrompt: nil, temperature: 0.4, maxTokens: 1200)
+            var collected = ""
+            do {
+                let client = ProviderRegistry.client(for: snapshot.kind)
+                for try await chunk in client.stream(prompt: meta, options: options, config: snapshot, apiKey: apiKey) {
+                    if Task.isCancelled { return }
+                    if case .text(let t) = chunk {
+                        collected += t
+                        self.promptImprovement = collected
+                    }
+                }
+            } catch {
+                if Task.isCancelled { return }
+                self.promptImproveError = "润色失败(\(snapshot.displayName)):\(error.localizedDescription)"
+                return
+            }
+            let result = collected.trimmingCharacters(in: .whitespacesAndNewlines)
+            if result.isEmpty {
+                self.promptImproveError = "润色没有返回内容,换个 provider 或稍后再试。"
+            } else {
+                self.promptImprovement = result
+            }
+        }
+    }
+
+    /// 采用润色结果:替换输入框文本,清空润色 state。
+    func acceptImprovedPrompt() {
+        let trimmed = (promptImprovement ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { prompt = trimmed }
+        dismissImprovement()
+    }
+
+    /// 放弃润色结果:取消进行中的任务并清空 state。
+    func dismissImprovement() {
+        promptImproveTask?.cancel()
+        promptImproveTask = nil
+        improvingPrompt = false
+        promptImprovement = nil
+        promptImproveError = nil
+    }
+
     // MARK: - 发送
 
     /// 根据 currentMode 决定调哪些 provider。Council 模式 Chair 也参与 panel,之后再做综合。
@@ -1057,6 +1427,12 @@ final class AppViewModel {
         case .debate:
             // 所有启用的 provider 都参与辩论;Chair 在最后做主持总结。
             return (enabled, chairProvider)
+        case .tournament:
+            // 所有启用的非 CLI provider 作为参赛选手(各自回答);裁判 = chair,没有则取第一个 enabled 非 CLI。
+            // CLI provider 沙箱差异大,淘汰赛回答不稳定,排除。
+            let players = enabled.filter { !$0.kind.isCLI }
+            let judge = chairProvider ?? players.first
+            return (players, judge)
         case .direct:
             if let chosen = resolvedFromModelChoices(maxCount: 1), !chosen.isEmpty {
                 return (chosen, nil)
@@ -1079,6 +1455,27 @@ final class AppViewModel {
                 panel.contains(where: { $0.id == c.id }) ? nil : c
             }
             return (panel, judge)
+        case .structured:
+            // 所有启用的非 CLI provider 都按同一 schema 出结构化结果;无 chair。
+            // CLI 沙箱差异大、JSON 可靠性低,排除。
+            return (enabled.filter { !$0.kind.isCLI }, nil)
+        }
+    }
+
+    /// Structured 模式:设置当前会话的 JSON Schema(没有会话则新建一个 structured 会话承载)。
+    func setStructuredSchema(_ schema: String) {
+        structuredSchemaError = nil
+        if let idx = conversations.firstIndex(where: { $0.id == selectedConversationID }) {
+            conversations[idx].structuredSchema = schema
+            conversations[idx].updatedAt = Date()
+            ConversationStore.save(conversations[idx])
+        } else {
+            var conv = Conversation(mode: .structured)
+            conv.structuredSchema = schema
+            conversations.insert(conv, at: 0)
+            selectedConversationID = conv.id
+            activeMode = .structured
+            ConversationStore.save(conv)
         }
     }
 

@@ -16,8 +16,8 @@ import Foundation
 enum WorkspaceManager {
     // MARK: - 配置
 
-    /// 允许读 / 写的文件后缀(纯文本)
-    static let textExtensions: Set<String> = [
+    /// 允许读 / 写的文件后缀(纯文本)。nonisolated:供后台 buildContext 读取。
+    nonisolated static let textExtensions: Set<String> = [
         "md", "markdown", "txt", "rst",
         "swift", "py", "js", "ts", "tsx", "jsx", "mjs", "cjs",
         "json", "yaml", "yml", "toml", "xml", "html", "htm", "css", "scss",
@@ -29,11 +29,11 @@ enum WorkspaceManager {
         "Dockerfile", "Makefile"
     ]
 
-    /// 总上下文体积上限 — 一次 send 注入到 prompt 的所有文件内容加和
-    static let contextSizeBudget = 80 * 1024  // 80KB
+    /// 总上下文体积上限 — 一次 send 注入到 prompt 的所有文件内容加和。nonisolated:供后台 buildContext 读取。
+    nonisolated static let contextSizeBudget = 80 * 1024  // 80KB
 
-    /// 单文件读写大小上限
-    static let perFileMaxSize = 1024 * 1024  // 1MB
+    /// 单文件读写大小上限。nonisolated:供后台 buildContext 读取。
+    nonisolated static let perFileMaxSize = 1024 * 1024  // 1MB
 
     // MARK: - Bookmark
 
@@ -78,7 +78,8 @@ enum WorkspaceManager {
     /// 把 workspace 内的所有文本文件扫一遍,返回一个能直接塞 system prompt 的 XML-ish 块。
     /// 路径相对 workspace 根。超过 `contextSizeBudget` 时按文件 byte size 升序排,先小后大。
     /// 当前实现:即便 budget 用完,文件树仍然完整列出(只是不带内容)。
-    static func buildContext(workspaceURL: URL) -> String? {
+    /// `nonisolated`:纯文件 I/O,无主线程状态依赖 —— 发送时由后台线程调用,避免扫树卡主线程。
+    nonisolated static func buildContext(workspaceURL: URL) -> String? {
         let fm = FileManager.default
         let scoped = workspaceURL.startAccessingSecurityScopedResource()
         defer { if scoped { workspaceURL.stopAccessingSecurityScopedResource() } }
@@ -371,7 +372,7 @@ enum WorkspaceManager {
 
     // MARK: - 内部
 
-    private static func isTextExtensionAllowed(_ url: URL) -> Bool {
+    nonisolated private static func isTextExtensionAllowed(_ url: URL) -> Bool {
         let ext = url.pathExtension.lowercased()
         if textExtensions.contains(ext) { return true }
         // 文件名本身就是 Dockerfile / Makefile 这类无扩展名的也允许
@@ -379,7 +380,7 @@ enum WorkspaceManager {
         return textExtensions.contains(base)
     }
 
-    private static func relativePath(of url: URL, from root: URL) -> String {
+    nonisolated private static func relativePath(of url: URL, from root: URL) -> String {
         let rootPath = root.standardizedFileURL.path
         let urlPath = url.standardizedFileURL.path
         if urlPath.hasPrefix(rootPath + "/") {
@@ -388,7 +389,7 @@ enum WorkspaceManager {
         return url.lastPathComponent
     }
 
-    private static func formatBytes(_ n: Int) -> String {
+    nonisolated private static func formatBytes(_ n: Int) -> String {
         if n < 1024 { return "\(n)B" }
         if n < 1024 * 1024 { return String(format: "%.1fKB", Double(n) / 1024.0) }
         return String(format: "%.1fMB", Double(n) / 1024.0 / 1024.0)

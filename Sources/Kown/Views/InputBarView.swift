@@ -32,6 +32,10 @@ struct InputBarView: View {
     #if os(iOS)
     @State private var showPhotoPicker = false
     @State private var photoItem: PhotosPickerItem?
+    /// OCR 扫描:从相册选图后跑 Vision 文字识别,把抽取的文字追加进输入框。
+    @State private var showOCRPicker = false
+    @State private var ocrItem: PhotosPickerItem?
+    @State private var ocrRunning = false
     #endif
 
     /// 语音听写(STT)。录音中把识别文本接在 dictationBase 后面写入 prompt。
@@ -60,6 +64,7 @@ struct InputBarView: View {
                             .strokeBorder(Color.red.opacity(0.18), lineWidth: 1)
                     }
             }
+            promptImprovePreview
             barRow
         }
         .padding(.horizontal, shellHorizontalPadding)
@@ -147,8 +152,50 @@ struct InputBarView: View {
                 }
             }
         }
+        // OCR 扫描:选图 → Vision 识别 → 抽取文字追加到输入框(不入附件)。
+        .photosPicker(isPresented: $showOCRPicker, selection: $ocrItem, matching: .images)
+        .onChange(of: ocrItem) { _, item in
+            guard let item else { return }
+            ocrRunning = true
+            Task {
+                defer { ocrItem = nil }
+                do {
+                    guard let data = try await item.loadTransferable(type: Data.self),
+                          let image = UIImage(data: data) else {
+                        await MainActor.run {
+                            ocrRunning = false
+                            pickerError = "读取图片失败"
+                        }
+                        return
+                    }
+                    let text = try await OCRService.recognizeText(in: image)
+                    await MainActor.run {
+                        appendOCRText(text)
+                        ocrRunning = false
+                        pickerError = nil
+                        inputFocused = true
+                    }
+                } catch {
+                    await MainActor.run {
+                        ocrRunning = false
+                        pickerError = error.localizedDescription
+                    }
+                }
+            }
+        }
         #endif
     }
+
+    #if os(iOS)
+    /// 把 OCR 抽取的文字追加进 prompt:空则直接填,非空则换行接在后面。
+    private func appendOCRText(_ text: String) {
+        if viewModel.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            viewModel.prompt = text
+        } else {
+            viewModel.prompt += "\n\n" + text
+        }
+    }
+    #endif
 
     #if os(macOS)
     private func handlePicked(_ result: Result<URL, Error>, isImage: Bool) {
@@ -311,6 +358,11 @@ struct InputBarView: View {
             #endif
             #if os(iOS)
             iconButton("photo", help: "从相册添加图片") { showPhotoPicker = true }
+            iconButton(ocrRunning ? "hourglass" : "doc.viewfinder",
+                       help: ocrRunning ? "正在识别文字…" : "扫描图片文字(OCR)— 识别后追加到输入框") {
+                showOCRPicker = true
+            }
+            .disabled(ocrRunning)
             #endif
             webSearchToggle
             if viewModel.currentMode == .debate {
@@ -332,6 +384,7 @@ struct InputBarView: View {
                 showEnhancer = true
             }
             .disabled(viewModel.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            promptImproveButton
             micButton
             voiceButton
             if viewModel.currentMode == .direct {
@@ -340,6 +393,13 @@ struct InputBarView: View {
                     viewModel.generateImage()
                 }
                 .disabled(viewModel.isGeneratingImage || viewModel.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                if viewModel.imageGenComparableProviders.count >= 2 {
+                    iconButton(viewModel.isGeneratingImage ? "hourglass" : "photo.stack",
+                               help: "图像生成对比(所有启用模型用同一描述各出一张并排比较,需各自选好出图模型)") {
+                        viewModel.generateImageComparison()
+                    }
+                    .disabled(viewModel.isGeneratingImage || viewModel.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
             }
             #if os(macOS)
             workspaceButton
@@ -359,6 +419,103 @@ struct InputBarView: View {
             VoiceConversationView(viewModel: viewModel)
         }
         #endif
+    }
+
+    // MARK: - 提示词润色(Prompt Improver)
+    // 与 Prompt Enhancer(wand.and.stars sheet)、follow-up 互不相干:独立按钮 + 输入栏内联预览,
+    // 走 viewModel.improvePrompt / acceptImprovedPrompt / dismissImprovement。
+
+    /// 「润色」按钮:用小模型把当前输入改写得更清晰、具体、结构化(内联预览,非 sheet)。
+    private var promptImproveButton: some View {
+        let empty = viewModel.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return iconButton(viewModel.improvingPrompt ? "hourglass" : "wand.and.rays",
+                          help: empty ? "先输入问题再润色" : "润色:让提问更清晰、具体、结构化") {
+            viewModel.improvePrompt()
+        }
+        .disabled(empty || viewModel.improvingPrompt)
+    }
+
+    /// 润色结果的内联预览(带「采用」「却下」按钮)、运行中指示与错误提示。
+    @ViewBuilder
+    private var promptImprovePreview: some View {
+        if let err = viewModel.promptImproveError {
+            HStack(spacing: 8) {
+                Label(err, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.orange)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Button {
+                    viewModel.dismissImprovement()
+                } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.tertiary)
+                }
+                .buttonStyle(.plain)
+                .help("关闭")
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(Color.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(Color.orange.opacity(0.20), lineWidth: 1)
+            }
+        } else if viewModel.improvingPrompt || viewModel.promptImprovement != nil {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: "wand.and.rays")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(Color.purple)
+                    Text("润色建议")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.secondary)
+                    if viewModel.improvingPrompt {
+                        ProgressView().controlSize(.small)
+                    }
+                    Spacer()
+                    Button {
+                        viewModel.dismissImprovement()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill").foregroundStyle(.tertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("却下(不采用)")
+                }
+
+                ScrollView {
+                    Text(viewModel.promptImprovement?.isEmpty == false
+                         ? (viewModel.promptImprovement ?? "")
+                         : "正在润色…")
+                        .font(.callout)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 160)
+
+                HStack(spacing: 8) {
+                    Spacer()
+                    Button("却下") {
+                        viewModel.dismissImprovement()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    Button("采用") {
+                        viewModel.acceptImprovedPrompt()
+                        inputFocused = true
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(viewModel.improvingPrompt
+                              || (viewModel.promptImprovement?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true))
+                }
+            }
+            .padding(12)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(Color.purple.opacity(0.20), lineWidth: 1)
+            }
+            .transition(.opacity.combined(with: .move(edge: .bottom)))
+        }
     }
 
     /// 语音对话模式入口:听 → 发 → 朗读 → 再听的免手循环。
@@ -505,6 +662,8 @@ struct InputBarView: View {
         case .direct:  return "Send a message..."
         case .compare: return "Ask both models..."
         case .debate:  return "Start a debate..."
+        case .structured: return "Ask for structured JSON..."
+        case .tournament: return "Start a tournament..."
         }
     }
 

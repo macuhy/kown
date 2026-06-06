@@ -51,6 +51,16 @@ extension AppViewModel {
         }
         guard let convIdx = conversations.firstIndex(where: { $0.id == selectedConversationID }) else { return }
 
+        // Structured 模式:发送前校验本会话的 JSON Schema,不合法直接拦截(不清空输入),把错误透出给 UI。
+        if currentMode == .structured {
+            let schema = conversations[convIdx].structuredSchema ?? StructuredOutput.defaultSchema
+            if let err = StructuredOutput.schemaError(schema) {
+                structuredSchemaError = err
+                return
+            }
+            structuredSchemaError = nil
+        }
+
         // ---- send():采集 live 输入 + 算 snapshot,把发送编排交给 runSend ----
         // 把文件附件文本拼到 prompt 前面；图片走 options.images
         let fileBlocks = attachments.compactMap { att -> String? in
@@ -75,27 +85,18 @@ extension AppViewModel {
         }
 
         let promptSnapshot = composedPrompt
-        // Workspace 上下文(若设置了 Working Folder):扫所有文件,打包成 XML 块,前置到 system prompt。
-        // Model 看到后可以在响应里输出 ```kown:write 块,我们 post-parse 自动应用。
-        let workspaceURLForSend = currentWorkspaceURL
-        let workspaceContext: String? = workspaceURLForSend.flatMap {
-            WorkspaceManager.buildContext(workspaceURL: $0)
-        }
-        // 知识库(本地 RAG):按本轮问题检索 top-K 片段,作 [相关资料] 块前置进 system。
-        let knowledgeContext: String? = {
-            guard let folder = currentKnowledgeFolder else { return nil }
-            let hits = LocalRAG.retrieve(query: trimmed, folder: folder, topK: 4)
-            guard !hits.isEmpty else { return nil }
-            return "[相关资料 — 来自知识库「\(folder.name)」,回答时优先参考以下片段]\n\n"
-                + hits.joined(separator: "\n\n---\n\n")
-        }()
-        let sysSnapshot: String = {
-            // 会话级系统提示优先;非 nil 且非空才覆盖全局,否则回退全局 systemPrompt。
+        // Workspace / 知识库 / 长期记忆 的上下文打包**挪到后台**(见 runSend → assembleSystemPrompt):
+        // 扫文件树 / 本地 RAG(切块+NLEmbedding)/ 记忆 BM25 在大输入上能卡主线程 0.5–2s。
+        // 这里只在主线程捕获**轻量**的原始输入,真正的打包在 runSend 的后台任务里做。
+        let workspaceURLForSend = currentWorkspaceURL          // 双用途:① 上下文打包 ② kown:write 落盘
+        let knowledgeFolderForSend = currentKnowledgeFolder
+        // memory items 取一份快照(O(1) COW),供后台 BM25 打分,避免触碰 @MainActor 的 MemoryStore。
+        let memoryItemsForSend: [MemoryItem] = memoryInjectionEnabled ? MemoryStore.shared.items : []
+        let memoryQueryForSend: String? = memoryInjectionEnabled ? trimmed : nil
+        // 基础系统提示(会话级优先,否则全局);上下文片段在后台前置到它前面。
+        let baseSystemPrompt: String = {
             let convPrompt = conversations[convIdx].systemPrompt?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let base = (convPrompt?.isEmpty == false) ? convPrompt! : systemPrompt
-            // 顺序:workspace 上下文 → 知识库片段 → 用户 system prompt。
-            let parts = [workspaceContext, knowledgeContext, base.isEmpty ? nil : base].compactMap { $0 }
-            return parts.joined(separator: "\n\n")
+            return (convPrompt?.isEmpty == false) ? convPrompt! : systemPrompt
         }()
         let imageSnapshot = imagePayloads
         // 把本轮图片字节落盘到同步目录,拿到轻量引用 → 历史里能看到 + 随 iCloud 同步。
@@ -110,21 +111,63 @@ extension AppViewModel {
         let debateRoundsSnapshot = debateRoundsForNextSend
         // Summary 只在 Council 模式跑
         let summarySnapshot = (modeSnapshot == .council) ? summaryProvider : nil
+        // Structured 模式的 schema 快照(其它模式为 nil)
+        let structuredSchemaSnapshot: String? = (modeSnapshot == .structured)
+            ? (conversations[convIdx].structuredSchema ?? StructuredOutput.defaultSchema)
+            : nil
 
         // 清空 prompt 输入框 + 附件(🌐 状态保留,跨发送/跨重启持久化)
         prompt = ""
         attachments = []
         followUpSuggestions = []
+        followUpError = nil
 
         let convID = conversations[convIdx].id
         runSend(
             convID: convID, panel: panel, chair: chair, summary: summarySnapshot,
-            promptText: promptSnapshot, systemPromptText: sysSnapshot, mode: modeSnapshot,
+            promptText: promptSnapshot, systemPromptText: baseSystemPrompt, mode: modeSnapshot,
             turnImages: turnImages, imagePayloads: imageSnapshot,
             contextSummary: contextSummarySnapshot, priorTurns: priorTurnsSnapshot,
             toolSession: toolSessionSnapshot, tools: toolsSnapshot,
-            debateRoundsCount: debateRoundsSnapshot, workspaceURL: workspaceURLForSend
+            debateRoundsCount: debateRoundsSnapshot, workspaceURL: workspaceURLForSend,
+            structuredSchema: structuredSchemaSnapshot,
+            workspaceContextURL: workspaceURLForSend,
+            knowledgeFolder: knowledgeFolderForSend,
+            knowledgeQuery: trimmed,
+            memoryItems: memoryItemsForSend,
+            memoryQuery: memoryQueryForSend
         )
+    }
+
+    /// 在后台线程把 workspace / 知识库 / 长期记忆 上下文打包,前置到基础 system prompt 前面。
+    /// `nonisolated`:三段都是纯计算 / 文件 I/O / actor(RAGVectorCache),不碰 @MainActor 状态,
+    /// 整体在 global executor 跑 —— 把原来卡在 send() 主线程的扫树 / RAG / BM25 全部挪走。
+    /// 顺序与历史一致:workspace 上下文 → 知识库片段 → 长期记忆 → 基础 system prompt。
+    /// 三段来源都为空时直接返回 base(edit/retry 路径走这里,行为不变)。
+    nonisolated private static func assembleSystemPrompt(
+        base: String,
+        workspaceContextURL: URL?,
+        knowledgeFolder: KnowledgeFolder?,
+        knowledgeQuery: String,
+        memoryItems: [MemoryItem],
+        memoryQuery: String?
+    ) async -> String {
+        var parts: [String] = []
+        if let url = workspaceContextURL, let ctx = WorkspaceManager.buildContext(workspaceURL: url) {
+            parts.append(ctx)
+        }
+        if let folder = knowledgeFolder {
+            let hits = await LocalRAG.retrieve(query: knowledgeQuery, folder: folder, topK: 4)
+            if !hits.isEmpty {
+                parts.append("[相关资料 — 来自知识库「\(folder.name)」,回答时优先参考以下片段]\n\n"
+                    + hits.joined(separator: "\n\n---\n\n"))
+            }
+        }
+        if let q = memoryQuery, let mem = MemoryStore.relevanceBlock(items: memoryItems, query: q) {
+            parts.append(mem)
+        }
+        if !base.isEmpty { parts.append(base) }
+        return parts.joined(separator: "\n\n")
     }
 
     /// 真正执行一次发送编排:种 live 状态 → 跑 panel/chair/summary → 建 Turn 落盘。
@@ -146,12 +189,19 @@ extension AppViewModel {
         toolSession: WebSearchSession?,
         tools: [LLMTool],
         debateRoundsCount: Int,
-        workspaceURL: URL?
+        workspaceURL: URL?,
+        structuredSchema: String? = nil,
+        // 上下文来源(主发送路径才传;edit/retry 用默认空值 → 不二次注入,沿用 systemPromptText 原样)。
+        // 在后台 assembleSystemPrompt 里前置到 systemPromptText 前面。
+        workspaceContextURL: URL? = nil,
+        knowledgeFolder: KnowledgeFolder? = nil,
+        knowledgeQuery: String = "",
+        memoryItems: [MemoryItem] = [],
+        memoryQuery: String? = nil
     ) {
         guard !panel.isEmpty else { return }
         // 别名:让下方异步体与原 send() 逐行一致,降低抽取风险
         let promptSnapshot = promptText
-        let sysSnapshot = systemPromptText
         let modeSnapshot = mode
         let imageSnapshot = imagePayloads
         let contextSummarySnapshot = contextSummary
@@ -161,6 +211,7 @@ extension AppViewModel {
         let debateRoundsSnapshot = debateRoundsCount
         let summarySnapshot = summary
         let workspaceURLForSend = workspaceURL
+        let structuredSchemaSnapshot = structuredSchema
 
         runningTask?.cancel()
         isRunning = true
@@ -192,6 +243,7 @@ extension AppViewModel {
         liveChairState = nil
         liveSummaryState = nil
         liveDebateRounds.removeAll()
+        liveTournamentRounds.removeAll()
         liveTurnPrompt = promptSnapshot
         liveTurnImages = turnImages
         liveSources.removeAll()
@@ -218,6 +270,23 @@ extension AppViewModel {
 
         runningTask = Task { [weak self] in
             guard let self else { return }
+
+            // 上下文打包(扫 workspace 文件树 / 知识库 RAG / 记忆 BM25)挪到后台线程算,避免卡主线程。
+            // live 卡已在上面同步种好,这里只是把最终 system prompt 算出来再发网络。
+            let sysSnapshot = await Self.assembleSystemPrompt(
+                base: systemPromptText,
+                workspaceContextURL: workspaceContextURL,
+                knowledgeFolder: knowledgeFolder,
+                knowledgeQuery: knowledgeQuery,
+                memoryItems: memoryItems,
+                memoryQuery: memoryQuery
+            )
+            if Task.isCancelled {
+                self.liveStates.values.forEach { $0.fail("已取消") }
+                self.isRunning = false
+                self.runningConvID = nil
+                return
+            }
 
             var responses: [String: String] = [:]
             var errors: [String: String] = [:]
@@ -311,9 +380,19 @@ extension AppViewModel {
 
                 debateRounds = rounds
             } else {
+                // Structured 模式:给每家拼上「按 schema 返回严格 JSON」的 prompt(全 provider 通用)。
+                // 其它模式 prompts 为空,沿用 defaultPrompt。
+                let structuredPrompts: [UUID: String]
+                if modeAtSend == .structured, let schema = structuredSchemaSnapshot {
+                    structuredPrompts = Dictionary(uniqueKeysWithValues: panel.map { cfg in
+                        (cfg.id, StructuredOutput.buildStructuredPrompt(userPrompt: promptSnapshot, schema: schema))
+                    })
+                } else {
+                    structuredPrompts = [:]
+                }
                 let panelResult = await self.runPanelRound(
                     panel: panel,
-                    prompts: [:],
+                    prompts: structuredPrompts,
                     defaultPrompt: promptSnapshot,
                     systemPrompt: sysSnapshot,
                     roundDate: roundDate,
@@ -340,6 +419,29 @@ extension AppViewModel {
                     }
                     if !s.sources.isEmpty { sourcesByProvider[cfg.id.uuidString] = s.sources }
                 }
+            }
+
+            // 1.5) Tournament(擂台 / 淘汰赛):panel 已各自回答,现在让裁判用单淘汰赛两两对决,
+            //      逐轮裁定胜者晋级,直到决出冠军。逐对裁定(逐 await),用单独的 liveTournamentRounds 直播。
+            var tournamentRounds: [TournamentRound]? = nil
+            if modeAtSend == .tournament {
+                tournamentRounds = await self.runTournamentJudging(
+                    panel: panel,
+                    judge: chair,
+                    promptSnapshot: promptSnapshot,
+                    responses: responses,
+                    errors: errors,
+                    sysSnapshot: sysSnapshot,
+                    contextSummary: contextSummarySnapshot,
+                    priorTurns: priorTurnsSnapshot,
+                    roundDate: roundDate,
+                    roundID: roundID,
+                    convTitle: convTitleSnapshot,
+                    convIDString: convIDString,
+                    reasoningByProvider: &reasoningByProvider,
+                    tokenUsage: &tokenUsage,
+                    snapshot: &snapshot
+                )
             }
 
             // 2) 如果有 Chair,跑综合 / 裁判 / 主持总结
@@ -523,6 +625,7 @@ extension AppViewModel {
                     providerSnapshot: snapshot,
                     panelOrder: panelOrder,
                     debateRounds: debateRounds,
+                    tournamentRounds: tournamentRounds,
                     appliedWrites: appliedWrites,
                     images: turnImages.isEmpty ? nil : turnImages,
                     sources: self.liveSources.isEmpty ? nil : self.liveSources,
@@ -540,6 +643,8 @@ extension AppViewModel {
 
                 // 触发增量摘要(后台跑,不阻塞 UI)
                 self.scheduleSummarization(for: convID)
+                // 触发跨会话长期记忆抽取(仅当开关开;后台跑,不阻塞 UI)
+                self.scheduleMemoryExtraction(for: convID)
                 // 首轮后自动起标题(后台跑,仅当标题还是首问截断)
                 self.scheduleAutoTitle(for: convID)
             }
@@ -562,6 +667,7 @@ extension AppViewModel {
             self.liveChairState = nil
             self.liveSummaryState = nil
             self.liveDebateRounds.removeAll()
+            self.liveTournamentRounds.removeAll()
             self.liveTurnPrompt = nil
             self.liveTurnImages = []
             self.isRunning = false
@@ -683,6 +789,9 @@ extension AppViewModel {
         activeMode = mode
         let contextSummary = ConversationSummarizer.summaryForNextSend(conversations[convIdx])
         let priorTurns = ConversationSummarizer.priorTurnsForReplay(conversations[convIdx])
+        let structuredSchema: String? = (mode == .structured)
+            ? (conversations[convIdx].structuredSchema ?? StructuredOutput.defaultSchema)
+            : nil
 
         runSend(
             convID: convID, panel: panel, chair: original.chairConfig, summary: original.summaryConfig,
@@ -691,7 +800,8 @@ extension AppViewModel {
             contextSummary: contextSummary, priorTurns: priorTurns,
             toolSession: nil, tools: [],
             debateRoundsCount: original.debateRounds?.count ?? debateRoundsForNextSend,
-            workspaceURL: currentWorkspaceURL
+            workspaceURL: currentWorkspaceURL,
+            structuredSchema: structuredSchema
         )
     }
 
@@ -769,6 +879,41 @@ extension AppViewModel {
         summarizingTasks[convID] = task
     }
 
+    /// 跨会话长期记忆抽取调度:仅在 `memoryInjectionEnabled` 开时跑。
+    /// 用小模型从「上次抽取以来的新增轮」里提炼长期有用的事实/偏好,沉淀到 `MemoryStore.shared`。
+    /// 与 `scheduleSummarization` 是两套独立水位(`memoryExtractedThroughTurnCount`),互不干扰。
+    func scheduleMemoryExtraction(for convID: UUID) {
+        guard memoryInjectionEnabled else { return }
+        if let running = memoryExtractionTasks[convID], !running.isCancelled { return }
+        guard let idx = conversations.firstIndex(where: { $0.id == convID }) else { return }
+        let convSnapshot = conversations[idx]
+        // 太短的会话不抽;距上次抽取又攒够增量轮才再抽。
+        guard convSnapshot.turns.count >= MemoryExtractor.triggerTurnCount else { return }
+        let remaining = convSnapshot.turns.count - convSnapshot.memoryExtractedThroughTurnCount
+        guard remaining >= MemoryExtractor.incrementalThreshold
+            || (convSnapshot.memoryExtractedThroughTurnCount == 0 && remaining >= 1) else { return }
+
+        let chair = chairProvider
+        let firstEnabled = providers.first(where: { $0.enabled && !$0.kind.isCLI })
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.memoryExtractionTasks.removeValue(forKey: convID) }
+            guard let result = await MemoryExtractor.extract(
+                for: convSnapshot, chair: chair, firstEnabled: firstEnabled
+            ) else { return }
+            if !result.memories.isEmpty {
+                MemoryStore.shared.addMany(result.memories, sourceConversationID: convID)
+            }
+            // 推进水位(即便没抽到内容也前进,避免重复对同样的轮次调用小模型)。只前进,防竞态回退。
+            guard let liveIdx = self.conversations.firstIndex(where: { $0.id == convID }) else { return }
+            if result.extractedThroughTurnCount > self.conversations[liveIdx].memoryExtractedThroughTurnCount {
+                self.conversations[liveIdx].memoryExtractedThroughTurnCount = result.extractedThroughTurnCount
+                ConversationStore.save(self.conversations[liveIdx])
+            }
+        }
+        memoryExtractionTasks[convID] = task
+    }
+
     func cancel() {
         runningTask?.cancel()
         runningTask = nil
@@ -786,6 +931,7 @@ extension AppViewModel {
             chair.fail("已取消")
         }
         liveDebateRounds.removeAll()
+        liveTournamentRounds.removeAll()
     }
 
     private func isStreaming(_ state: ResponseState) -> Bool {
@@ -831,8 +977,13 @@ extension AppViewModel {
         // 组 prompt
         let prompt: String
         switch mode {
-        case .direct, .council, .compare:
+        case .direct, .council, .compare, .tournament:
+            // Tournament 的 panel 回答就是直接回答原问题(裁判对决另走 retryChair 不在此);重答即重发原问题。
             prompt = turn.prompt
+        case .structured:
+            // 重试也要带上 schema 指令,否则模型可能不再返回严格 JSON。
+            let schema = conversations[convIdx].structuredSchema ?? StructuredOutput.defaultSchema
+            prompt = StructuredOutput.buildStructuredPrompt(userPrompt: turn.prompt, schema: schema)
         case .debate:
             let rounds = turn.debateRounds ?? []
             let targetRound = roundIndex ?? rounds.last?.index ?? 1
@@ -1210,6 +1361,164 @@ extension AppViewModel {
             }
         }
         return (responses, errors)
+    }
+
+    // MARK: - Tournament(擂台 / 淘汰赛)裁定
+
+    /// Tournament 模式:panel 各自回答后,由裁判(judge)用单淘汰赛逐对裁定胜者晋级,逐轮决出冠军。
+    /// - panel 已经各自回答(responses/errors 是它们对原问题的回答)。
+    /// - 每一轮把当前晋级者两两配对;奇数个时最后一个轮空(bye)直接晋级。
+    /// - 每场对决调用 judge 取「胜者 + 理由」(逐场 await,顺序进行)。
+    /// - 裁判失败/解析失败时降级:取 A 胜(若 B 失败/空)或默认 A,保证赛程能走完。
+    /// 逐轮把进度写进 `liveTournamentRounds`(直播展示),最终返回完整的 `[TournamentRound]`。
+    private func runTournamentJudging(
+        panel: [ProviderConfig],
+        judge: ProviderConfig?,
+        promptSnapshot: String,
+        responses: [String: String],
+        errors: [String: String],
+        sysSnapshot: String,
+        contextSummary: String?,
+        priorTurns: [PriorTurn],
+        roundDate: Date,
+        roundID: String,
+        convTitle: String,
+        convIDString: String,
+        reasoningByProvider: inout [String: String],
+        tokenUsage: inout [String: TurnTokenUsage],
+        snapshot: inout [String: ProviderConfig]
+    ) async -> [TournamentRound] {
+        // 裁判:优先 chair,否则第一个 enabled 非 CLI;都没有就用 panel 第一个非 CLI。
+        let judgeCfg = judge
+            ?? self.providers.first(where: { $0.enabled && !$0.kind.isCLI })
+            ?? panel.first(where: { !$0.kind.isCLI })
+        if let judgeCfg { snapshot[judgeCfg.id.uuidString] = judgeCfg }
+
+        func label(_ key: String) -> String {
+            if let cfg = snapshot[key] { return PromptBuilders.providerLabel(cfg) }
+            return "选手"
+        }
+
+        // 晋级者队列:初始为 panel 顺序。两两配对直到只剩 1 人(冠军)。
+        var contenders: [String] = panel.map { $0.id.uuidString }
+        guard contenders.count >= 2 else {
+            // 只有 0/1 个选手,无需对决:直接给一轮空赛程(冠军即唯一选手)。
+            if let only = contenders.first {
+                let round = TournamentRound(index: 1, title: "决赛",
+                    matches: [TournamentRound.Match(aProviderID: only, winnerProviderID: only,
+                                                    rationale: "仅一位选手,直接夺冠")])
+                self.liveTournamentRounds = [round]
+                return [round]
+            }
+            return []
+        }
+
+        var rounds: [TournamentRound] = []
+        var roundIndex = 1
+        while contenders.count >= 2 {
+            if Task.isCancelled { break }
+            let matchCount = contenders.count / 2
+            let isFinalRound = contenders.count == 2
+            let title = PromptBuilders.tournamentRoundTitle(matchCount: matchCount, isFinalRound: isFinalRound)
+            var round = TournamentRound(index: roundIndex, title: title, matches: [])
+            self.liveTournamentRounds = rounds + [round]
+
+            var winners: [String] = []
+            var i = 0
+            while i < contenders.count {
+                if Task.isCancelled { break }
+                let aKey = contenders[i]
+                // 轮空(奇数个):A 直接晋级。
+                if i + 1 >= contenders.count {
+                    let m = TournamentRound.Match(aProviderID: aKey, bProviderID: nil,
+                                                  winnerProviderID: aKey, rationale: "轮空,直接晋级")
+                    round.matches.append(m)
+                    winners.append(aKey)
+                    self.liveTournamentRounds = rounds + [round]
+                    i += 1
+                    continue
+                }
+                let bKey = contenders[i + 1]
+                let aErr = errors[aKey]
+                let bErr = errors[bKey]
+                let aResp = responses[aKey] ?? ""
+                let bResp = responses[bKey] ?? ""
+
+                var winnerKey: String
+                var rationale: String
+                var matchError: String? = nil
+
+                // 一方失败/空 → 对方直接胜(不必调用裁判)。
+                let aDead = (aErr?.isEmpty == false) || aResp.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                let bDead = (bErr?.isEmpty == false) || bResp.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                if aDead && !bDead {
+                    winnerKey = bKey; rationale = "对手失败 / 空响应,直接晋级"
+                } else if bDead && !aDead {
+                    winnerKey = aKey; rationale = "对手失败 / 空响应,直接晋级"
+                } else if aDead && bDead {
+                    winnerKey = aKey; rationale = "双方均失败 / 空响应,按签位晋级"
+                } else if let judgeCfg {
+                    let matchPrompt = PromptBuilders.buildTournamentMatchPrompt(
+                        originalPrompt: promptSnapshot,
+                        aLabel: label(aKey), aResponse: aResp, aError: aErr,
+                        bLabel: label(bKey), bResponse: bResp, bError: bErr
+                    )
+                    var collected = ""
+                    var collectedReasoning = ""
+                    do {
+                        let apiKey = judgeCfg.kind.isCLI ? "" : ((try? KeychainStore.load(id: judgeCfg.id)) ?? "")
+                        let client = ProviderRegistry.client(for: judgeCfg.kind)
+                        var opts = self.optionsFor(config: judgeCfg, systemPromptOverride: sysSnapshot)
+                        opts.contextSummary = contextSummary
+                        opts.priorTurns = priorTurns
+                        opts.temperature = 0.2
+                        for try await chunk in client.stream(prompt: matchPrompt, options: opts, config: judgeCfg, apiKey: apiKey) {
+                            if Task.isCancelled { break }
+                            switch chunk {
+                            case .text(let t): collected += t
+                            case .reasoning(let r): collectedReasoning += r
+                            case .usage(let inp, let out, let cached):
+                                UsageStore.shared.record(providerKind: judgeCfg.kind, model: judgeCfg.model,
+                                                         inputTokens: inp, outputTokens: out, cachedTokens: cached)
+                            default: break
+                            }
+                        }
+                    } catch {
+                        matchError = error.localizedDescription
+                    }
+                    if let verdict = PromptBuilders.parseTournamentVerdict(from: collected) {
+                        winnerKey = verdict.winnerIsA ? aKey : bKey
+                        rationale = verdict.rationale
+                    } else {
+                        // 解析失败 → 降级取 A(并把裁判原文作理由,便于排查)。
+                        winnerKey = aKey
+                        rationale = collected.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            ? "裁判未给出有效判决,按签位晋级"
+                            : PromptBuilders.shorten(collected, max: 120)
+                    }
+                    if !collectedReasoning.isEmpty {
+                        reasoningByProvider[judgeCfg.id.uuidString] = collectedReasoning
+                    }
+                } else {
+                    winnerKey = aKey; rationale = "无可用裁判,按签位晋级"
+                }
+
+                let m = TournamentRound.Match(aProviderID: aKey, bProviderID: bKey,
+                                              winnerProviderID: winnerKey, rationale: rationale, error: matchError)
+                round.matches.append(m)
+                winners.append(winnerKey)
+                self.liveTournamentRounds = rounds + [round]
+                i += 2
+            }
+
+            rounds.append(round)
+            self.liveTournamentRounds = rounds
+            contenders = winners
+            roundIndex += 1
+            if Task.isCancelled { break }
+        }
+
+        return rounds
     }
 
     private enum RunTarget { case panel, chair, summary }

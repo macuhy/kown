@@ -5,8 +5,8 @@ import Foundation
 @MainActor
 enum ConversationStore {
     /// 启动时加载到内存的最大条数 — 防止重度用户累积上千条把内存挤爆。
-    /// 文件全部保留在磁盘,旧的需要时可显式 `loadOne` 拉回。
-    static let maxLoadedOnStartup = 100
+    /// 文件全部保留在磁盘,旧的需要时可显式 `loadOne` 拉回。nonisolated:供后台 loadAll 读取。
+    nonisolated static let maxLoadedOnStartup = 100
 
     private static var dir: URL {
         let url = Platform.syncedDataDir.appendingPathComponent("conversations", isDirectory: true)
@@ -30,9 +30,23 @@ enum ConversationStore {
         return d
     }()
 
+    /// loadAll 的后台版:主线程先解析 dir(Platform.syncedDataDir 是 @MainActor),再把扫描+解码挪后台。
+    /// 冷启动时 init 用它,避免一启动就在主线程 O(N) 解码上百个 JSON(撑出 0.5–1.5s 白屏)。
+    static func loadAllAsync() async -> [Conversation] {
+        let dirURL = dir
+        return await Task.detached(priority: .userInitiated) { loadAll(from: dirURL) }.value
+    }
+
     /// 启动时只加载最近 `maxLoadedOnStartup` 条(按文件 mtime 倒序),其他留在磁盘。
     /// 避免一启动就 O(N) 解码所有 JSON、内存膨胀。
     static func loadAll() -> [Conversation] {
+        loadAll(from: dir)
+    }
+
+    /// 纯函数实现:给定 conversations 目录,扫描 + 解码 + 去重。
+    /// nonisolated:无主线程状态依赖,可在后台线程跑(用局部 decoder,因为共享的 static decoder
+    /// 是 @MainActor 隔离的、非 Sendable)。dir 由调用方在主线程解析后传入。
+    nonisolated static func loadAll(from dir: URL) -> [Conversation] {
         let fm = FileManager.default
         guard let urls = try? fm.contentsOfDirectory(
             at: dir, includingPropertiesForKeys: [.contentModificationDateKey]
@@ -51,6 +65,8 @@ enum ConversationStore {
             .prefix(maxLoadedOnStartup)
             .map { $0.0 }
 
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
         var convs: [Conversation] = []
         for url in recentURLs {
             guard let data = try? Data(contentsOf: url),

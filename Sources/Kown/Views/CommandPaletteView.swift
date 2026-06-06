@@ -30,7 +30,8 @@ struct CommandPaletteView: View {
         }
         .frame(minWidth: 460, minHeight: 360)
         .onAppear {
-            searchIndex.rebuild(viewModel.conversations)
+            // 索引重建挪到后台(见 ConversationSearchIndex.rebuild),不卡命令面板的弹出动画。
+            Task { await searchIndex.rebuild(viewModel.conversations) }
             fieldFocused = true
         }
         .onChange(of: query) { _, _ in selectedIndex = 0 }
@@ -166,9 +167,12 @@ struct CommandPaletteView: View {
             convs = Array(active.prefix(8))
         } else {
             // 全文命中(标题 + 正文)优先;再并上标题直接命中,去重保持顺序。
-            let hitIDs = searchIndex.search(q).map(\.id)
-            var ordered: [UUID] = hitIDs
-            for c in active where c.title.localizedCaseInsensitiveContains(q) && !ordered.contains(c.id) {
+            // 封顶 8 条:下面对每条 conv 都要 matchingTurn 扫全部轮(无索引子串搜索),
+            // 不封顶时大量会话 × 每条全文扫 → 按键卡顿。8 与空 query 的 prefix(8) 对齐。
+            let hitIDs = searchIndex.search(q).prefix(8).map(\.id)
+            var ordered: [UUID] = Array(hitIDs)
+            for c in active where ordered.count < 8
+                && c.title.localizedCaseInsensitiveContains(q) && !ordered.contains(c.id) {
                 ordered.append(c.id)
             }
             let byID = Dictionary(uniqueKeysWithValues: active.map { ($0.id, $0) })
@@ -225,6 +229,8 @@ struct CommandPaletteView: View {
         case .compare: return "模型对比"
         case .council: return "模型议会"
         case .debate:  return "模型辩论"
+        case .structured: return "结构化输出"
+        case .tournament: return "模型擂台"
         }
     }
 

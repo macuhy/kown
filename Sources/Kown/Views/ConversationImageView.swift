@@ -125,3 +125,74 @@ struct ConversationImagesRow: View {
         }
     }
 }
+
+/// 图像生成对比:多个模型用同一 prompt 各自出图,按模型分组并排展示。
+/// 每个模型一张卡片:头部是模型名 + model,下面是它出的图(横向缩略图)或失败原因。
+struct GeneratedImageComparison: View {
+    /// 渲染顺序的 providerID(uuidString);来自 `Turn.panelOrder`。
+    let order: [String]
+    /// providerID → provider 快照(取名字 / model 展示)。来自 `Turn.providerSnapshot`。
+    let snapshot: [String: ProviderConfig]
+    /// providerID → 该模型出的图。
+    let imagesByProvider: [String: [TurnImage]]
+    /// providerID → 该模型失败原因。
+    let errors: [String: String]
+
+    private var columns: [GridItem] {
+        [GridItem(.adaptive(minimum: 200, maximum: 320), spacing: 12, alignment: .top)]
+    }
+
+    var body: some View {
+        LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
+            ForEach(order, id: \.self) { pid in
+                card(pid: pid)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func card(pid: String) -> some View {
+        let cfg = snapshot[pid]
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "photo.artframe")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+                Text(cfg?.displayName ?? "模型")
+                    .font(.caption.weight(.bold))
+                    .lineLimit(1)
+                if let model = cfg?.model, !model.isEmpty {
+                    Text(model)
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 4)
+            }
+            if let imgs = imagesByProvider[pid], !imgs.isEmpty {
+                ConversationImagesRow(images: imgs)
+            } else if let err = errors[pid] {
+                Label(err, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+                    .background(Color.red.opacity(0.07),
+                                in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            } else {
+                Text("(无图片)")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.platformControlBackground.opacity(0.45),
+                    in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.10), lineWidth: 1)
+        }
+    }
+}

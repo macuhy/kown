@@ -127,6 +127,13 @@ struct CouncilTurnsView: View {
             if let votes = turn.councilVotes, !votes.scores.isEmpty {
                 VoteResultsCard(vote: votes, names: voteNames(turn))
             }
+            // 答案差异分析(共識/分歧)—— opt-in「分析分歧」按钮 + 结果面板。
+            ConsensusSection(
+                analysis: turn.consensusAnalysis,
+                isAnalyzing: viewModel.isAnalyzingConsensus(turnID: turn.id),
+                error: viewModel.consensusErrors[turn.id],
+                onAnalyze: { viewModel.analyzeConsensus(turnID: turn.id) }
+            )
             if let writes = turn.appliedWrites, !writes.isEmpty {
                 AppliedWritesStrip(writes: writes, onUndo: { viewModel.undoWrite(turnID: turn.id, write: $0) })
             }

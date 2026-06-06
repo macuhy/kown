@@ -28,13 +28,32 @@ final class ConversationSearchIndex {
 
     // MARK: - 构建 / 增量更新
 
-    /// 全量重建索引
-    func rebuild(_ conversations: [Conversation]) {
-        inverted.removeAll(keepingCapacity: true)
-        documents.removeAll(keepingCapacity: true)
+    /// 全量重建索引。**后台线程算,主线程一次性替换**:拼全文(searchableText)+ 整段分词(tokenize)
+    /// 在大语料上是 O(总字节数),原来同步跑在主线程 → 首次搜索/打开命令面板卡顿。现在挪到后台。
+    func rebuild(_ conversations: [Conversation]) async {
+        let snapshot = conversations
+        let built = await Task.detached(priority: .userInitiated) { [self] in
+            self.buildIndex(snapshot)
+        }.value
+        inverted = built.inverted
+        documents = built.documents
+    }
+
+    /// 纯函数版全量构建(可在后台线程跑):只用局部字典 + nonisolated 的 searchableText/tokenize,
+    /// 不碰 self 的 @MainActor 倒排表。
+    nonisolated private func buildIndex(
+        _ conversations: [Conversation]
+    ) -> (inverted: [String: Set<UUID>], documents: [UUID: String]) {
+        var inverted: [String: Set<UUID>] = [:]
+        var documents: [UUID: String] = [:]
         for conv in conversations where conv.deletedAt == nil {
-            index(conv)
+            let doc = searchableText(conv)
+            documents[conv.id] = doc
+            for token in tokenize(doc) {
+                inverted[token, default: []].insert(conv.id)
+            }
         }
+        return (inverted, documents)
     }
 
     /// 增量更新单个会话(新增或覆盖)
@@ -97,7 +116,7 @@ final class ConversationSearchIndex {
 
     /// 取会话的可搜索全文:标题 + 每个 Turn 的 prompt / 各 response / chair 综合 / summary 汇总
     /// + 辩论各轮发言 + 各家思考过程,确保全局搜索能覆盖所有模式的内容。
-    private func searchableText(_ conv: Conversation) -> String {
+    nonisolated private func searchableText(_ conv: Conversation) -> String {
         var parts: [String] = [conv.title]
         for turn in conv.turns {
             parts.append(turn.prompt)
@@ -123,7 +142,7 @@ final class ConversationSearchIndex {
     // MARK: - 内部:分词
 
     /// 把文本切成索引词条:连续 CJK 字符取 bigram(单字也保留),英文/数字按词。
-    private func tokenize(_ text: String) -> Set<String> {
+    nonisolated private func tokenize(_ text: String) -> Set<String> {
         var tokens: Set<String> = []
         var asciiBuffer = ""
         var cjkBuffer: [Character] = []

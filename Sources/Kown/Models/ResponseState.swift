@@ -13,8 +13,16 @@ enum ResponsePhase: Sendable {
 final class ResponseState: Identifiable {
     let id: UUID
     var text: String = ""
+    /// `text.count` 的缓存。`String.count` 是 O(N);回答卡 body 每次求值要读 3 次(折叠阈值 / 展开角标 / footer 字数),
+    /// 超长回答 + Council 多卡重渲染下累积成可观开销。只在 flush/finish/reset 时更新一次,view 直接读这个。
+    var charCount: Int = 0
     /// 模型「思考过程」累计文本(reasoning / thinking / thought)。与 `text` 同样走节流 flush。
+    /// 上限 `maxReasoningChars`:扩展思考模型(o1 / DeepSeek thinking / Claude thinking)能流出 50–200KB,
+    /// 而 reasoning 走单个 `Text(reasoning)` 渲染(无 markdown 路径的 maxFinishedChars 截断),
+    /// 每 50ms flush 都整段重新测量 → 烧 CPU。到顶后停止追加(同 markdown 的封顶哲学)。
     var reasoning: String = ""
+    /// 思考文本上限,与 MarkdownText.MD.maxFinishedChars 对齐。
+    static let maxReasoningChars = 40_000
     var phase: ResponsePhase = .idle
     var startedAt: Date?
     var finishedAt: Date?
@@ -60,6 +68,7 @@ final class ResponseState: Identifiable {
         pendingChunks = ""
         pendingReasoning = ""
         text = ""
+        charCount = 0
         reasoning = ""
         events = []
         inputTokens = 0
@@ -98,12 +107,19 @@ final class ResponseState: Identifiable {
     /// 把 buffer 里所有 chunk 合并提交到 `text` / `reasoning`。`finish() / fail()` 前手动 flush 一次保证最后几个字节不丢。
     private func flushPending() {
         if !pendingReasoning.isEmpty {
-            reasoning += pendingReasoning
+            // 到顶后只清空缓冲、不再追加,避免 reasoning 无限增长 + 每次 flush 重测整段。
+            if reasoning.count < Self.maxReasoningChars {
+                reasoning += pendingReasoning
+                if reasoning.count > Self.maxReasoningChars {
+                    reasoning = String(reasoning.prefix(Self.maxReasoningChars)) + "\n\n[思考内容过长,已截断]"
+                }
+            }
             pendingReasoning = ""
         }
         guard !pendingChunks.isEmpty else { return }
         text += pendingChunks
         pendingChunks = ""
+        charCount = text.count
     }
 
     func logEvent(_ message: String) {
@@ -138,6 +154,7 @@ final class ResponseState: Identifiable {
     static func historical(id: UUID, text: String, error: String?, reasoning: String = "") -> ResponseState {
         let s = ResponseState(id: id)
         s.text = text
+        s.charCount = text.count
         s.reasoning = reasoning
         if let error, !error.isEmpty {
             s.phase = .failed(error)
