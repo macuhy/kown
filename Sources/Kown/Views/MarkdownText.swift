@@ -26,14 +26,13 @@ func citationLinkified(_ text: String, sources: [SourceRef], knowledgeSources: [
 
 /// 模型输出渲染:
 /// - **streaming=true**: 渲染**节流快照**的 markdown(每 ~150ms 取一次 text),把"每 chunk 重 parse
-///   整段"(O(N²))降为按时间节流;未闭合代码围栏临时补全;不开 textSelection 更轻;超长(>6000 字)退回 raw。
+///   整段"(O(N²))降为按时间节流;未闭合代码围栏临时补全;流式期间不开 textSelection 更轻;超长(>6000 字)退回 raw。
 /// - **finished**: 双路径:
 ///   - 默认走 `Text(AttributedString(markdown:))` — **整个回答作为单个 Text view**,
 ///     支持跨段/跨标题/跨列表的全文拖选。内联格式(粗体/斜体/inline code/链接)保留。
 ///     代价:H1/H2 标题不放大、列表无缩进 — 对 LLM chat 内容是可接受的取舍。
 ///   - 含代码块(```或 ~~~)/ 表格 / 任务列表(`- [ ]`)的回答 fallback 到 swift-markdown-ui,
-///     保留代码块、表格、checkbox 视觉(`AttributedString` 的 inlineOnly 会把这些渲染成字面字符)。
-///     这种回答跨块选择本来就少需求(代码块要复制有右上角按钮)。
+///     保留代码块、表格、checkbox 视觉;完成态同样开启系统文本选择,可像备忘录一样选中拷贝片段。
 struct MarkdownText: View {
     let text: String
     var streaming: Bool = false
@@ -43,12 +42,10 @@ struct MarkdownText: View {
             // 只有正在生成的卡片才进流式分支(它独占一个节流定时器)。
             StreamingMarkdownText(text: text)
         } else if text.count > MD.maxFinishedChars {
-            MD.rawText(text)  // 防失控:超长走 raw,避开 anchor/布局重路径
+            MD.rawText(text, selectable: true)  // 防失控:超长走 raw,避开 anchor/布局重路径
         } else {
-            // selectable:true —— 仅作用于「单个 Text」纯文本路径(整段答案=一个 Text=一个
-            // SelectionOverlay,可拖选复制任意片段,开销恒定)。块级 Markdown 路径(代码/表格)
-            // 仍强制关闭:那条路每段套一个 overlay,滚动时 setFont→失效 intrinsic→重布局自我重入,
-            // 答卡一多就烧满一个核(卡死)。代码块有各自的「复制」按钮,整段有底部「复制」兜底。
+            // 完成态允许系统文本选择:纯文本路径可跨段拖选,块级 Markdown 路径也能选中
+            // 代码/表格/标题里的片段;流式分支仍关闭,避免每个 chunk 触发选择层重布局。
             MD.rendered(for: MD.stylizeMath(text), selectable: true)
         }
     }
@@ -72,7 +69,7 @@ private struct StreamingMarkdownText: View {
         let src = snapshot.isEmpty ? text : snapshot
         return Group {
             if src.count > MD.maxLiveChars {
-                MD.rawText(src)
+                MD.rawText(src, selectable: false)
             } else {
                 // 节流快照 + 数学样式 + 补全未闭合代码围栏;不开 textSelection 更轻。
                 // styledSnapshot 为空仅出现在 onAppear 之前的首帧,退化为即时计算一次。
@@ -102,21 +99,21 @@ enum MD {
     static let maxFinishedChars = 40000
 
     @ViewBuilder
-    static func rawText(_ s: String) -> some View {
+    static func rawText(_ s: String, selectable: Bool) -> some View {
         Text(s)
+            .textSelectable(selectable)
             .font(.body)
             .lineSpacing(5)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// `selectable` 只对「单个 Text」纯文本路径生效(开销恒定,安全)。块级 Markdown 路径
-    /// 永远不开选中:每段套一个 SelectionOverlay,滚动重布局自我重入会卡死(见 MarkdownText 注释)。
+    /// `selectable` 只在完成态开启;流式期间关闭,避免高频刷新时选择层反复重布局。
     @ViewBuilder
     static func rendered(for src: String, selectable: Bool) -> some View {
         if hasBlockLevelExtras(src) {
             Markdown(src)
-                .textSelectable(false)
+                .textSelectable(selectable)
                 .markdownTheme(kownTheme)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -133,7 +130,7 @@ enum MD {
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             Markdown(src)
-                .textSelectable(false)
+                .textSelectable(selectable)
                 .markdownTheme(kownTheme)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
