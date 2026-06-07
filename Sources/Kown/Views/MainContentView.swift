@@ -135,6 +135,7 @@ struct MainContentView: View {
                 desktopHeaderButton("command", tint: tint, help: "命令面板") {
                     viewModel.showCommandPalette = true
                 }
+                desktopExportMenu(tint: tint)
                 desktopHeaderButton("square.and.pencil", tint: tint, filled: true, help: "新建会话") {
                     viewModel.newConversation(mode: viewModel.currentMode)
                 }
@@ -199,6 +200,29 @@ struct MainContentView: View {
         }
         .buttonStyle(.plain)
         .help(help)
+    }
+
+    private func desktopExportMenu(tint: Color) -> some View {
+        Menu {
+            exportMenuItems(conversation: viewModel.selectedConversation)
+        } label: {
+            Image(systemName: "square.and.arrow.up")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(tint)
+                .frame(width: 32, height: 32)
+                .background {
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .fill(Color.platformControlBackground.opacity(0.58))
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .strokeBorder(tint.opacity(0.16), lineWidth: 1)
+                }
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("导出会话")
     }
     #endif
 
