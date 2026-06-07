@@ -17,12 +17,14 @@ enum ConversationExporter {
 
     enum Format: String, CaseIterable, Sendable {
         case markdown
+        case html
         case json
 
         /// 文件扩展名(不含点)
         var fileExtension: String {
             switch self {
             case .markdown: return "md"
+            case .html:     return "html"
             case .json:     return "json"
             }
         }
@@ -31,6 +33,7 @@ enum ConversationExporter {
         var menuTitle: String {
             switch self {
             case .markdown: return "导出为 Markdown"
+            case .html:     return "导出为网页(HTML)"
             case .json:     return "导出为 JSON"
             }
         }
@@ -38,6 +41,7 @@ enum ConversationExporter {
         var symbol: String {
             switch self {
             case .markdown: return "doc.richtext"
+            case .html:     return "safari"
             case .json:     return "curlybraces"
             }
         }
@@ -49,6 +53,7 @@ enum ConversationExporter {
     static func text(for conversation: Conversation, format: Format) -> String {
         switch format {
         case .markdown: return markdown(for: conversation)
+        case .html:     return HTMLExporter.html(for: conversation)
         case .json:     return jsonString(for: conversation)
         }
     }
