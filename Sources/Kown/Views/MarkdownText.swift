@@ -34,10 +34,11 @@ struct MarkdownText: View {
         } else if text.count > MD.maxFinishedChars {
             MD.rawText(text)  // 防失控:超长走 raw,避开 anchor/布局重路径
         } else {
-            // selectable:false —— macOS 上每段可选中文本会套一个 SelectionOverlay,
-            // 滚动时这些浮层 setFont→失效 intrinsic size→再布局 自我重入,答卡一多滑动就烧满
-            // 一个核(卡死)。整段复制有底部「复制」按钮,这里关掉常开选中根治。
-            MD.rendered(for: MD.stylizeMath(text), selectable: false)
+            // selectable:true —— 仅作用于「单个 Text」纯文本路径(整段答案=一个 Text=一个
+            // SelectionOverlay,可拖选复制任意片段,开销恒定)。块级 Markdown 路径(代码/表格)
+            // 仍强制关闭:那条路每段套一个 overlay,滚动时 setFont→失效 intrinsic→重布局自我重入,
+            // 答卡一多就烧满一个核(卡死)。代码块有各自的「复制」按钮,整段有底部「复制」兜底。
+            MD.rendered(for: MD.stylizeMath(text), selectable: true)
         }
     }
 }
@@ -98,11 +99,13 @@ enum MD {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    /// `selectable` 只对「单个 Text」纯文本路径生效(开销恒定,安全)。块级 Markdown 路径
+    /// 永远不开选中:每段套一个 SelectionOverlay,滚动重布局自我重入会卡死(见 MarkdownText 注释)。
     @ViewBuilder
     static func rendered(for src: String, selectable: Bool) -> some View {
         if hasBlockLevelExtras(src) {
             Markdown(src)
-                .textSelectable(selectable)
+                .textSelectable(false)
                 .markdownTheme(kownTheme)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -119,7 +122,7 @@ enum MD {
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             Markdown(src)
-                .textSelectable(selectable)
+                .textSelectable(false)
                 .markdownTheme(kownTheme)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
