@@ -488,51 +488,112 @@ struct MainContentView: View {
         #endif
     }
 
-    /// 「继续生成」按钮 — 让模型接着上一轮回答继续(回答被截断时尤其有用)。
-    private var continueButton: some View {
-        HStack {
-            Spacer()
-            Button { viewModel.continueGenerating() } label: {
-                Label("继续生成", systemImage: "arrow.down.circle")
-                    .font(.callout.weight(.semibold))
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
+    /// 回答后的快捷操作:把继续生成 / 质量增强 / 追问建议收拢到同一行,避免宽屏下散落在大空白里。
+    @ViewBuilder
+    private var postAnswerTools: some View {
+        if let turn = viewModel.selectedConversation?.turns.last {
+            let revising = viewModel.isRevising(turnID: turn.id)
+            let checking = viewModel.isFactChecking(turnID: turn.id)
+            VStack(alignment: .leading, spacing: 10) {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 10) {
+                        postAnswerActionButtons(for: turn, revising: revising, checking: checking)
+                        Spacer(minLength: 0)
+                    }
+                    WrappingHStack(horizontalSpacing: 8, verticalSpacing: 7) {
+                        postAnswerActionButtons(for: turn, revising: revising, checking: checking)
+                    }
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .strokeBorder(modeTint.opacity(0.12), lineWidth: 1)
+                }
+
+                postAnswerStatusAndResults(for: turn)
             }
-            .buttonStyle(.bordered)
-            .clipShape(Capsule())
-            Spacer()
+            .padding(.horizontal, 18)
+            .padding(.vertical, 8)
         }
-        .padding(.vertical, 6)
     }
 
-    /// 追问建议:无建议时显示「追问建议」按钮(按需生成);有建议时列出可点的追问 chips。
     @ViewBuilder
-    private var followUpBar: some View {
-        if viewModel.followUpSuggestions.isEmpty {
-            VStack(spacing: 6) {
-                HStack {
-                    Spacer()
-                    Button { viewModel.suggestFollowUps() } label: {
-                        Label(viewModel.suggestingFollowUps ? "生成中…" : "追问建议", systemImage: "sparkles")
-                            .font(.callout.weight(.semibold))
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                    }
-                    .buttonStyle(.bordered)
-                    .clipShape(Capsule())
-                    .disabled(viewModel.suggestingFollowUps)
-                    Spacer()
-                }
-                if let err = viewModel.followUpError {
-                    Text(err)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 18)
-                }
+    private func postAnswerActionButtons(for turn: Turn, revising: Bool, checking: Bool) -> some View {
+        postActionChip("继续生成", systemImage: "arrow.down.circle") {
+            viewModel.continueGenerating()
+        }
+        if turn.selfRevision == nil {
+            postActionChip(revising ? "反思中…" : "自我反思",
+                           systemImage: "arrow.triangle.2.circlepath",
+                           disabled: revising) {
+                viewModel.reviseTurn(turnID: turn.id)
             }
-            .padding(.bottom, 6)
-        } else {
+        }
+        if turn.factCheck == nil {
+            postActionChip(checking ? "核查中…" : "事实核查",
+                           systemImage: "checkmark.shield",
+                           disabled: checking) {
+                viewModel.factCheckTurn(turnID: turn.id)
+            }
+        }
+        if viewModel.followUpSuggestions.isEmpty {
+            postActionChip(viewModel.suggestingFollowUps ? "生成中…" : "追问建议",
+                           systemImage: "sparkles",
+                           disabled: viewModel.suggestingFollowUps) {
+                viewModel.suggestFollowUps()
+            }
+        }
+    }
+
+    private func postActionChip(
+        _ title: String,
+        systemImage: String,
+        disabled: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+                .foregroundStyle(disabled ? Color.secondary : Color.primary.opacity(0.84))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background((disabled ? Color.secondary : modeTint).opacity(0.10), in: Capsule())
+                .overlay {
+                    Capsule().strokeBorder((disabled ? Color.secondary : modeTint).opacity(0.18), lineWidth: 1)
+                }
+                .fixedSize()
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+    }
+
+    /// 追问建议和质量增强结果显示在操作条下方,不再把触发按钮拆成多行。
+    @ViewBuilder
+    private func postAnswerStatusAndResults(for turn: Turn) -> some View {
+        if let err = viewModel.revisionErrors[turn.id] {
+            Text(err).font(.caption2).foregroundStyle(.red)
+        }
+        if let err = viewModel.factCheckErrors[turn.id] {
+            Text(err).font(.caption2).foregroundStyle(.red)
+        }
+        if let err = viewModel.followUpError {
+            Text(err)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        if let revision = turn.selfRevision {
+            SelfRevisionCard(revision: revision,
+                             providerName: turn.providerSnapshot[revision.providerID]?.displayName)
+        }
+        if let factCheck = turn.factCheck {
+            FactCheckCard(result: factCheck,
+                          providerName: turn.providerSnapshot[factCheck.providerID]?.displayName)
+        }
+        if !viewModel.followUpSuggestions.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(viewModel.followUpSuggestions, id: \.self) { q in
                     Button { viewModel.askFollowUp(q) } label: {
@@ -561,60 +622,6 @@ struct MainContentView: View {
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 18)
-            .padding(.bottom, 8)
-        }
-    }
-
-    /// 答案质量增强:自我反思修订 + 事实核查。作用于当前会话最后一轮。
-    /// 没结果时显示按钮(按需触发);有结果时展示对应卡片。
-    @ViewBuilder
-    private var qualityBar: some View {
-        if let turn = viewModel.selectedConversation?.turns.last {
-            VStack(alignment: .leading, spacing: 10) {
-                let revising = viewModel.isRevising(turnID: turn.id)
-                let checking = viewModel.isFactChecking(turnID: turn.id)
-
-                if turn.selfRevision == nil || turn.factCheck == nil {
-                    HStack(spacing: 10) {
-                        if turn.selfRevision == nil {
-                            Button { viewModel.reviseTurn(turnID: turn.id) } label: {
-                                Label(revising ? "反思中…" : "自我反思", systemImage: "arrow.triangle.2.circlepath")
-                                    .font(.caption.weight(.semibold))
-                                    .padding(.horizontal, 12).padding(.vertical, 7)
-                            }
-                            .buttonStyle(.bordered).clipShape(Capsule())
-                            .disabled(revising)
-                        }
-                        if turn.factCheck == nil {
-                            Button { viewModel.factCheckTurn(turnID: turn.id) } label: {
-                                Label(checking ? "核查中…" : "事实核查", systemImage: "checkmark.shield")
-                                    .font(.caption.weight(.semibold))
-                                    .padding(.horizontal, 12).padding(.vertical, 7)
-                            }
-                            .buttonStyle(.bordered).clipShape(Capsule())
-                            .disabled(checking)
-                        }
-                        Spacer(minLength: 0)
-                    }
-                }
-                if let err = viewModel.revisionErrors[turn.id] {
-                    Text(err).font(.caption2).foregroundStyle(.red)
-                }
-                if let err = viewModel.factCheckErrors[turn.id] {
-                    Text(err).font(.caption2).foregroundStyle(.red)
-                }
-                if let revision = turn.selfRevision {
-                    SelfRevisionCard(revision: revision,
-                                     providerName: turn.providerSnapshot[revision.providerID]?.displayName)
-                }
-                if let factCheck = turn.factCheck {
-                    FactCheckCard(result: factCheck,
-                                  providerName: turn.providerSnapshot[factCheck.providerID]?.displayName)
-                }
-            }
-            .padding(.horizontal, 18)
-            .padding(.bottom, 6)
         }
     }
 
@@ -772,9 +779,7 @@ struct MainContentView: View {
                             )
                         }
                         if hasTurns, !(viewModel.runningConvID == conv?.id && viewModel.isRunning) {
-                            continueButton
-                            qualityBar
-                            followUpBar
+                            postAnswerTools
                         }
                     }
                     Color.clear.frame(height: 4).id("bottom")
