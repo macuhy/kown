@@ -563,6 +563,58 @@ struct MainContentView: View {
         }
     }
 
+    /// 答案质量增强:自我反思修订 + 事实核查。作用于当前会话最后一轮。
+    /// 没结果时显示按钮(按需触发);有结果时展示对应卡片。
+    @ViewBuilder
+    private var qualityBar: some View {
+        if let turn = viewModel.selectedConversation?.turns.last {
+            VStack(alignment: .leading, spacing: 10) {
+                let revising = viewModel.isRevising(turnID: turn.id)
+                let checking = viewModel.isFactChecking(turnID: turn.id)
+
+                if turn.selfRevision == nil || turn.factCheck == nil {
+                    HStack(spacing: 10) {
+                        if turn.selfRevision == nil {
+                            Button { viewModel.reviseTurn(turnID: turn.id) } label: {
+                                Label(revising ? "反思中…" : "自我反思", systemImage: "arrow.triangle.2.circlepath")
+                                    .font(.caption.weight(.semibold))
+                                    .padding(.horizontal, 12).padding(.vertical, 7)
+                            }
+                            .buttonStyle(.bordered).clipShape(Capsule())
+                            .disabled(revising)
+                        }
+                        if turn.factCheck == nil {
+                            Button { viewModel.factCheckTurn(turnID: turn.id) } label: {
+                                Label(checking ? "核查中…" : "事实核查", systemImage: "checkmark.shield")
+                                    .font(.caption.weight(.semibold))
+                                    .padding(.horizontal, 12).padding(.vertical, 7)
+                            }
+                            .buttonStyle(.bordered).clipShape(Capsule())
+                            .disabled(checking)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                }
+                if let err = viewModel.revisionErrors[turn.id] {
+                    Text(err).font(.caption2).foregroundStyle(.red)
+                }
+                if let err = viewModel.factCheckErrors[turn.id] {
+                    Text(err).font(.caption2).foregroundStyle(.red)
+                }
+                if let revision = turn.selfRevision {
+                    SelfRevisionCard(revision: revision,
+                                     providerName: turn.providerSnapshot[revision.providerID]?.displayName)
+                }
+                if let factCheck = turn.factCheck {
+                    FactCheckCard(result: factCheck,
+                                  providerName: turn.providerSnapshot[factCheck.providerID]?.displayName)
+                }
+            }
+            .padding(.horizontal, 18)
+            .padding(.bottom, 6)
+        }
+    }
+
     @ViewBuilder
     private var content: some View {
         let conv = viewModel.selectedConversation
@@ -716,6 +768,7 @@ struct MainContentView: View {
                         }
                         if hasTurns, !(viewModel.runningConvID == conv?.id && viewModel.isRunning) {
                             continueButton
+                            qualityBar
                             followUpBar
                         }
                     }

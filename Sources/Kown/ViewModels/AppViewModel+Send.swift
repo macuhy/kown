@@ -718,6 +718,8 @@ extension AppViewModel {
                 self.scheduleMemoryExtraction(for: convID)
                 // 首轮后自动起标题(后台跑,仅当标题还是首问截断)
                 self.scheduleAutoTitle(for: convID)
+                // 首轮后自动打标签(后台跑,仅当开关开且本会话还没有标签)
+                self.scheduleAutoTag(for: convID)
             }
 
             // 完成 — 停无声音频 + 释放后台 token + 后台时通知用户
@@ -919,6 +921,52 @@ extension AppViewModel {
                   let liveIdx = self.conversations.firstIndex(where: { $0.id == convID }),
                   self.conversations[liveIdx].title == autoTitle else { return }
             self.conversations[liveIdx].title = title
+            ConversationStore.save(self.conversations[liveIdx])
+        }
+    }
+
+    /// 首轮回答后用小模型给会话推荐 1-3 个标签(仅当开关开 + 本会话还没标签)。后台异步,失败不动。
+    /// 与自动起标题独立:标签便于侧栏按主题过滤检索。用户手动设过标签则不覆盖。
+    private func scheduleAutoTag(for convID: UUID) {
+        guard autoTagEnabled,
+              !autoTagTasks.contains(convID),
+              let idx = conversations.firstIndex(where: { $0.id == convID }),
+              conversations[idx].turns.count == 1,
+              conversations[idx].tags.isEmpty else { return }
+        let turn = conversations[idx].turns[0]
+        guard let cfg = chairProvider ?? providers.first(where: { $0.enabled && !$0.kind.isCLI }),
+              !cfg.kind.isCLI else { return }
+        let answer = turn.chairSummary ?? turn.summaryText
+            ?? turn.responses.values.first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) ?? ""
+        let q = String(turn.prompt.prefix(500))
+        let a = String(answer.prefix(400))
+        autoTagTasks.insert(convID)
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.autoTagTasks.remove(convID) }
+            let apiKey = (try? KeychainStore.load(id: cfg.id)) ?? ""
+            let prompt = "根据下面的对话,给它打 1-3 个简短主题标签(每个 2-6 字,如「编程」「健康」「旅行」)。只输出标签,用英文逗号分隔,不要解释、不要序号、不要标点。\n\n问:\(q)\n答:\(a)"
+            let options = ChatOptions(systemPrompt: nil, temperature: 0.3, maxTokens: 32)
+            var collected = ""
+            do {
+                let client = ProviderRegistry.client(for: cfg.kind)
+                for try await chunk in client.stream(prompt: prompt, options: options, config: cfg, apiKey: apiKey) {
+                    if case .text(let t) = chunk { collected += t }
+                }
+            } catch { return }
+            // 解析:按逗号/顿号/换行切,清洗,去重,最多 3 个,每个 ≤8 字。
+            let separators = CharacterSet(charactersIn: ",，、\n;；")
+            let tags = collected
+                .components(separatedBy: separators)
+                .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: " #「」『』\"'.。-*")) }
+                .filter { !$0.isEmpty && $0.count <= 8 }
+                .reduce(into: [String]()) { acc, t in if !acc.contains(t) { acc.append(t) } }
+                .prefix(3)
+            guard !tags.isEmpty,
+                  let liveIdx = self.conversations.firstIndex(where: { $0.id == convID }),
+                  self.conversations[liveIdx].tags.isEmpty else { return }
+            self.conversations[liveIdx].tags = Array(tags)
+            self.conversations[liveIdx].updatedAt = Date()
             ConversationStore.save(self.conversations[liveIdx])
         }
     }

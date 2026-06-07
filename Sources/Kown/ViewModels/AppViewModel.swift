@@ -37,6 +37,14 @@ final class AppViewModel {
     var analyzingConsensusTurns: Set<UUID> = []
     /// 差异分析失败时的原因,key = turnID(给用户看;成功或重试时清空)。
     var consensusErrors: [UUID: String] = [:]
+    /// 正在做自我反思修订的 turn 集合。
+    var revisingTurns: Set<UUID> = []
+    /// 自我反思失败原因,key = turnID。
+    var revisionErrors: [UUID: String] = [:]
+    /// 正在做事实核查的 turn 集合。
+    var factCheckingTurns: Set<UUID> = []
+    /// 事实核查失败原因,key = turnID。
+    var factCheckErrors: [UUID: String] = [:]
     /// GitHub 集成:是否已连接(token 存在)。连接 / 断开后刷新,驱动 UI 显示。
     var gitHubConnected: Bool = GitHubAuth.isConnected()
     /// 当前用户的 GitHub 仓库列表(选仓库菜单用,首次打开时按需拉取后缓存)。
@@ -103,6 +111,10 @@ final class AppViewModel {
     var skillAutoTriggerEnabled: Bool {
         didSet { UserDefaults.standard.set(skillAutoTriggerEnabled, forKey: Self.skillAutoTriggerKey) }
     }
+    /// 首轮回答后自动给会话推荐标签(一次小模型调用)。默认开;关掉则只能手动打标签。
+    var autoTagEnabled: Bool {
+        didSet { UserDefaults.standard.set(autoTagEnabled, forKey: Self.autoTagKey) }
+    }
     /// 技能库(命名的「系统提示 + 工具白名单」能力包)。
     let skillsStore = SkillsStore()
     /// 最近一次发送被自动触发命中的技能 id(手动绑定时为 nil)。供 UI 显示「本次生效技能」徽标,非持久化。
@@ -167,6 +179,7 @@ final class AppViewModel {
     private static let memoryInjectionKey = "kown.memory.injection.v1"
     private static let deviceToolsToggleKey = "kown.deviceTools.toggle.v1"
     private static let skillAutoTriggerKey = "kown.skill.autoTrigger.v1"
+    private static let autoTagKey = "kown.autoTag.v1"
     // 发送编排已移到 AppViewModel+Send.swift,以下原 private 状态降为 internal 供其访问。
     var runningTask: Task<Void, Never>?
     var summarizingTasks: [UUID: Task<Void, Never>] = [:]
@@ -174,6 +187,8 @@ final class AppViewModel {
     var memoryExtractionTasks: [UUID: Task<Void, Never>] = [:]
     /// 正在自动起标题的会话(防重复触发)。
     var autoTitleTasks: Set<UUID> = []
+    /// 正在自动打标签的会话(防重复触发)。
+    var autoTagTasks: Set<UUID> = []
 
     // MARK: - Init
 
@@ -200,6 +215,8 @@ final class AppViewModel {
         self.deviceToolsEnabledForNextSend = UserDefaults.standard.bool(forKey: Self.deviceToolsToggleKey)
         // 自动触发默认开:首次启动 UserDefaults 没有该键时取 true。
         self.skillAutoTriggerEnabled = (UserDefaults.standard.object(forKey: Self.skillAutoTriggerKey) as? Bool) ?? true
+        // 自动打标签默认开:首次启动 UserDefaults 没有该键时取 true。
+        self.autoTagEnabled = (UserDefaults.standard.object(forKey: Self.autoTagKey) as? Bool) ?? true
 
         // 冷启动:会话 JSON 解码挪到后台线程(避免一启动就在主线程解码上百个文件 → 白屏/卡顿),
         // 解码完回主线程赋值,再清理过期回收站(purge 依赖已加载的 conversations)。
@@ -684,20 +701,10 @@ final class AppViewModel {
             guard let self else { return }
             defer { self.judgingCompareTurnIDs.remove(turnID) }
             let apiKey = (try? KeychainStore.load(id: judgeCfg.id)) ?? ""
-            let prompt = """
-            你是严谨中立的评审。下面是同一个问题的两份回答(A / B)。判断哪份整体更好(更准确、更完整、更有用),只能二选一。
-            第一行只输出胜者字母:`A` 或 `B`。第二行起用一两句中文说明理由,不要复述原文。
-
-            【问题】
-            \(q)
-
-            【回答 A · \(aName)】
-            \(a)
-
-            【回答 B · \(bName)】
-            \(b)
-            """
-            let options = ChatOptions(systemPrompt: nil, temperature: 0.2, maxTokens: 400)
+            let prompt = PromptBuilders.buildCompareScoringPrompt(
+                question: q, aName: aName, aResponse: a, bName: bName, bResponse: b
+            )
+            let options = ChatOptions(systemPrompt: nil, temperature: 0.2, maxTokens: 500)
             var collected = ""
             do {
                 let client = ProviderRegistry.client(for: judgeCfg.kind)
@@ -709,21 +716,30 @@ final class AppViewModel {
                 return
             }
 
-            // 解析:首个出现的 A / B 当胜者,剩余文本当理由。
+            // 优先解析带维度打分的 JSON;失败则降级到纯文本「首个 A/B」解析(无分数)。
             let trimmed = collected.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard let parsed = Self.parseVerdict(trimmed) else {
+            let winnerIsA: Bool
+            let rationale: String
+            var scores: [String: CouncilVote.Score]? = nil
+            if let scored = PromptBuilders.parseCompareVerdict(from: trimmed) {
+                winnerIsA = scored.winnerIsA
+                rationale = scored.rationale.isEmpty ? "裁判未给出理由。" : scored.rationale
+                scores = [aKey: scored.scoreA, bKey: scored.scoreB]
+            } else if let parsed = Self.parseVerdict(trimmed) {
+                winnerIsA = parsed.winnerIsA
+                rationale = parsed.rationale.isEmpty ? "裁判未给出理由。" : parsed.rationale
+            } else {
                 self.judgeCompareErrors[turnID] = "评判结果无法解析(\(judgeCfg.displayName)):\(trimmed.prefix(80))"
                 return
             }
-            let winnerCfg = parsed.winnerIsA ? aCfg : bCfg
-            let loserCfg  = parsed.winnerIsA ? bCfg : aCfg
-            let rationale = parsed.rationale.isEmpty ? "裁判未给出理由。" : parsed.rationale
+            let winnerCfg = winnerIsA ? aCfg : bCfg
+            let loserCfg  = winnerIsA ? bCfg : aCfg
 
             // 写回 Turn(只前进到 live 索引,防竞态)。
             guard let liveConvIdx = self.conversations.firstIndex(where: { $0.id == convID }),
                   let liveTurnIdx = self.conversations[liveConvIdx].turns.firstIndex(where: { $0.id == turnID }) else { return }
             self.conversations[liveConvIdx].turns[liveTurnIdx].compareVerdict =
-                CompareVerdict(winnerProviderID: winnerCfg.id.uuidString, rationale: rationale)
+                CompareVerdict(winnerProviderID: winnerCfg.id.uuidString, rationale: rationale, scores: scores)
             self.conversations[liveConvIdx].updatedAt = Date()
             ConversationStore.save(self.conversations[liveConvIdx])
 
@@ -1249,6 +1265,19 @@ final class AppViewModel {
         } catch {
             return "抓取失败:\(error.localizedDescription)"
         }
+    }
+
+    /// 一键总结链接:抓取网页正文入上下文,自动填一条总结 prompt 并发送。
+    /// 复用 `attachScrapedURL`(同一抓取链路)。抓取失败返回错误文案、不发送。
+    /// 若用户已在输入框写了内容,则把它当作针对该网页的具体问题,否则用默认总结指令。
+    func summarizeURL(_ urlString: String) async -> String? {
+        if let err = await attachScrapedURL(urlString) { return err }
+        let userQ = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        if userQ.isEmpty {
+            prompt = "请阅读上面附带的网页正文,用中文做一份结构化总结:1)一句话主旨;2)关键要点(bullet);3)值得注意的数据/结论。"
+        }
+        send()
+        return nil
     }
 
     func attachImage(at url: URL) throws {

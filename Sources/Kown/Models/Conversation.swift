@@ -197,10 +197,14 @@ struct CompareVerdict: Codable, Hashable, Sendable {
     var winnerProviderID: String
     /// 判定理由(一句话说明为什么这家更好)。
     var rationale: String
+    /// 各家按 4 维度(0-10)的打分:providerID(uuidString) → 分数。
+    /// 仅 JSON 评分模式有;旧裁判(只给胜者)为空。复用 `CouncilVote.Score` 的四维定义。
+    var scores: [String: CouncilVote.Score]?
 
-    init(winnerProviderID: String, rationale: String) {
+    init(winnerProviderID: String, rationale: String, scores: [String: CouncilVote.Score]? = nil) {
         self.winnerProviderID = winnerProviderID
         self.rationale = rationale
+        self.scores = scores
     }
 }
 
@@ -215,6 +219,54 @@ struct ConsensusAnalysis: Codable, Hashable, Sendable {
     init(agreements: [String] = [], disagreements: [String] = []) {
         self.agreements = agreements
         self.disagreements = disagreements
+    }
+}
+
+/// 自我反思修订:让模型回看自己的答案,先批评再产出改进版。opt-in「自我反思」按钮触发。
+struct SelfRevision: Codable, Hashable, Sendable {
+    /// 对原答案的批评 / 发现的问题(bullet 文本)。
+    var critique: String
+    /// 修订后的改进答案(Markdown)。
+    var revised: String
+    /// 执行反思的 provider providerID(uuidString),展示「由谁修订」。
+    var providerID: String
+
+    init(critique: String, revised: String, providerID: String) {
+        self.critique = critique
+        self.revised = revised
+        self.providerID = providerID
+    }
+}
+
+/// 事实核查结果:抽取答案里的关键论断,用 web_search 反查后逐条标注。opt-in「事实核查」按钮触发。
+struct FactCheckResult: Codable, Hashable, Sendable {
+    /// 一条被核查的论断。
+    struct Claim: Codable, Hashable, Sendable, Identifiable {
+        var id: String { claim }
+        /// 论断原文(从答案中提炼)。
+        var claim: String
+        /// 判定:`verified`(已验证)/ `doubtful`(存疑)/ `unverifiable`(无法核实)。
+        var verdict: String
+        /// 一句话说明判定依据。
+        var note: String
+        /// 支撑 / 反驳该论断的来源。
+        var sources: [SourceRef]
+
+        init(claim: String, verdict: String, note: String, sources: [SourceRef] = []) {
+            self.claim = claim
+            self.verdict = verdict
+            self.note = note
+            self.sources = sources
+        }
+    }
+    /// 逐条核查结果。
+    var claims: [Claim]
+    /// 执行核查的 provider providerID(uuidString)。
+    var providerID: String
+
+    init(claims: [Claim], providerID: String) {
+        self.claims = claims
+        self.providerID = providerID
     }
 }
 
@@ -279,6 +331,10 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
     var generatedImagesByProvider: [String: [TurnImage]]?
     /// 图像生成对比里各家失败原因:providerID(uuidString) → 错误文案。旧会话没有,保持 optional。
     var imageGenErrors: [String: String]?
+    /// 自我反思修订结果(opt-in「自我反思」按钮触发)。旧会话没有,保持 optional。
+    var selfRevision: SelfRevision?
+    /// 事实核查结果(opt-in「事实核查」按钮触发)。旧会话没有,保持 optional。
+    var factCheck: FactCheckResult?
 
     init(id: UUID = UUID(),
          timestamp: Date = Date(),
@@ -307,7 +363,9 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
          compareVerdict: CompareVerdict? = nil,
          consensusAnalysis: ConsensusAnalysis? = nil,
          generatedImagesByProvider: [String: [TurnImage]]? = nil,
-         imageGenErrors: [String: String]? = nil) {
+         imageGenErrors: [String: String]? = nil,
+         selfRevision: SelfRevision? = nil,
+         factCheck: FactCheckResult? = nil) {
         self.id = id
         self.timestamp = timestamp
         self.prompt = prompt
@@ -336,6 +394,8 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
         self.consensusAnalysis = consensusAnalysis
         self.generatedImagesByProvider = generatedImagesByProvider
         self.imageGenErrors = imageGenErrors
+        self.selfRevision = selfRevision
+        self.factCheck = factCheck
     }
 
     // 兼容旧 JSON(缺新字段时 sources 等以 decodeIfPresent 解码,默认 nil),不破坏现有存档/同步。
@@ -346,6 +406,7 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
         case providerSnapshot, panelOrder, debateRounds, tournamentRounds, appliedWrites, images, sources
         case reasoningByProvider, tokenUsage, councilVotes, sourcesByProvider
         case generatedImages, compareVerdict, consensusAnalysis, generatedImagesByProvider, imageGenErrors
+        case selfRevision, factCheck
     }
 
     init(from decoder: Decoder) throws {
@@ -378,6 +439,8 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
         self.consensusAnalysis = try c.decodeIfPresent(ConsensusAnalysis.self, forKey: .consensusAnalysis)
         self.generatedImagesByProvider = try c.decodeIfPresent([String: [TurnImage]].self, forKey: .generatedImagesByProvider)
         self.imageGenErrors = try c.decodeIfPresent([String: String].self, forKey: .imageGenErrors)
+        self.selfRevision = try c.decodeIfPresent(SelfRevision.self, forKey: .selfRevision)
+        self.factCheck = try c.decodeIfPresent(FactCheckResult.self, forKey: .factCheck)
     }
 
     /// 取顺序化的 panel 配置（按发送顺序，Chair 不在内）

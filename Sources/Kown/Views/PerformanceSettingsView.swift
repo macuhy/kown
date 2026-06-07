@@ -13,6 +13,8 @@ struct PerformanceSettingsView: View {
     @AppStorage("kown.councilVoting.v1") private var councilVoting: Bool = false
     /// 与 AppViewModel.autoRouteEnabled 同一 key。
     @AppStorage("kown.autoRoute.v1") private var autoRoute: Bool = false
+    /// 与 AppViewModel.autoTagEnabled 同一 key。默认开。
+    @AppStorage("kown.autoTag.v1") private var autoTag: Bool = true
     /// 与 AnthropicClient.claudeThinkingEnabled 同一 key。
     @AppStorage("kown.claudeThinking.v1") private var claudeThinking: Bool = false
     /// 与 AdaptivePanelGrid.panelsPerRowKey 同一 key。0 = 自动按宽度;1~4 = 固定每行面板数。
@@ -42,6 +44,7 @@ struct PerformanceSettingsView: View {
                 autoFailoverCard
                 councilVotingCard
                 autoRouteCard
+                autoTagCard
                 claudeThinkingCard
                 guideCard
             }
@@ -60,6 +63,7 @@ struct PerformanceSettingsView: View {
                 autoFailoverCard
                 councilVotingCard
                 autoRouteCard
+                autoTagCard
                 claudeThinkingCard
                 guideCard
             }
@@ -128,6 +132,31 @@ struct PerformanceSettingsView: View {
                     Text("按难度自动选模型(Direct,实验)")
                         .font(.body.weight(.semibold))
                     Text("Direct 模式下,按问题难度在当前模型所属厂商里自动切换档位:简单问题走便宜模型,复杂问题走旗舰。卡片会显示实际用的型号。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .tint(secondaryTint)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(secondaryTint.opacity(0.16), lineWidth: 1)
+        }
+    }
+
+    // MARK: - 自动打标签
+
+    private var autoTagCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Toggle(isOn: $autoTag) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("自动打标签")
+                        .font(.body.weight(.semibold))
+                    Text("首轮回答后用小模型给会话推荐 1-3 个主题标签,方便侧栏按标签过滤检索。仅当会话还没有标签时触发,手动改过不覆盖。会多一次轻量模型调用。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

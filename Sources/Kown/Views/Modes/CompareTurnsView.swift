@@ -243,6 +243,15 @@ struct CompareTurnsView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+            if let scores = verdict.scores, !scores.isEmpty {
+                Divider().padding(.vertical, 2)
+                Text("准确·完整·可执行·清晰")
+                    .font(.caption2).foregroundStyle(.secondary)
+                ForEach(scoreRows(turn: turn, scores: scores), id: \.id) { item in
+                    scoreRow(name: item.name, score: item.score,
+                             isWinner: item.id == verdict.winnerProviderID)
+                }
+            }
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -255,6 +264,54 @@ struct CompareTurnsView: View {
 
     private var verdictTint: Color {
         Color(red: 0.85, green: 0.60, blue: 0.14)
+    }
+
+    /// 把 verdict.scores 排成「按总分降序」的行(带展示名)。
+    private func scoreRows(turn: Turn, scores: [String: CouncilVote.Score])
+        -> [(id: String, name: String, score: CouncilVote.Score)] {
+        scores.map { (id: $0.key,
+                      name: turn.providerSnapshot[$0.key]?.displayName ?? "模型",
+                      score: $0.value) }
+            .sorted { $0.score.total > $1.score.total }
+    }
+
+    private func scoreRow(name: String, score: CouncilVote.Score, isWinner: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                if isWinner {
+                    Image(systemName: "crown.fill").font(.caption2).foregroundStyle(verdictTint)
+                }
+                Text(name).font(.caption.weight(.semibold)).lineLimit(1)
+                Spacer(minLength: 0)
+                Text("\(score.total)").font(.caption.weight(.bold).monospacedDigit())
+                    .foregroundStyle(verdictTint)
+                Text("/40").font(.caption2).foregroundStyle(.tertiary)
+            }
+            HStack(spacing: 6) {
+                dimBar("准", score.accuracy)
+                dimBar("整", score.completeness)
+                dimBar("行", score.actionability)
+                dimBar("晰", score.clarity)
+            }
+        }
+        .padding(8)
+        .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private func dimBar(_ label: String, _ v: Int) -> some View {
+        HStack(spacing: 3) {
+            Text(label).font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.secondary.opacity(0.18))
+                    Capsule().fill(verdictTint.opacity(0.8))
+                        .frame(width: geo.size.width * CGFloat(v) / 10.0)
+                }
+            }
+            .frame(height: 5)
+            Text("\(v)").font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private var compareTint: Color {

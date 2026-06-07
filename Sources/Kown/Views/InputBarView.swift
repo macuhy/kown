@@ -96,7 +96,15 @@ struct InputBarView: View {
                 .textInputAutocapitalization(.never)
                 .keyboardType(.URL)
                 #endif
-            Button("抓取") {
+            Button("抓取并总结") {
+                let u = urlDraft
+                scraping = true
+                Task {
+                    let err = await viewModel.summarizeURL(u)
+                    await MainActor.run { scraping = false; pickerError = err }
+                }
+            }
+            Button("仅抓取入上下文") {
                 let u = urlDraft
                 scraping = true
                 Task {
@@ -106,7 +114,7 @@ struct InputBarView: View {
             }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("用 Firecrawl 抓取该网页正文,作为附件并入上下文")
+            Text("用 Firecrawl 抓取该网页正文。「抓取并总结」会直接发问并生成总结;「仅抓取」只作为附件并入上下文。")
         }
         .sheet(isPresented: $showPromptLibrary) {
             PromptInsertSheet { rendered in

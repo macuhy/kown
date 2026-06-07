@@ -462,4 +462,61 @@ enum PromptBuilders {
         if w.hasPrefix("B") { return (false, rationale) }
         return nil
     }
+
+    // MARK: - Compare 维度打分裁判
+
+    /// Compare 模式裁判 prompt(带维度打分版)— 让裁判对 A / B 两份回答按 4 维度(0-10)打分,
+    /// 并给出胜者 + 一句理由,输出严格 JSON。比只给「胜者」更可视化(对齐 Council 投票)。
+    static func buildCompareScoringPrompt(
+        question: String,
+        aName: String,
+        aResponse: String,
+        bName: String,
+        bResponse: String
+    ) -> String {
+        var lines: [String] = []
+        lines.append("你是严谨中立的评审。下面是同一个问题的两份回答(A / B),请逐份按维度打分,再判出整体胜者。")
+        lines.append("")
+        lines.append("【问题】")
+        lines.append(shorten(question, max: 1200))
+        lines.append("")
+        lines.append("【回答 A · \(aName)】")
+        lines.append(shorten(aResponse.isEmpty ? "(空响应)" : aResponse, max: 2400))
+        lines.append("")
+        lines.append("【回答 B · \(bName)】")
+        lines.append(shorten(bResponse.isEmpty ? "(空响应)" : bResponse, max: 2400))
+        lines.append("")
+        lines.append("维度(各 0-10 整数):accuracy 准确性 / completeness 完整性 / actionability 可执行性 / clarity 清晰度。")
+        lines.append("**只输出一个 JSON 对象**,不要任何额外文字 / 解释 / Markdown 代码围栏,格式严格如下:")
+        lines.append("{\"A\":{\"accuracy\":8,\"completeness\":7,\"actionability\":6,\"clarity\":9}," +
+                     "\"B\":{\"accuracy\":5,\"completeness\":6,\"actionability\":7,\"clarity\":6}," +
+                     "\"winner\":\"A\",\"rationale\":\"一句话理由\"}")
+        lines.append("winner 只能是 \"A\" 或 \"B\";rationale 用中文,不超过 80 字。")
+        return lines.joined(separator: "\n")
+    }
+
+    /// 解析带维度打分的 Compare 裁判返回。失败返回 nil(调用方降级到纯文本解析)。
+    static func parseCompareVerdict(
+        from text: String
+    ) -> (winnerIsA: Bool, rationale: String, scoreA: CouncilVote.Score, scoreB: CouncilVote.Score)? {
+        guard let jsonString = extractJSONObject(from: text),
+              let data = jsonString.data(using: .utf8) else { return nil }
+        struct S: Decodable { let accuracy: Int?; let completeness: Int?; let actionability: Int?; let clarity: Int? }
+        struct DTO: Decodable { let A: S?; let B: S?; let winner: String?; let rationale: String? }
+        guard let dto = try? JSONDecoder().decode(DTO.self, from: data),
+              let a = dto.A, let b = dto.B else { return nil }
+        func clamp(_ v: Int?) -> Int { max(0, min(10, v ?? 0)) }
+        func score(_ s: S) -> CouncilVote.Score {
+            CouncilVote.Score(accuracy: clamp(s.accuracy), completeness: clamp(s.completeness),
+                              actionability: clamp(s.actionability), clarity: clamp(s.clarity))
+        }
+        let scoreA = score(a), scoreB = score(b)
+        let w = (dto.winner ?? "").trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let rationale = (dto.rationale ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let winnerIsA: Bool
+        if w.hasPrefix("A") { winnerIsA = true }
+        else if w.hasPrefix("B") { winnerIsA = false }
+        else { winnerIsA = scoreA.total >= scoreB.total }   // winner 缺失/异常时按总分裁定
+        return (winnerIsA, rationale, scoreA, scoreB)
+    }
 }
