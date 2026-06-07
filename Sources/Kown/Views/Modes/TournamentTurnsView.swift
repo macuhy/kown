@@ -87,7 +87,8 @@ struct TournamentTurnsView: View {
                         isRetrying: viewModel.isRetrying(turnID: turn.id, configID: cfg.id),
                         reasoning: turn.reasoningByProvider?[key],
                         tokenUsage: turn.tokenUsage?[key],
-                        sources: turn.sourcesByProvider?[key] ?? []
+                        sources: turn.sourcesByProvider?[key] ?? [],
+                        knowledgeSources: turn.knowledgeSources ?? []
                     )
                     .frame(maxWidth: .infinity, alignment: .topLeading)
                 }

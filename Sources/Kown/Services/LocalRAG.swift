@@ -12,6 +12,15 @@ enum LocalRAG {
     static let maxInjectChars = 6000
 
     struct Chunk: Sendable {
+        let docId: UUID
+        let docName: String
+        let text: String
+    }
+
+    /// 检索命中的片段(带可回溯的来源元数据)。供「句级溯源」用:答案里的 `[n]` 角标
+    /// 映射到这里的第 n 条,点开可弹出 `docName` 文档的 `text` 原文。
+    struct RetrievedChunk: Sendable {
+        let docId: UUID
         let docName: String
         let text: String
     }
@@ -66,11 +75,23 @@ enum LocalRAG {
     /// `nonisolated async`:切块 / BM25 是纯计算,向量走 `RAGVectorCache`(actor)—— 整段在后台线程跑,
     /// 不再卡发送时的主线程(扫块 + NLEmbedding 在大知识库上可达 0.5–2s)。
     nonisolated static func retrieve(query: String, folder: KnowledgeFolder, topK: Int = 4) async -> [String] {
+        let chunks = await retrieveChunks(query: query, folder: folder, topK: topK)
+        return chunks.map { "【\($0.docName)】\n\($0.text)" }
+    }
+
+    /// 同 `retrieve`,但保留可回溯的来源元数据(docId / docName),用于「句级溯源」。
+    nonisolated static func retrieveDetailed(query: String, folder: KnowledgeFolder, topK: Int = 4) async -> [RetrievedChunk] {
+        let chunks = await retrieveChunks(query: query, folder: folder, topK: topK)
+        return chunks.map { RetrievedChunk(docId: $0.docId, docName: $0.docName, text: $0.text) }
+    }
+
+    /// 检索核心:切块 → BM25 + 向量混合(RRF)→ 取 top-K(受 `maxInjectChars` 预算约束),返回选中块。
+    nonisolated private static func retrieveChunks(query: String, folder: KnowledgeFolder, topK: Int) async -> [Chunk] {
         var seen = Set<String>()
         var chunks: [Chunk] = []
         for doc in folder.docs {
             for c in chunk(doc.text) where seen.insert(c).inserted {
-                chunks.append(Chunk(docName: doc.name, text: c))
+                chunks.append(Chunk(docId: doc.id, docName: doc.name, text: c))
             }
         }
         guard !chunks.isEmpty else { return [] }
@@ -108,14 +129,14 @@ enum LocalRAG {
             rankedIdx = fused.sorted { $0.value > $1.value }.prefix(topK).map { $0.key }
         }
 
-        var out: [String] = []
+        var out: [Chunk] = []
         var used = 0
         for idx in rankedIdx {
             let c = chunks[idx]
-            let block = "【\(c.docName)】\n\(c.text)"
-            if used + block.count > maxInjectChars { break }
-            out.append(block)
-            used += block.count
+            let blockLen = c.docName.count + c.text.count + 4
+            if used + blockLen > maxInjectChars { break }
+            out.append(c)
+            used += blockLen
         }
         return out
     }

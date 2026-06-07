@@ -4,12 +4,23 @@ import MarkdownUI
 /// 把正文里的 `[n]`(1≤n≤来源数)替换成指向对应来源的 markdown 链接,链接文字仍是 `[n]`。
 /// 这样答卡正文里的引用角标可直接点开来源,且复用现有 markdown 链接渲染(不改渲染器)。
 /// 来源为空、或序号越界、或非引用(如代码里的 `arr[1]`,序号超出来源数)都原样保留。
-func citationLinkified(_ text: String, sources: [SourceRef]) -> String {
-    guard !sources.isEmpty, text.contains("[") else { return text }
+///
+/// 句级溯源:`knowledgeSources` 非空时,落在知识库编号集合里的 `[n]` 映射到自定义
+/// scheme `kown-cite://n`,由 `.knowledgeCitationHost(...)` 拦截弹出原文片段(不走浏览器)。
+/// 同一个 `[n]` 优先映射 web 来源(`n <= sources.count`),其余再尝试知识库编号。
+func citationLinkified(_ text: String, sources: [SourceRef], knowledgeSources: [KnowledgeSourceRef] = []) -> String {
+    guard (!sources.isEmpty || !knowledgeSources.isEmpty), text.contains("[") else { return text }
+    let knowledgeIndices = Set(knowledgeSources.map(\.index))
     return text.replacing(/\[(\d{1,3})\]/) { match in
-        guard let n = Int(match.1), n >= 1, n <= sources.count else { return String(match.0) }
+        guard let n = Int(match.1), n >= 1 else { return String(match.0) }
         // 链接文字里的方括号需转义,否则 markdown 解析器会错配嵌套括号。
-        return "[\\[\(n)\\]](\(sources[n - 1].url))"
+        if n <= sources.count {
+            return "[\\[\(n)\\]](\(sources[n - 1].url))"
+        }
+        if knowledgeIndices.contains(n) {
+            return "[\\[\(n)\\]](kown-cite://\(n))"
+        }
+        return String(match.0)
     }
 }
 

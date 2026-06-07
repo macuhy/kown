@@ -80,7 +80,8 @@ struct DebateTurnsView: View {
                             isRetrying: viewModel.isRetrying(turnID: turn.id, configID: cfg.id),
                             reasoning: turn.reasoningByProvider?[key],
                             tokenUsage: turn.tokenUsage?[key],
-                            sources: turn.sourcesByProvider?[key] ?? []
+                            sources: turn.sourcesByProvider?[key] ?? [],
+                            knowledgeSources: turn.knowledgeSources ?? []
                         )
                         .frame(maxWidth: .infinity, alignment: .topLeading)
                     }
@@ -106,6 +107,7 @@ struct DebateTurnsView: View {
                     reasoning: turn.reasoningByProvider?[moderator.id.uuidString],
                     tokenUsage: turn.tokenUsage?[moderator.id.uuidString],
                     sources: turn.sources ?? [],
+                    knowledgeSources: turn.knowledgeSources ?? [],
                     regenerateProviders: viewModel.regenerateCandidates,
                     onRegenerate: { viewModel.regenerateChairWithModel(turnID: turn.id, target: .chair, newProviderID: $0) }
                 )

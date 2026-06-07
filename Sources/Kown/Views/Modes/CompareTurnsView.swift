@@ -77,7 +77,8 @@ struct CompareTurnsView: View {
                         onRegenerate: { viewModel.regenerateWithModel(turnID: turn.id, newProviderID: $0) },
                         reasoning: turn.reasoningByProvider?[key],
                         tokenUsage: turn.tokenUsage?[key],
-                        sources: turn.sourcesByProvider?[key] ?? []
+                        sources: turn.sourcesByProvider?[key] ?? [],
+                        knowledgeSources: turn.knowledgeSources ?? []
                     )
                     .frame(maxWidth: .infinity)
                 }
@@ -98,6 +99,7 @@ struct CompareTurnsView: View {
                     reasoning: turn.reasoningByProvider?[judge.id.uuidString],
                     tokenUsage: turn.tokenUsage?[judge.id.uuidString],
                     sources: turn.sources ?? [],
+                    knowledgeSources: turn.knowledgeSources ?? [],
                     regenerateProviders: viewModel.regenerateCandidates,
                     onRegenerate: { viewModel.regenerateChairWithModel(turnID: turn.id, target: .chair, newProviderID: $0) }
                 )

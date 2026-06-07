@@ -82,7 +82,8 @@ struct CouncilTurnsView: View {
                         onRegenerate: { viewModel.regenerateWithModel(turnID: turn.id, newProviderID: $0) },
                         reasoning: turn.reasoningByProvider?[key],
                         tokenUsage: turn.tokenUsage?[key],
-                        sources: turn.sourcesByProvider?[key] ?? []
+                        sources: turn.sourcesByProvider?[key] ?? [],
+                        knowledgeSources: turn.knowledgeSources ?? []
                     )
                     .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
@@ -101,6 +102,7 @@ struct CouncilTurnsView: View {
                     reasoning: turn.reasoningByProvider?[chair.id.uuidString],
                     tokenUsage: turn.tokenUsage?[chair.id.uuidString],
                     sources: turn.sources ?? [],
+                    knowledgeSources: turn.knowledgeSources ?? [],
                     regenerateProviders: viewModel.regenerateCandidates,
                     onRegenerate: { viewModel.regenerateChairWithModel(turnID: turn.id, target: .chair, newProviderID: $0) }
                 )
@@ -120,6 +122,7 @@ struct CouncilTurnsView: View {
                     reasoning: turn.reasoningByProvider?[summary.id.uuidString],
                     tokenUsage: turn.tokenUsage?[summary.id.uuidString],
                     sources: turn.sources ?? [],
+                    knowledgeSources: turn.knowledgeSources ?? [],
                     regenerateProviders: viewModel.regenerateCandidates,
                     onRegenerate: { viewModel.regenerateChairWithModel(turnID: turn.id, target: .summary, newProviderID: $0) }
                 )

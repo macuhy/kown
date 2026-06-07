@@ -312,6 +312,8 @@ struct HistoricalResponseCard: View {
     var tokenUsage: TurnTokenUsage? = nil
     /// 本轮引用来源(footer 显示 Sources 小药丸)。
     var sources: [SourceRef] = []
+    /// 本轮知识库引用来源(句级溯源)。非空时答案里的 [n] 角标可点开原文片段。
+    var knowledgeSources: [KnowledgeSourceRef] = []
 
     @State private var copied = false
     @State private var imageCopied = false
@@ -534,7 +536,8 @@ struct HistoricalResponseCard: View {
         } else {
             let isLong = text.count > Self.collapseThreshold
             VStack(alignment: .leading, spacing: 8) {
-                MarkdownText(text: citationLinkified(text, sources: sources))
+                MarkdownText(text: citationLinkified(text, sources: sources, knowledgeSources: knowledgeSources))
+                    .knowledgeCitationHost(knowledgeSources)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .frame(maxHeight: (isLong && !expanded) ? 360 : nil, alignment: .top)
                     .clipped()
@@ -1225,6 +1228,8 @@ struct ChairSummaryCard: View {
     var tokenUsage: TurnTokenUsage? = nil
     /// 本轮引用来源(footer Sources 小药丸)。
     var sources: [SourceRef] = []
+    /// 本轮知识库引用来源(句级溯源)。
+    var knowledgeSources: [KnowledgeSourceRef] = []
     /// 「换模型」候选 + 回调(空 / nil = 不显示)。
     var regenerateProviders: [ProviderConfig] = []
     var onRegenerate: ((UUID) -> Void)? = nil
@@ -1512,7 +1517,8 @@ struct ChairSummaryCard: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(role.tint.opacity(0.07), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         } else if let text, !text.isEmpty {
-            MarkdownText(text: citationLinkified(text, sources: sources))
+            MarkdownText(text: citationLinkified(text, sources: sources, knowledgeSources: knowledgeSources))
+                .knowledgeCitationHost(knowledgeSources)
         }
     }
 }
