@@ -17,7 +17,24 @@ final class AppViewModel {
     var selectedConversationID: UUID?
     /// 没选会话时新建会话使用的默认模式
     var activeMode: ConversationMode = .council
-    var prompt: String = ""
+    var prompt: String = "" {
+        didSet { refreshPromptDerived() }
+    }
+    /// 缓存:输入是否「空白」(trim 后为空)。给工具按钮 / canSend 用,
+    /// 避免每次按键在多个 render body 里反复 `trimmingCharacters` 扫全串(大文本时这会 N×O(n))。
+    private(set) var promptIsBlank = true
+    /// 缓存:输入是否「过大」。大文本时输入框从多行 TextField 切到 TextEditor(NSTextView),
+    /// 否则 macOS 的 `axis:.vertical` TextField 每次按键都会同步重排全文 → 主线程卡死。
+    private(set) var promptIsLarge = false
+    /// 切到 TextEditor 的 utf8 字节阈值(`utf8.count` 是 O(1),不会自身拖慢)。
+    private let promptLargeThresholdBytes = 2000
+
+    /// prompt 改动后刷新派生缓存。在 `prompt` 的 didSet 里调用。
+    private func refreshPromptDerived() {
+        // `allSatisfy(\.isWhitespace)` 命中首个非空白字符即短路 → 正常输入 O(1),只有全空白串才扫到底。
+        promptIsBlank = prompt.allSatisfy(\.isWhitespace)
+        promptIsLarge = prompt.utf8.count > promptLargeThresholdBytes
+    }
     /// 各会话未发送的输入草稿(切走暂存、切回还原)。会话级,内存留存。
     private var drafts: [UUID: String] = [:]
     /// 当前轮的「追问建议」(点「追问建议」按需生成);发送/切换会话清空。
@@ -1627,8 +1644,7 @@ final class AppViewModel {
     }
 
     var canSend: Bool {
-        let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, !isRunning else { return false }
+        guard !promptIsBlank, !isRunning else { return false }
         let (panel, _) = providersForCurrentSend()
         return !panel.isEmpty
     }

@@ -65,7 +65,7 @@ struct InputBarView: View {
                     }
             }
             #if os(iOS)
-            if hasIOSContextChips {
+            if hasIOSContextChips && !iOSKeyboardCompact {
                 iOSContextChips
             }
             #endif
@@ -118,7 +118,7 @@ struct InputBarView: View {
         }
         .sheet(isPresented: $showPromptLibrary) {
             PromptInsertSheet { rendered in
-                if viewModel.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                if viewModel.promptIsBlank {
                     viewModel.prompt = rendered
                 } else {
                     viewModel.prompt += "\n\n" + rendered
@@ -133,6 +133,15 @@ struct InputBarView: View {
         .sheet(isPresented: $showKnowledge) {
             KnowledgeView(viewModel: viewModel)
         }
+        #if os(iOS)
+        .fullScreenCover(isPresented: $showVoice) {
+            VoiceConversationView(viewModel: viewModel)
+        }
+        #else
+        .sheet(isPresented: $showVoice) {
+            VoiceConversationView(viewModel: viewModel)
+        }
+        #endif
         #if os(macOS)
         .fileImporter(
             isPresented: $showFileImporter,
@@ -202,7 +211,7 @@ struct InputBarView: View {
     #if os(iOS)
     /// 把 OCR 抽取的文字追加进 prompt:空则直接填,非空则换行接在后面。
     private func appendOCRText(_ text: String) {
-        if viewModel.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if viewModel.promptIsBlank {
             viewModel.prompt = text
         } else {
             viewModel.prompt += "\n\n" + text
@@ -232,14 +241,25 @@ struct InputBarView: View {
     @ViewBuilder
     private var barRow: some View {
         #if os(iOS)
-        VStack(spacing: 6) {
-            promptField
-            HStack(spacing: 8) {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    toolButtons
-                        .padding(.vertical, 1)
-                }
+        if iOSKeyboardCompact {
+            HStack(alignment: .bottom, spacing: 7) {
+                iOSCompactToolsMenu
+                promptField
+                    .layoutPriority(1)
+                micButton
                 sendButton
+            }
+            .transition(.opacity.combined(with: .move(edge: .bottom)))
+        } else {
+            VStack(spacing: 6) {
+                promptField
+                HStack(spacing: 8) {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        toolButtons
+                            .padding(.vertical, 1)
+                    }
+                    sendButton
+                }
             }
         }
         #else
@@ -265,31 +285,93 @@ struct InputBarView: View {
     }
 
     private var promptField: some View {
+        // 普通长度走多行 TextField;超过阈值(viewModel.promptIsLarge)切到 TextEditor(NSTextView)。
+        // macOS 的 axis:.vertical TextField 在大文本下每次按键都同步重排全文 → 卡死主线程;
+        // TextEditor 有真正的文本系统,长文本远比多行 TextField 抗造。
+        Group {
+            if viewModel.promptIsLarge {
+                decoratedPromptEditor(
+                    TextEditor(text: $viewModel.prompt)
+                        .font(.body)
+                        .scrollContentBackground(.hidden)
+                        .frame(maxHeight: largePromptMaxHeight)   // 超过就内部滚动,不再无限长高
+                )
+            } else {
+                decoratedPromptEditor(
+                    // 注意:title 必须是空常量。给多行 TextField(axis:.vertical) 传非空 placeholder,
+                    // 在 macOS 聚焦态下会触发 setPlaceholderString → _restartEditingWithTextView →
+                    // endEditing → textDidEndEditing → 再布局 的重入死循环(整核 100% CPU)。
+                    // 占位文字改用 SwiftUI Text 叠层手动渲染,绕开 AppKit 的占位路径。
+                    TextField("", text: $viewModel.prompt, axis: .vertical)
+                        .textFieldStyle(.plain)
+                        .font(.body)
+                        .lineLimit(1...promptMaxLines)
+                )
+                .submitLabel(.send)
+                .onSubmit { sendIfCan() }
+                // ↑ 取更早一条:仅当输入框为空、或正在浏览历史时拦截,避免破坏正常多行编辑的光标上移。
+                .onKeyPress(.upArrow) {
+                    guard inputFocused, canBrowseHistory else { return .ignored }
+                    if let text = history.older(current: viewModel.prompt) {
+                        viewModel.prompt = text
+                        return .handled
+                    }
+                    return .ignored
+                }
+                // ↓ 取更晚一条:仅当正在浏览历史时拦截,否则放行给正常多行编辑。
+                .onKeyPress(.downArrow) {
+                    guard inputFocused, history.isBrowsing else { return .ignored }
+                    if let text = history.newer() {
+                        viewModel.prompt = text
+                        return .handled
+                    }
+                    return .ignored
+                }
+            }
+        }
+        .focused($inputFocused)
+        // 拖拽文件/图片到输入框 → 分流成附件(图片走缩略图、其它走文本/PDF)。
+        .onDrop(of: [.fileURL], isTargeted: nil) { providers in handleDrop(providers) }
+        // 用户改动文本就退出历史浏览态(下次 ↑ 从最新一条重新数起)。
+        // 历史回填本身也会改 prompt,这里用 isBrowsing 把回填动作排除掉。
+        .onChange(of: viewModel.prompt) { _, _ in
+            if !history.isBrowsing { history.resetBrowsing() }
+        }
+        #if os(iOS)
+        .onTapGesture { inputFocused = true }
+        #endif
+        #if os(macOS)
+        // ⌘V 粘贴图片(位图字节)兜底 — file-url 由下面的 NSEvent monitor 抢在字段编辑器前拦。
+        .onPasteCommand(of: ["public.image", "public.png", "public.jpeg", "public.tiff"]) { _ in
+            handlePasteImage()
+        }
+        // 关键:聚焦时装 local keyDown monitor。聚焦的字段编辑器会先把 file-url
+        // 当文本吃掉 ⌘V(只贴路径、无缩略图),onPasteCommand 根本轮不到 → 这里抢在它前面。
+        .onAppear { installPasteMonitor() }
+        .onDisappear { removePasteMonitor() }
+        #endif
+    }
+
+    /// 输入框外观装饰(占位 / 内边距 / 背景 / 边框 / 阴影),compact(TextField)与 large(TextEditor)共用。
+    private func decoratedPromptEditor<Editor: View>(_ editor: Editor) -> some View {
         let tint = viewModel.currentMode.kownTint
-        // 注意:title 必须是空常量。给多行 TextField(axis:.vertical) 传非空 placeholder,
-        // 在 macOS 聚焦态下会触发 setPlaceholderString → _restartEditingWithTextView →
-        // endEditing → textDidEndEditing → 再布局 的重入死循环(整核 100% CPU)。
-        // 占位文字改用 SwiftUI Text 叠层手动渲染,绕开 AppKit 的占位路径。
-        return TextField("", text: $viewModel.prompt, axis: .vertical)
+        return editor
             .overlay(alignment: .topLeading) {
-                if viewModel.prompt.isEmpty {
+                if viewModel.prompt.isEmpty {   // large 模式不会为空,占位只对 compact 生效
                     Text(placeholder)
                         .foregroundStyle(.secondary)
                         .allowsHitTesting(false)
                 }
             }
-            .textFieldStyle(.plain)
-            .font(.body)
-            .lineLimit(1...5)
             .padding(.horizontal, promptHorizontalPadding)
             .padding(.vertical, promptVerticalPadding)
             .frame(minHeight: promptMinHeight)
             .frame(maxWidth: .infinity)
             .background {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    RoundedRectangle(cornerRadius: promptCornerRadius, style: .continuous)
                         .fill(Color.platformTextBackground.opacity(0.78))
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    RoundedRectangle(cornerRadius: promptCornerRadius, style: .continuous)
                         .fill(
                             LinearGradient(
                                 colors: [
@@ -303,55 +385,14 @@ struct InputBarView: View {
                 }
             }
             .overlay {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: promptCornerRadius, style: .continuous)
                     .strokeBorder(
                         inputFocused ? tint.opacity(0.48) : Color.primary.opacity(0.10),
                         lineWidth: inputFocused ? 1.5 : 1
                     )
             }
             .shadow(color: inputFocused ? tint.opacity(0.13) : Color.clear, radius: 16, x: 0, y: 8)
-            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .focused($inputFocused)
-            // 拖拽文件/图片到输入框 → 分流成附件(图片走缩略图、其它走文本/PDF)。
-            .onDrop(of: [.fileURL], isTargeted: nil) { providers in handleDrop(providers) }
-            .submitLabel(.send)
-            .onSubmit { sendIfCan() }
-            // 用户改动文本就退出历史浏览态(下次 ↑ 从最新一条重新数起)。
-            // 历史回填本身也会改 prompt,这里用 isBrowsing 把回填动作排除掉。
-            .onChange(of: viewModel.prompt) { _, _ in
-                if !history.isBrowsing { history.resetBrowsing() }
-            }
-            // ↑ 取更早一条:仅当输入框为空、或正在浏览历史时拦截,避免破坏正常多行编辑的光标上移。
-            .onKeyPress(.upArrow) {
-                guard inputFocused, canBrowseHistory else { return .ignored }
-                if let text = history.older(current: viewModel.prompt) {
-                    viewModel.prompt = text
-                    return .handled
-                }
-                return .ignored
-            }
-            // ↓ 取更晚一条:仅当正在浏览历史时拦截,否则放行给正常多行编辑。
-            .onKeyPress(.downArrow) {
-                guard inputFocused, history.isBrowsing else { return .ignored }
-                if let text = history.newer() {
-                    viewModel.prompt = text
-                    return .handled
-                }
-                return .ignored
-            }
-            #if os(iOS)
-            .onTapGesture { inputFocused = true }
-            #endif
-            #if os(macOS)
-            // ⌘V 粘贴图片(位图字节)兜底 — file-url 由下面的 NSEvent monitor 抢在字段编辑器前拦。
-            .onPasteCommand(of: ["public.image", "public.png", "public.jpeg", "public.tiff"]) { _ in
-                handlePasteImage()
-            }
-            // 关键:聚焦时装 local keyDown monitor。聚焦的 TextField 字段编辑器会先把 file-url
-            // 当文本吃掉 ⌘V(只贴路径、无缩略图),onPasteCommand 根本轮不到 → 这里抢在它前面。
-            .onAppear { installPasteMonitor() }
-            .onDisappear { removePasteMonitor() }
-            #endif
+            .contentShape(RoundedRectangle(cornerRadius: promptCornerRadius, style: .continuous))
     }
 
     /// 是否允许 ↑ 进入历史回溯:输入框为空(光标必在首行)或已经在浏览中。
@@ -364,14 +405,8 @@ struct InputBarView: View {
     private var toolButtons: some View {
         #if os(iOS)
         iOSToolButtons
-            .fullScreenCover(isPresented: $showVoice) {
-                VoiceConversationView(viewModel: viewModel)
-            }
         #else
         macToolButtons
-            .sheet(isPresented: $showVoice) {
-                VoiceConversationView(viewModel: viewModel)
-            }
         #endif
     }
 
@@ -406,7 +441,7 @@ struct InputBarView: View {
                 viewModel.enhancePrompt()
                 showEnhancer = true
             }
-            .disabled(viewModel.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .disabled(viewModel.promptIsBlank)
             promptImproveButton
             micButton
             voiceButton
@@ -415,13 +450,13 @@ struct InputBarView: View {
                            help: "生成图片(用当前模型,需选支持出图的模型)") {
                     viewModel.generateImage()
                 }
-                .disabled(viewModel.isGeneratingImage || viewModel.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(viewModel.isGeneratingImage || viewModel.promptIsBlank)
                 if viewModel.imageGenComparableProviders.count >= 2 {
                     iconButton(viewModel.isGeneratingImage ? "hourglass" : "photo.stack",
                                help: "图像生成对比(所有启用模型用同一描述各出一张并排比较,需各自选好出图模型)") {
                         viewModel.generateImageComparison()
                     }
-                    .disabled(viewModel.isGeneratingImage || viewModel.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(viewModel.isGeneratingImage || viewModel.promptIsBlank)
                 }
             }
             workspaceButton
@@ -450,80 +485,77 @@ struct InputBarView: View {
         }
     }
 
-    private var moreToolsMenu: some View {
-        let promptEmpty = viewModel.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    /// 键盘弹起时只保留一个紧凑入口,把次要动作收进菜单,避免工具栏挤占对话内容。
+    private var iOSCompactToolsMenu: some View {
+        let tint = viewModel.currentMode.kownTint
+        let active = hasIOSContextChips ||
+            (viewModel.canEnableWebSearch && viewModel.webSearchEnabledForNextSend) ||
+            (viewModel.currentMode == .debate && viewModel.debateRoundsForNextSend > 1)
         return Menu {
             Button {
-                withAnimation(.easeInOut(duration: 0.18)) { showSystemPromptDrawer.toggle() }
+                showPhotoPicker = true
             } label: {
-                Label("System Prompt", systemImage: "slider.horizontal.3")
+                Label("添加图片", systemImage: "photo")
             }
             Button {
-                showPromptLibrary = true
+                showOCRPicker = true
             } label: {
-                Label("提示词库", systemImage: "text.badge.plus")
+                Label(ocrRunning ? "正在识别文字" : "扫描图片文字", systemImage: ocrRunning ? "hourglass" : "doc.viewfinder")
             }
-            Button {
-                showKnowledge = true
-            } label: {
-                Label("知识库", systemImage: "books.vertical")
-            }
-            Divider()
-            Button {
-                viewModel.deviceToolsEnabledForNextSend.toggle()
-            } label: {
-                Label(viewModel.deviceToolsEnabledForNextSend ? "关闭设备工具" : "启用设备工具",
-                      systemImage: viewModel.deviceToolsEnabledForNextSend ? "checkmark.circle" : "wrench.and.screwdriver.fill")
-            }
-            iOSSkillBindingMenu
-            iOSGitHubMenu
-            if !viewModel.canEnableWebSearch {
-                Label("网页搜索未配置", systemImage: "globe.badge.exclamationmark")
-            }
+            .disabled(ocrRunning)
             if viewModel.canEnableWebSearch {
                 Button {
-                    urlDraft = ""
-                    showURLScrape = true
+                    viewModel.webSearchEnabledForNextSend.toggle()
                 } label: {
-                    Label(scraping ? "正在抓取网页" : "抓取网页正文",
-                          systemImage: scraping ? "hourglass" : "link.badge.plus")
+                    Label(viewModel.webSearchEnabledForNextSend ? "关闭网页搜索" : "开启网页搜索",
+                          systemImage: viewModel.webSearchEnabledForNextSend ? "checkmark.circle" : "globe")
                 }
-                .disabled(scraping)
+            }
+            if viewModel.currentMode == .debate {
+                Menu {
+                    ForEach(1...4, id: \.self) { n in
+                        Button {
+                            viewModel.debateRoundsForNextSend = n
+                        } label: {
+                            if n == viewModel.debateRoundsForNextSend {
+                                Label(roundsLabel(n), systemImage: "checkmark")
+                            } else {
+                                Text(roundsLabel(n))
+                            }
+                        }
+                    }
+                } label: {
+                    Label("Debate 轮数", systemImage: "arrow.triangle.2.circlepath")
+                }
             }
             Divider()
-            Button {
-                viewModel.enhancePrompt()
-                showEnhancer = true
-            } label: {
-                Label("AI 改写问题", systemImage: "wand.and.stars")
-            }
-            .disabled(promptEmpty)
-            Button {
-                viewModel.improvePrompt()
-            } label: {
-                Label(viewModel.improvingPrompt ? "正在润色" : "润色问题",
-                      systemImage: viewModel.improvingPrompt ? "hourglass" : "wand.and.rays")
-            }
-            .disabled(promptEmpty || viewModel.improvingPrompt)
-            if viewModel.currentMode == .direct {
-                Divider()
-                Button {
-                    viewModel.generateImage()
-                } label: {
-                    Label(viewModel.isGeneratingImage ? "正在生成图片" : "生成图片",
-                          systemImage: viewModel.isGeneratingImage ? "hourglass" : "photo.badge.plus")
-                }
-                .disabled(viewModel.isGeneratingImage || promptEmpty)
-                if viewModel.imageGenComparableProviders.count >= 2 {
-                    Button {
-                        viewModel.generateImageComparison()
-                    } label: {
-                        Label(viewModel.isGeneratingImage ? "正在生成对比" : "图像生成对比",
-                              systemImage: viewModel.isGeneratingImage ? "hourglass" : "photo.stack")
+            iOSMoreToolsMenuContent
+        } label: {
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: "plus")
+                    .font(.system(size: 15, weight: .black))
+                    .foregroundStyle(active ? tint : .secondary)
+                    .frame(width: toolButtonSize, height: toolButtonSize)
+                    .background((active ? tint : Color.primary).opacity(active ? 0.13 : 0.055), in: Circle())
+                    .overlay {
+                        Circle().strokeBorder((active ? tint : Color.primary).opacity(active ? 0.28 : 0.07), lineWidth: 1)
                     }
-                    .disabled(viewModel.isGeneratingImage || promptEmpty)
+                if active {
+                    Circle()
+                        .fill(tint)
+                        .frame(width: 7, height: 7)
+                        .overlay(Circle().strokeBorder(Color.platformWindowBackground, lineWidth: 1.5))
+                        .offset(x: -1, y: 1)
                 }
             }
+        }
+        .menuIndicator(.hidden)
+        .accessibilityLabel(active ? "更多工具,有已启用上下文" : "更多工具")
+    }
+
+    private var moreToolsMenu: some View {
+        Menu {
+            iOSMoreToolsMenuContent
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: "ellipsis.circle")
@@ -541,6 +573,87 @@ struct InputBarView: View {
         }
         .menuIndicator(.hidden)
         .accessibilityLabel("更多工具")
+    }
+
+    @ViewBuilder
+    private var iOSMoreToolsMenuContent: some View {
+        let promptEmpty = viewModel.promptIsBlank
+        Button {
+            withAnimation(.easeInOut(duration: 0.18)) { showSystemPromptDrawer.toggle() }
+        } label: {
+            Label("System Prompt", systemImage: "slider.horizontal.3")
+        }
+        Button {
+            showPromptLibrary = true
+        } label: {
+            Label("提示词库", systemImage: "text.badge.plus")
+        }
+        Button {
+            showKnowledge = true
+        } label: {
+            Label("知识库", systemImage: "books.vertical")
+        }
+        Divider()
+        Button {
+            viewModel.deviceToolsEnabledForNextSend.toggle()
+        } label: {
+            Label(viewModel.deviceToolsEnabledForNextSend ? "关闭设备工具" : "启用设备工具",
+                  systemImage: viewModel.deviceToolsEnabledForNextSend ? "checkmark.circle" : "wrench.and.screwdriver.fill")
+        }
+        iOSSkillBindingMenu
+        iOSGitHubMenu
+        if !viewModel.canEnableWebSearch {
+            Label("网页搜索未配置", systemImage: "globe.badge.exclamationmark")
+        }
+        if viewModel.canEnableWebSearch {
+            Button {
+                urlDraft = ""
+                showURLScrape = true
+            } label: {
+                Label(scraping ? "正在抓取网页" : "抓取网页正文",
+                      systemImage: scraping ? "hourglass" : "link.badge.plus")
+            }
+            .disabled(scraping)
+        }
+        Divider()
+        Button {
+            showVoice = true
+        } label: {
+            Label("语音对话", systemImage: "waveform")
+        }
+        Button {
+            viewModel.enhancePrompt()
+            showEnhancer = true
+        } label: {
+            Label("AI 改写问题", systemImage: "wand.and.stars")
+        }
+        .disabled(promptEmpty)
+        Button {
+            viewModel.improvePrompt()
+        } label: {
+            Label(viewModel.improvingPrompt ? "正在润色" : "润色问题",
+                  systemImage: viewModel.improvingPrompt ? "hourglass" : "wand.and.rays")
+        }
+        .disabled(promptEmpty || viewModel.improvingPrompt)
+        if viewModel.currentMode == .direct {
+            Divider()
+            Button {
+                viewModel.generateImage()
+            } label: {
+                Label(viewModel.isGeneratingImage ? "正在生成图片" : "生成图片",
+                      systemImage: viewModel.isGeneratingImage ? "hourglass" : "photo.badge.plus")
+            }
+            .disabled(viewModel.isGeneratingImage || promptEmpty)
+            if viewModel.imageGenComparableProviders.count >= 2 {
+                Button {
+                    viewModel.generateImageComparison()
+                } label: {
+                    Label(viewModel.isGeneratingImage ? "正在生成对比" : "图像生成对比",
+                          systemImage: viewModel.isGeneratingImage ? "hourglass" : "photo.stack")
+                }
+                .disabled(viewModel.isGeneratingImage || promptEmpty)
+            }
+        }
     }
 
     private var iOSSkillBindingMenu: some View {
@@ -645,7 +758,7 @@ struct InputBarView: View {
 
     /// 「润色」按钮:用小模型把当前输入改写得更清晰、具体、结构化(内联预览,非 sheet)。
     private var promptImproveButton: some View {
-        let empty = viewModel.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let empty = viewModel.promptIsBlank
         return iconButton(viewModel.improvingPrompt ? "hourglass" : "wand.and.rays",
                           help: empty ? "先输入问题再润色" : "润色:让提问更清晰、具体、结构化") {
             viewModel.improvePrompt()
@@ -1128,6 +1241,10 @@ struct InputBarView: View {
     }
 
     #if os(iOS)
+    private var iOSKeyboardCompact: Bool {
+        inputFocused
+    }
+
     private var hasIOSContextChips: Bool {
         viewModel.deviceToolsEnabledForNextSend ||
         viewModel.currentBoundSkill != nil ||
@@ -1201,7 +1318,7 @@ struct InputBarView: View {
 
     private var shellSpacing: CGFloat {
         #if os(iOS)
-        return 6
+        return iOSKeyboardCompact ? 4 : 6
         #else
         return 10
         #endif
@@ -1209,7 +1326,7 @@ struct InputBarView: View {
 
     private var shellHorizontalPadding: CGFloat {
         #if os(iOS)
-        return 12
+        return iOSKeyboardCompact ? 8 : 12
         #else
         return 16
         #endif
@@ -1217,7 +1334,7 @@ struct InputBarView: View {
 
     private var shellVerticalPadding: CGFloat {
         #if os(iOS)
-        return 8
+        return iOSKeyboardCompact ? 5 : 8
         #else
         return 12
         #endif
@@ -1225,7 +1342,7 @@ struct InputBarView: View {
 
     private var promptHorizontalPadding: CGFloat {
         #if os(iOS)
-        return 13
+        return iOSKeyboardCompact ? 11 : 13
         #else
         return 16
         #endif
@@ -1233,7 +1350,7 @@ struct InputBarView: View {
 
     private var promptVerticalPadding: CGFloat {
         #if os(iOS)
-        return 9
+        return iOSKeyboardCompact ? 7 : 9
         #else
         return 12
         #endif
@@ -1241,15 +1358,39 @@ struct InputBarView: View {
 
     private var promptMinHeight: CGFloat {
         #if os(iOS)
-        return 44
+        return iOSKeyboardCompact ? 40 : 44
         #else
         return 48
         #endif
     }
 
+    private var promptMaxLines: Int {
+        #if os(iOS)
+        return iOSKeyboardCompact ? 3 : 5
+        #else
+        return 5
+        #endif
+    }
+
+    private var largePromptMaxHeight: CGFloat {
+        #if os(iOS)
+        return iOSKeyboardCompact ? 110 : 180
+        #else
+        return 220
+        #endif
+    }
+
+    private var promptCornerRadius: CGFloat {
+        #if os(iOS)
+        return iOSKeyboardCompact ? 20 : 16
+        #else
+        return 16
+        #endif
+    }
+
     private var toolButtonSize: CGFloat {
         #if os(iOS)
-        return 34
+        return iOSKeyboardCompact ? 32 : 34
         #else
         return 30
         #endif
@@ -1304,7 +1445,7 @@ struct InputBarView: View {
 
     private var sendButtonSize: CGFloat {
         #if os(iOS)
-        return 42
+        return iOSKeyboardCompact ? 38 : 42
         #else
         return 38
         #endif
