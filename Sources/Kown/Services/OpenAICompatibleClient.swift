@@ -90,8 +90,14 @@ struct OpenAICompatibleClient: LLMClient {
                         guard let ctx = options.toolContext else { break }
                         let router = ToolRouter(context: ctx)
                         for call in result.toolCalls {
+                            let argsSummary = ToolStep.summarizeArgs(argumentsJSON: call.argumentsJSON)
+                            continuation.yield(.toolStep(ToolStep(id: call.id, round: round,
+                                toolName: call.name, argsSummary: argsSummary, status: .running)))
                             continuation.yield(.toolEvent(Self.eventLineForCall(call)))
                             let toolResult = await router.execute(call)
+                            continuation.yield(.toolStep(ToolStep(id: call.id, round: round,
+                                toolName: call.name, argsSummary: argsSummary,
+                                status: toolResult.isError ? .error : .done, resultSummary: toolResult.summary)))
                             continuation.yield(.toolEvent(toolResult.summary))
                             let refs = ToolRouter.sources(from: toolResult)
                             if !refs.isEmpty { continuation.yield(.sources(refs)) }

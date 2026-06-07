@@ -28,6 +28,8 @@ final class ResponseState: Identifiable {
     var finishedAt: Date?
     /// 工具调用/搜索进度等附加事件,在 UI 顶部以 chip 形式渲染。
     var events: [String] = []
+    /// 结构化工具步骤(Agent 步骤可视化),按 round 分组渲染成步骤树。非空时优先于 `events` chips。
+    var toolSteps: [ToolStep] = []
     /// 本轮 token 用量(流末尾的 usage chunk 填充)。用于回答卡的成本角标 + 落盘进 Turn。
     var inputTokens: Int = 0
     var outputTokens: Int = 0
@@ -71,6 +73,7 @@ final class ResponseState: Identifiable {
         charCount = 0
         reasoning = ""
         events = []
+        toolSteps = []
         inputTokens = 0
         outputTokens = 0
         cachedInputTokens = 0
@@ -126,6 +129,15 @@ final class ResponseState: Identifiable {
         let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         events.append(trimmed)
+    }
+
+    /// 按 id upsert 一步工具进度(running 先插入,done/error 原地更新)。
+    func upsertToolStep(_ step: ToolStep) {
+        if let idx = toolSteps.firstIndex(where: { $0.id == step.id }) {
+            toolSteps[idx] = step
+        } else {
+            toolSteps.append(step)
+        }
     }
 
     func finish() {

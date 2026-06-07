@@ -116,8 +116,14 @@ struct GeminiClient: LLMClient {
                         let router = ToolRouter(context: ctx)
                         var functionResponseParts: [[String: Any]] = []
                         for call in result.toolCalls {
+                            let argsSummary = ToolStep.summarizeArgs(argumentsJSON: call.argumentsJSON)
+                            continuation.yield(.toolStep(ToolStep(id: call.id, round: round,
+                                toolName: call.name, argsSummary: argsSummary, status: .running)))
                             continuation.yield(.toolEvent(Self.eventLineForCall(call)))
                             let tr = await router.execute(call)
+                            continuation.yield(.toolStep(ToolStep(id: call.id, round: round,
+                                toolName: call.name, argsSummary: argsSummary,
+                                status: tr.isError ? .error : .done, resultSummary: tr.summary)))
                             continuation.yield(.toolEvent(tr.summary))
                             let refs = ToolRouter.sources(from: tr)
                             if !refs.isEmpty { continuation.yield(.sources(refs)) }

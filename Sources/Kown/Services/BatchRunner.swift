@@ -193,6 +193,8 @@ final class BatchRunner {
                     cell.reasoning += r
                 case .toolEvent:
                     break
+                case .toolStep:
+                    break
                 case .sources:
                     break
                 case .usage(let input, let output, let cached):

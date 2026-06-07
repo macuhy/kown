@@ -319,7 +319,10 @@ struct ResponseColumnView: View {
 
     @ViewBuilder
     private var toolEventsBlock: some View {
-        if !state.events.isEmpty {
+        if !state.toolSteps.isEmpty {
+            // 有结构化步骤时优先渲染步骤树(替代平铺 chips)。
+            AgentStepsView(steps: state.toolSteps)
+        } else if !state.events.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(Array(state.events.enumerated()), id: \.offset) { _, line in
                     let color = line.hasPrefix("⚠") ? Color.orange : Color.blue
