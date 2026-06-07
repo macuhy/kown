@@ -419,6 +419,10 @@ private struct KnowledgeFolderDetail: View {
     @State private var name = ""
     @State private var showAddDoc = false
     @State private var showImporter = false
+    @State private var showAddURL = false
+    @State private var urlDraft = ""
+    @State private var scrapingURL = false
+    @State private var urlError: String?
 
     private var folder: KnowledgeFolder? {
         viewModel.knowledgeFolders.first(where: { $0.id == folderID })
@@ -454,6 +458,15 @@ private struct KnowledgeFolderDetail: View {
                 } label: {
                     Label("从文件导入", systemImage: "folder")
                 }
+                Button {
+                    urlError = nil; urlDraft = ""; showAddURL = true
+                } label: {
+                    Label(scrapingURL ? "正在抓取网页…" : "从网页链接导入", systemImage: scrapingURL ? "hourglass" : "link")
+                }
+                .disabled(scrapingURL)
+                if let urlError {
+                    Text(urlError).font(.caption2).foregroundStyle(.red)
+                }
             }
         }
         .navigationTitle(folder?.name ?? "资料夹")
@@ -472,6 +485,31 @@ private struct KnowledgeFolderDetail: View {
                       allowsMultipleSelection: true) { result in
             if case .success(let urls) = result {
                 for url in urls { importFile(url) }
+            }
+        }
+        .alert("从网页链接导入", isPresented: $showAddURL) {
+            TextField("https://…", text: $urlDraft)
+                #if os(iOS)
+                .textInputAutocapitalization(.never)
+                .keyboardType(.URL)
+                #endif
+            Button("取消", role: .cancel) {}
+            Button("抓取") { scrapeURL() }
+        } message: {
+            Text("用 Firecrawl 抓取网页正文,作为一篇文档加入本资料夹。需已配置 Web Search。")
+        }
+    }
+
+    private func scrapeURL() {
+        let u = urlDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !u.isEmpty else { return }
+        scrapingURL = true
+        urlError = nil
+        Task {
+            let err = await viewModel.addKnowledgeDocFromURL(folderID: folderID, urlString: u)
+            await MainActor.run {
+                scrapingURL = false
+                urlError = err
             }
         }
     }

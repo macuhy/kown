@@ -42,6 +42,31 @@ extension AppViewModel {
         saveKnowledge()
     }
 
+    /// 从一个 URL 抓取正文(Firecrawl)并作为文档加入资料夹。成功返回 nil,否则返回错误文案。
+    /// 需已配置 Web Search(Firecrawl key + baseURL),与 `attachScrapedURL` 同一抓取链路。
+    func addKnowledgeDocFromURL(folderID: UUID, urlString: String) async -> String? {
+        let trimmed = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "请输入链接" }
+        let normalized = trimmed.hasPrefix("http") ? trimmed : "https://" + trimmed
+        guard canEnableWebSearch, let key = try? WebSearchKey.load(), !key.isEmpty else {
+            return "需先在 设置 ▸ Web Search 配置 Firecrawl Key"
+        }
+        let client = FirecrawlClient(baseURL: webSearchConfig.baseURL, apiKey: key)
+        do {
+            let result = try await client.scrape(url: normalized)
+            var content = result.markdown
+            let maxChars = 200 * 1024
+            if content.count > maxChars { content = String(content.prefix(maxChars)) + "\n\n…(网页正文过长已截断)" }
+            // 把来源 URL 写进正文头,RAG 检索注入时也能带上出处。
+            let docName = result.title.isEmpty ? normalized : result.title
+            let body = "来源:\(normalized)\n\n\(content)"
+            addKnowledgeDoc(folderID: folderID, name: docName, text: body)
+            return nil
+        } catch {
+            return "抓取失败:\(error.localizedDescription)"
+        }
+    }
+
     func removeKnowledgeDoc(folderID: UUID, docID: UUID) {
         guard let idx = knowledgeFolders.firstIndex(where: { $0.id == folderID }) else { return }
         knowledgeFolders[idx].docs.removeAll { $0.id == docID }
