@@ -104,6 +104,16 @@ struct CompareTurnsView: View {
                     onRegenerate: { viewModel.regenerateChairWithModel(turnID: turn.id, target: .chair, newProviderID: $0) }
                 )
             }
+            // 合成最优终稿 —— opt-in「合成最优答案」按钮 + 结果卡。≥2 家非空回答才显示。
+            if turn.responses.values.filter({ !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }).count >= 2 {
+                SynthesisSection(
+                    conclusion: turn.synthesizedConclusion,
+                    providerName: turn.synthesizedConclusion.flatMap { turn.providerSnapshot[$0.providerID]?.displayName },
+                    isSynthesizing: viewModel.isSynthesizing(turnID: turn.id),
+                    error: viewModel.synthesisErrors[turn.id],
+                    onSynthesize: { viewModel.synthesizeTurn(turnID: turn.id) }
+                )
+            }
             // 答案差异分析(共識/分歧)—— opt-in「分析分歧」按钮 + 结果面板。
             ConsensusSection(
                 analysis: turn.consensusAnalysis,

@@ -226,7 +226,8 @@ enum ToolCatalog {
                              deviceTools: Bool,
                              extraToolNames: Set<String>,
                              gitHub: Bool = false,
-                             fileSystem: Bool = false) -> [LLMTool] {
+                             fileSystem: Bool = false,
+                             mcpTools: [LLMTool] = []) -> [LLMTool] {
         var tools: [LLMTool] = []
         if webSearch != nil { tools.append(ToolCatalog.webSearch) }
         if deviceTools || extraToolNames.contains(ToolCatalog.createReminder.name) { tools.append(ToolCatalog.createReminder) }
@@ -242,6 +243,8 @@ enum ToolCatalog {
             tools.append(ToolCatalog.localListDir)
             tools.append(ToolCatalog.localWriteFile)
         }
+        // 外部 MCP server 暴露的工具(已命名空间化),直接追加。
+        tools.append(contentsOf: mcpTools)
         return tools
     }
 }
@@ -266,11 +269,13 @@ struct WebSearchSession: Sendable {
 /// 设备工具(提醒/备忘)执行时走各自的单例 / 系统服务,不需要额外上下文。
 /// `nil` 表示本次不带任何工具 —— 客户端据此跳过工具循环、且不注入当前时间。
 struct ToolContext: Sendable {
-    var webSearch: WebSearchSession?
+    var webSearch: WebSearchSession? = nil
     /// 本会话绑定的 GitHub 写入目标;非 nil 时 `github_read_file` 工具可用。
-    var github: GitHubWriteTarget?
+    var github: GitHubWriteTarget? = nil
     /// 本地文件工具授权目录的 security-scoped bookmark(macOS);非 nil 时本地文件工具可用。
-    var localFileBookmark: Data?
+    var localFileBookmark: Data? = nil
+    /// 已连接的 MCP server 会话;非 nil 时其暴露的 `mcp__…` 工具可被调用。
+    var mcp: MCPSession? = nil
 }
 
 /// 执行模型发出的 ToolCall。线程安全,无可变状态。
@@ -297,6 +302,13 @@ struct ToolRouter: Sendable {
     }
 
     func execute(_ call: ToolCall) async -> ToolResult {
+        // MCP 工具(命名空间 mcp__…)路由到对应的 server 连接执行。
+        if MCPSession.isMCPTool(call.name) {
+            guard let mcp = context.mcp else {
+                return Self.errorResult(call, summary: "⚠ MCP 未连接", message: "no mcp session")
+            }
+            return await mcp.callTool(call)
+        }
         switch call.name {
         case ToolCatalog.webSearch.name:
             return await runWebSearch(call)

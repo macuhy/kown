@@ -424,6 +424,8 @@ struct InputBarView: View {
                                : "附加图片（当前面板里没有支持视觉的 provider，发送时会忽略）") { pickImage() }
             webSearchToggle
             deviceToolsToggle
+            mcpToggle
+            deepAgentToggle
             skillPicker
             if viewModel.currentMode == .debate {
                 debateRoundsPicker
@@ -602,6 +604,22 @@ struct InputBarView: View {
         } label: {
             Label(viewModel.deviceToolsEnabledForNextSend ? "关闭设备工具" : "启用设备工具",
                   systemImage: viewModel.deviceToolsEnabledForNextSend ? "checkmark.circle" : "wrench.and.screwdriver.fill")
+        }
+        if !viewModel.mcpStore.enabledServers.isEmpty {
+            Button {
+                viewModel.mcpEnabledForNextSend.toggle()
+            } label: {
+                Label(viewModel.mcpEnabledForNextSend ? "关闭 MCP 工具" : "启用 MCP 工具",
+                      systemImage: viewModel.mcpEnabledForNextSend ? "checkmark.circle" : "powerplug.fill")
+            }
+        }
+        if viewModel.currentMode == .direct {
+            Button {
+                viewModel.deepAgentEnabledForNextSend.toggle()
+            } label: {
+                Label(viewModel.deepAgentEnabledForNextSend ? "关闭深入模式" : "启用深入模式",
+                      systemImage: viewModel.deepAgentEnabledForNextSend ? "checkmark.circle" : "brain.head.profile")
+            }
         }
         #if os(macOS)
         if LocalFileToolState.shared.isAuthorized {
@@ -1141,6 +1159,66 @@ struct InputBarView: View {
         .help(isOn ? "下一条消息可创建提醒/备忘录(再按关闭)" : "本次发送启用设备工具(提醒/备忘录)")
     }
 
+    /// MCP 工具开关 — 本次发送连接已挂载的 MCP server。仅当至少挂载了一个 server 时显示。
+    @ViewBuilder
+    private var mcpToggle: some View {
+        if !viewModel.mcpStore.enabledServers.isEmpty {
+            let isOn = viewModel.mcpEnabledForNextSend
+            Button {
+                viewModel.mcpEnabledForNextSend.toggle()
+            } label: {
+                Image(systemName: "powerplug.fill")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(isOn ? Color.white : .secondary)
+                    .frame(width: toolButtonSize, height: toolButtonSize)
+                    .background {
+                        Circle().fill(
+                            isOn
+                                ? LinearGradient(colors: [Color(red: 0.26, green: 0.54, blue: 0.80), Color.blue.opacity(0.78)],
+                                                 startPoint: .topLeading, endPoint: .bottomTrailing)
+                                : LinearGradient(colors: [Color.primary.opacity(0.06), Color.primary.opacity(0.035)],
+                                                 startPoint: .topLeading, endPoint: .bottomTrailing)
+                        )
+                    }
+                    .overlay {
+                        Circle().strokeBorder(isOn ? Color.white.opacity(0.24) : Color.primary.opacity(0.08), lineWidth: 1)
+                    }
+            }
+            .buttonStyle(.plain)
+            .help(isOn ? "本次发送已挂载 MCP 工具(再按关闭)" : "本次发送启用 MCP 工具(\(viewModel.mcpStore.enabledServers.count) 个 server)")
+        }
+    }
+
+    /// 深入模式开关(仅 Direct)— 本次发送走多步 Agent:规划→多轮工具→自检→交付。
+    @ViewBuilder
+    private var deepAgentToggle: some View {
+        if viewModel.currentMode == .direct {
+            let isOn = viewModel.deepAgentEnabledForNextSend
+            Button {
+                viewModel.deepAgentEnabledForNextSend.toggle()
+            } label: {
+                Image(systemName: "brain.head.profile")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(isOn ? Color.white : .secondary)
+                    .frame(width: toolButtonSize, height: toolButtonSize)
+                    .background {
+                        Circle().fill(
+                            isOn
+                                ? LinearGradient(colors: [Color(red: 0.52, green: 0.36, blue: 0.86), Color.purple.opacity(0.78)],
+                                                 startPoint: .topLeading, endPoint: .bottomTrailing)
+                                : LinearGradient(colors: [Color.primary.opacity(0.06), Color.primary.opacity(0.035)],
+                                                 startPoint: .topLeading, endPoint: .bottomTrailing)
+                        )
+                    }
+                    .overlay {
+                        Circle().strokeBorder(isOn ? Color.white.opacity(0.24) : Color.primary.opacity(0.08), lineWidth: 1)
+                    }
+            }
+            .buttonStyle(.plain)
+            .help(isOn ? "深入模式:多步规划+多轮工具+自检(再按关闭)" : "本次发送启用深入模式(配合工具效果最佳)")
+        }
+    }
+
     /// 技能选择 — 手动给当前会话绑定一个技能,或留空走自动触发。
     @ViewBuilder
     private var skillPicker: some View {
@@ -1260,6 +1338,8 @@ struct InputBarView: View {
 
     private var hasIOSContextChips: Bool {
         viewModel.deviceToolsEnabledForNextSend ||
+        viewModel.mcpEnabledForNextSend ||
+        (viewModel.deepAgentEnabledForNextSend && viewModel.currentMode == .direct) ||
         viewModel.currentBoundSkill != nil ||
         viewModel.currentGitHubRepo != nil
     }
@@ -1274,6 +1354,24 @@ struct InputBarView: View {
                         tint: Color(red: 0.20, green: 0.60, blue: 0.62)
                     ) {
                         viewModel.deviceToolsEnabledForNextSend = false
+                    }
+                }
+                if viewModel.mcpEnabledForNextSend {
+                    contextChip(
+                        "MCP",
+                        icon: "powerplug.fill",
+                        tint: Color(red: 0.26, green: 0.54, blue: 0.80)
+                    ) {
+                        viewModel.mcpEnabledForNextSend = false
+                    }
+                }
+                if viewModel.deepAgentEnabledForNextSend && viewModel.currentMode == .direct {
+                    contextChip(
+                        "深入模式",
+                        icon: "brain.head.profile",
+                        tint: Color(red: 0.52, green: 0.36, blue: 0.86)
+                    ) {
+                        viewModel.deepAgentEnabledForNextSend = false
                     }
                 }
                 if let skill = viewModel.currentBoundSkill {

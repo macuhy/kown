@@ -22,6 +22,10 @@ struct ChatOptions: Sendable {
     /// 客户端通过 `toolContext` 在工具被调用时本地执行并回灌结果。
     var tools: [LLMTool] = []
     var toolContext: ToolContext? = nil
+    /// 工具循环最多轮数。默认 6;Direct「深入模式」抬高到更大值,支持长链多步 Agent。
+    var maxToolRounds: Int = 6
+    /// Agent 指令:非空时拼到 system prompt 最前面(规划→执行→自检→交付)。仅深入模式注入。
+    var agentInstruction: String? = nil
 
     static let `default` = ChatOptions()
 }
@@ -63,10 +67,13 @@ func joinURL(_ base: String, _ path: String) -> String {
 /// `includeCurrentTime` 为 true 时在最前面注入当前日期/星期/时区
 /// — 当前只在 🌐 web search 启用时这么干,因为搜来的结果天然带时效性。
 /// 摘要单独成块,带 [对话回顾] 标签,提示模型这是"以前的事"。
-func combineSystem(userSystem: String?, summary: String?, includeCurrentTime: Bool = false) -> String? {
+func combineSystem(userSystem: String?, summary: String?, includeCurrentTime: Bool = false,
+                   agentInstruction: String? = nil) -> String? {
     let sys = (userSystem ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     let sum = (summary ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    let agent = (agentInstruction ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     var parts: [String] = []
+    if !agent.isEmpty { parts.append(agent) }
     if includeCurrentTime {
         parts.append(currentTimeContextLine())
         // 联网检索开启时(includeCurrentTime == 本次带工具),要求行内标注引用,

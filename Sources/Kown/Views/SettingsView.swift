@@ -12,6 +12,7 @@ struct SettingsView: View {
         case prompts
         case skills
         case deviceTools
+        case mcp
         case github
         case chains
         case webSearch
@@ -36,6 +37,7 @@ struct SettingsView: View {
             case .prompts:     return "Prompt 库"
             case .skills:      return "技能"
             case .deviceTools: return "设备工具"
+            case .mcp:         return "MCP"
             case .github:      return "GitHub"
             case .chains:      return "工作流"
             case .webSearch:   return "Web Search"
@@ -60,6 +62,7 @@ struct SettingsView: View {
             case .prompts:     return "text.badge.plus"
             case .skills:      return "wand.and.stars"
             case .deviceTools: return "wrench.and.screwdriver.fill"
+            case .mcp:         return "powerplug"
             case .github:      return "chevron.left.forwardslash.chevron.right"
             case .chains:      return "arrow.triangle.branch"
             case .webSearch:   return "globe"
@@ -84,6 +87,7 @@ struct SettingsView: View {
             case .prompts:     return Color(red: 0.56, green: 0.40, blue: 0.86)
             case .skills:      return Color(red: 0.48, green: 0.36, blue: 0.90)
             case .deviceTools: return Color(red: 0.20, green: 0.60, blue: 0.62)
+            case .mcp:         return Color(red: 0.26, green: 0.54, blue: 0.80)
             case .github:      return Color(red: 0.18, green: 0.62, blue: 0.58)
             case .chains:      return Color(red: 0.30, green: 0.52, blue: 0.88)
             case .webSearch:   return Color(red: 0.16, green: 0.48, blue: 0.94)
@@ -174,6 +178,8 @@ struct SettingsView: View {
                         SkillsLibraryView(store: viewModel.skillsStore, viewModel: viewModel)
                     case .deviceTools:
                         DeviceToolsSettingsView(viewModel: viewModel)
+                    case .mcp:
+                        MCPSettingsView(viewModel: viewModel)
                     case .github:
                         gitHubTab
                     case .chains:
@@ -536,7 +542,7 @@ struct SettingsView: View {
     private var desktopTabSections: [(title: String, tabs: [Tab])] {
         [
             ("基础", [.providers, .prompts, .skills, .deviceTools, .github]),
-            ("工作流", [.chains, .webSearch, .tts, .scheduler, .performance]),
+            ("工作流", [.chains, .mcp, .webSearch, .tts, .scheduler, .performance]),
             ("数据", [.sync, .backup, .memory, .favorites]),
             ("洞察", [.usage, .dashboard, .leaderboard, .eval]),
             ("版本", [.updates, .changelog])
@@ -733,6 +739,8 @@ struct SettingsView: View {
                 SkillsLibraryView(store: viewModel.skillsStore, viewModel: viewModel)
             case .deviceTools:
                 DeviceToolsSettingsView(viewModel: viewModel)
+            case .mcp:
+                MCPSettingsView(viewModel: viewModel)
             case .github:
                 gitHubTab
             case .chains:
@@ -1128,6 +1136,7 @@ struct SettingsView: View {
         case .prompts:     return "保存可复用的 Prompt 模板,用 {{变量}} 占位,填充后一键复制。"
         case .skills:      return "技能 = 系统提示 + 可用工具。可按输入自动触发,也可绑定到当前会话。"
         case .deviceTools: return "让模型在你的系统「提醒事项 / 备忘录」里创建条目。需授权;iOS 备忘录走剪贴板+跳转。"
+        case .mcp:         return "挂载外部 MCP server,把任意第三方工具暴露给模型。支持远程 HTTP/SSE,macOS 还支持本地 stdio 命令。"
         case .github:      return "连接 GitHub 后,对话里可选仓库,把定稿内容直接提交;聊天显示改动行数与 commit 链接。"
         case .chains:      return "把多个「模型 + 指示」步骤串成流水线,用 {{prev}} / {{input}} 接力,逐步执行。"
         case .webSearch:   return "配置 Firecrawl 让模型在需要时调用 web_search。"

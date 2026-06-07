@@ -61,6 +61,10 @@ struct DirectTurnsView: View {
                     errors: turn.imageGenErrors ?? [:]
                 )
             } else {
+                // 历史回看:有留痕的工具步骤树就展示(深入模式 / 带工具的回答)。
+                if let steps = turn.toolSteps, !steps.isEmpty {
+                    AgentStepsView(steps: steps)
+                }
                 if let cfg = turn.orderedPanelConfigs.first {
                     let key = cfg.id.uuidString
                     assistantBubble(

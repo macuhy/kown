@@ -2,7 +2,6 @@ import Foundation
 
 struct OpenAICompatibleClient: LLMClient {
     /// 一次 tool-use 循环里允许的最大轮数。最后一轮强制无工具,且追加一条用户提示让模型 wrap up。
-    private static let maxToolRounds = 6
 
     func stream(prompt: String,
                 options: ChatOptions,
@@ -15,7 +14,8 @@ struct OpenAICompatibleClient: LLMClient {
                     if let sys = combineSystem(
                         userSystem: options.systemPrompt,
                         summary: options.contextSummary,
-                        includeCurrentTime: options.toolContext != nil
+                        includeCurrentTime: options.toolContext != nil,
+                        agentInstruction: options.agentInstruction
                     ) {
                         messages.append(["role": "system", "content": sys])
                     }
@@ -33,8 +33,9 @@ struct OpenAICompatibleClient: LLMClient {
                     var cumulativeOutput = 0
                     var cumulativeCached = 0
 
-                    for round in 0..<Self.maxToolRounds {
-                        let isLast = round == Self.maxToolRounds - 1
+                    let maxRounds = max(1, options.maxToolRounds)
+                    for round in 0..<maxRounds {
+                        let isLast = round == maxRounds - 1
                         if isLast, options.toolContext != nil, !options.tools.isEmpty {
                             // 多 tool 轮已耗尽 — 提示模型停止调用,以现有信息作答
                             messages.append([

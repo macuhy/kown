@@ -46,6 +46,17 @@ extension AppViewModel {
         send()
     }
 
+    /// 深入模式注入到 system prompt 最前面的 Agent 指令:规划 → 多轮工具 → 自检 → 交付。
+    static let deepAgentInstruction = """
+    你现在处于「深入模式」,作为一个自主 Agent 工作。请按以下方式完成用户的任务:
+    1. 规划:先想清楚要达成的目标,把它拆成几个步骤(复杂任务才需要明说计划)。
+    2. 执行:主动、多次使用可用的工具(联网搜索 / 读写文件 / MCP 工具 / 日历提醒等)收集事实与证据,\
+    不要凭记忆臆断可验证的信息;一个工具不够就接着调下一个,直到信息足够。
+    3. 自检:给出结论前,回看已有证据是否真的支撑结论,有没有遗漏、矛盾或没核实的关键点;不够就继续调工具补齐。
+    4. 交付:给出完整、准确、可执行的最终答案,并在结尾用一句话说明你做了哪些核查、置信度如何。
+    在目标真正达成前不要轻易停下;但也不要无意义地重复调用工具。
+    """
+
     func send() {
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -171,9 +182,14 @@ extension AppViewModel {
             gitHub: gitHubTargetForSend != nil,
             fileSystem: fileToolsBookmark != nil)
         // 有任一工具才建 context;否则 nil(客户端据此跳过工具循环、不注入当前时间)。
+        // 注:MCP 工具在 runSend 的后台任务里异步连接后再并入,这里不计入「是否建 context」的判断。
         let toolContextSnapshot: ToolContext? = toolsSnapshot.isEmpty
             ? nil : ToolContext(webSearch: webSessionSnapshot, github: gitHubTargetForSend,
                                 localFileBookmark: fileToolsBookmark)
+        // MCP:开关开时,带上已启用的 server 配置快照,真正的连接 + tools/list 在后台任务里做。
+        let mcpServersForSend: [MCPServerConfig] = mcpEnabledForNextSend ? mcpStore.enabledServers : []
+        // 深入模式(仅 Direct):抬高工具循环上限 + 注入 Agent 规划/自检指令。
+        let deepAgentForSend = (currentMode == .direct && deepAgentEnabledForNextSend)
         let modeSnapshot = currentMode
         let debateRoundsSnapshot = debateRoundsForNextSend
         // Summary 只在 Council 模式跑
@@ -203,7 +219,9 @@ extension AppViewModel {
             knowledgeFolder: knowledgeFolderForSend,
             knowledgeQuery: trimmed,
             memoryItems: memoryItemsForSend,
-            memoryQuery: memoryQueryForSend
+            memoryQuery: memoryQueryForSend,
+            mcpServers: mcpServersForSend,
+            deepAgent: deepAgentForSend
         )
     }
 
@@ -289,7 +307,11 @@ extension AppViewModel {
         knowledgeFolder: KnowledgeFolder? = nil,
         knowledgeQuery: String = "",
         memoryItems: [MemoryItem] = [],
-        memoryQuery: String? = nil
+        memoryQuery: String? = nil,
+        // 本次发送启用的 MCP server(已启用 + 开关开时才非空);连接在后台任务里做。
+        mcpServers: [MCPServerConfig] = [],
+        // 深入模式(仅 Direct):多步 Agent 长链。
+        deepAgent: Bool = false
     ) {
         guard !panel.isEmpty else { return }
         // 别名:让下方异步体与原 send() 逐行一致,降低抽取风险
@@ -383,6 +405,21 @@ extension AppViewModel {
                 return
             }
 
+            // MCP:连接已启用的 server、拉工具,并入本次工具集 + 上下文(连不上的 server 自动跳过)。
+            // 连接是网络 / 子进程操作,放在这里(后台任务)做;只有 panel 工具循环用得到。
+            let mcpSession: MCPSession? = mcpServers.isEmpty ? nil : await MCPSession.connect(servers: mcpServers)
+            var effectiveTools = toolsSnapshot
+            var effectiveToolContext = toolContextSnapshot
+            if let mcp = mcpSession {
+                effectiveTools.append(contentsOf: mcp.tools)
+                var ctx = effectiveToolContext ?? ToolContext()
+                ctx.mcp = mcp
+                effectiveToolContext = ctx
+            }
+            // 深入模式:抬高工具循环上限,并注入 Agent 规划/执行/自检指令(仅 Direct,见 send())。
+            let agentMaxRounds = deepAgent ? 12 : 6
+            let agentInstructionForSend: String? = deepAgent ? Self.deepAgentInstruction : nil
+
             var responses: [String: String] = [:]
             var errors: [String: String] = [:]
             // 思考过程 + token 用量,key = providerID(uuidString),panel/chair/summary 共用。
@@ -455,8 +492,8 @@ extension AppViewModel {
                         images: imageSnapshot,
                         contextSummary: contextSummarySnapshot,
                         priorTurns: priorTurnsSnapshot,
-                        tools: toolsSnapshot,
-                        toolContext: toolContextSnapshot,
+                        tools: effectiveTools,
+                        toolContext: effectiveToolContext,
                         conversationTitle: convTitleSnapshot,
                         conversationID: convIDString
                     )
@@ -495,10 +532,12 @@ extension AppViewModel {
                     images: imageSnapshot,
                     contextSummary: contextSummarySnapshot,
                     priorTurns: priorTurnsSnapshot,
-                    tools: toolsSnapshot,
-                    toolContext: toolContextSnapshot,
+                    tools: effectiveTools,
+                    toolContext: effectiveToolContext,
                     conversationTitle: convTitleSnapshot,
-                    conversationID: convIDString
+                    conversationID: convIDString,
+                    maxToolRounds: agentMaxRounds,
+                    agentInstruction: agentInstructionForSend
                 )
                 responses = panelResult.responses
                 errors = panelResult.errors
@@ -514,6 +553,12 @@ extension AppViewModel {
                     }
                     if !s.sources.isEmpty { sourcesByProvider[cfg.id.uuidString] = s.sources }
                 }
+            }
+
+            // 工具调用步骤树:留主答案(panel 首家)的步骤,落盘进 Turn,刷新会话后仍可见 Agent 轨迹。
+            var primaryToolSteps: [ToolStep]? = nil
+            if let firstCfg = panel.first, let s = self.liveStates[firstCfg.id], !s.toolSteps.isEmpty {
+                primaryToolSteps = s.toolSteps
             }
 
             // 1.5) Tournament(擂台 / 淘汰赛):panel 已各自回答,现在让裁判用单淘汰赛两两对决,
@@ -768,7 +813,8 @@ extension AppViewModel {
                     councilVotes: councilVotes,
                     sourcesByProvider: sourcesByProvider.isEmpty ? nil : sourcesByProvider,
                     knowledgeSources: knowledgeSourcesSnapshot.isEmpty ? nil : knowledgeSourcesSnapshot,
-                    escalationSuggestion: escalationSuggestion
+                    escalationSuggestion: escalationSuggestion,
+                    toolSteps: primaryToolSteps
                 )
                 self.conversations[idx].turns.append(turn)
                 self.conversations[idx].updatedAt = Date()
@@ -800,6 +846,9 @@ extension AppViewModel {
                 title: "Kown 回答已完成",
                 body: notifyBody
             )
+
+            // 释放 MCP 连接(stdio 子进程退出 / HTTP 会话丢弃)。
+            await mcpSession?.closeAll()
 
             self.liveStates.removeAll()
             self.liveChairState = nil
@@ -1510,7 +1559,9 @@ extension AppViewModel {
         tools: [LLMTool],
         toolContext: ToolContext?,
         conversationTitle: String,
-        conversationID: String
+        conversationID: String,
+        maxToolRounds: Int = 6,
+        agentInstruction: String? = nil
     ) async -> (responses: [String: String], errors: [String: String]) {
         startLivePanelRound(panel)
 
@@ -1535,7 +1586,9 @@ extension AppViewModel {
                         tools: tools,
                         toolContext: toolContext,
                         conversationTitle: conversationTitle,
-                        conversationID: conversationID
+                        conversationID: conversationID,
+                        maxToolRounds: maxToolRounds,
+                        agentInstruction: agentInstruction
                     )
                 }
             }
@@ -1720,7 +1773,9 @@ extension AppViewModel {
         tools: [LLMTool],
         toolContext: ToolContext?,
         conversationTitle: String,
-        conversationID: String
+        conversationID: String,
+        maxToolRounds: Int = 6,
+        agentInstruction: String? = nil
     ) async -> (UUID, String, String?) {
         let state: ResponseState
         switch target {
@@ -1744,6 +1799,8 @@ extension AppViewModel {
             options.priorTurns = priorTurns
             options.tools = tools
             options.toolContext = toolContext
+            options.maxToolRounds = maxToolRounds
+            options.agentInstruction = agentInstruction
             for try await chunk in client.stream(prompt: prompt, options: options, config: config, apiKey: key) {
                 if Task.isCancelled { break }
                 switch chunk {

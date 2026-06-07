@@ -27,8 +27,8 @@ enum LLMStreamChunk: Sendable {
 }
 
 /// 一步工具调用的结构化进度。`id` = 模型给的 tool_use id,用于把 running → done/error 更新到同一步。
-struct ToolStep: Identifiable, Sendable, Hashable {
-    enum Status: String, Sendable, Hashable {
+struct ToolStep: Identifiable, Sendable, Hashable, Codable {
+    enum Status: String, Sendable, Hashable, Codable {
         case running    // 已发起调用,等结果
         case done       // 成功
         case error      // 失败
@@ -68,7 +68,16 @@ struct ToolStep: Identifiable, Sendable, Hashable {
         case "local_read_file":  return "读取本地文件"
         case "local_list_dir":   return "列出目录"
         case "local_write_file": return "暂存文件改动"
-        default:                  return toolName
+        default:
+            // MCP 工具:mcp__<slug>__<tool> → 「<tool> · <slug>」,去掉前缀更易读。
+            if toolName.hasPrefix("mcp__") {
+                let rest = String(toolName.dropFirst("mcp__".count))
+                if let sep = rest.range(of: "__") {
+                    return "\(String(rest[sep.upperBound...])) · \(String(rest[..<sep.lowerBound]))"
+                }
+                return rest
+            }
+            return toolName
         }
     }
 
@@ -99,7 +108,7 @@ struct ToolStep: Identifiable, Sendable, Hashable {
         case "create_note":      return "note.text"
         case "github_read_file": return "chevron.left.forwardslash.chevron.right"
         case "local_read_file", "local_list_dir", "local_write_file": return "folder"
-        default:                  return "wrench.and.screwdriver"
+        default:                  return toolName.hasPrefix("mcp__") ? "powerplug" : "wrench.and.screwdriver"
         }
     }
 }

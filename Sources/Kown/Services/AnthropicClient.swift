@@ -1,7 +1,6 @@
 import Foundation
 
 struct AnthropicClient: LLMClient {
-    private static let maxToolRounds = 6
     /// 默认 output token 预算 — 32k 在多轮工具循环里太奢侈。
     private static let defaultMaxTokens = 8192
     /// 扩展思考的 token 预算。
@@ -74,7 +73,8 @@ struct AnthropicClient: LLMClient {
                             systemPrompt: combineSystem(
                                 userSystem: options.systemPrompt,
                                 summary: options.contextSummary,
-                                includeCurrentTime: options.toolContext != nil
+                                includeCurrentTime: options.toolContext != nil,
+                                agentInstruction: options.agentInstruction
                             ),
                             tools: tools,
                             temperature: temperature,
@@ -86,8 +86,9 @@ struct AnthropicClient: LLMClient {
                         )
                     }
 
-                    for round in 0..<Self.maxToolRounds {
-                        let isLast = round == Self.maxToolRounds - 1
+                    let maxRounds = max(1, options.maxToolRounds)
+                    for round in 0..<maxRounds {
+                        let isLast = round == maxRounds - 1
                         if isLast, options.toolContext != nil, !options.tools.isEmpty {
                             messages.append([
                                 "role": "user",

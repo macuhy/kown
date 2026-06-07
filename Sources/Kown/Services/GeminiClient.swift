@@ -1,8 +1,6 @@
 import Foundation
 
 struct GeminiClient: LLMClient {
-    private static let maxToolRounds = 6
-
     /// 构造当前轮 user content。带图片时 parts 里加 `inline_data`(base64),文本 part 在后。
     private static func makeUserContent(prompt: String, images: [Attachment.ImagePayload]) -> [String: Any] {
         var parts: [[String: Any]] = []
@@ -44,8 +42,9 @@ struct GeminiClient: LLMClient {
                     var cumulativeOutput = 0
                     var cumulativeCached = 0
 
-                    for round in 0..<Self.maxToolRounds {
-                        let isLast = round == Self.maxToolRounds - 1
+                    let maxRounds = max(1, options.maxToolRounds)
+                    for round in 0..<maxRounds {
+                        let isLast = round == maxRounds - 1
                         if isLast, options.toolContext != nil, !options.tools.isEmpty {
                             contents.append([
                                 "role": "user",
@@ -62,7 +61,8 @@ struct GeminiClient: LLMClient {
                             systemPrompt: combineSystem(
                                 userSystem: options.systemPrompt,
                                 summary: options.contextSummary,
-                                includeCurrentTime: options.toolContext != nil
+                                includeCurrentTime: options.toolContext != nil,
+                                agentInstruction: options.agentInstruction
                             ),
                             tools: toolsForThisRound,
                             temperature: options.temperature,

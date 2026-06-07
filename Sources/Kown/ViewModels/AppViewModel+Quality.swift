@@ -108,4 +108,55 @@ extension AppViewModel {
             ConversationStore.save(self.conversations[cIdx])
         }
     }
+
+    // MARK: - 合成最优终稿(Council / Compare)
+
+    func isSynthesizing(turnID: UUID) -> Bool { synthesizingTurns.contains(turnID) }
+
+    /// 把某轮各家回答合成一份最优终稿,结果写回 `Turn.synthesizedConclusion`。
+    /// 答案收集对齐 `analyzeConsensus`(panelOrder + providerSnapshot 展示名),≥2 家非空才可跑。
+    func synthesizeTurn(turnID: UUID) {
+        guard !synthesizingTurns.contains(turnID) else { return }
+        guard let convID = selectedConversationID,
+              let convIdx = conversations.firstIndex(where: { $0.id == convID }),
+              let turnIdx = conversations[convIdx].turns.firstIndex(where: { $0.id == turnID }) else { return }
+        let turn = conversations[convIdx].turns[turnIdx]
+
+        var answers: [ConsensusAnalyzer.NamedAnswer] = []
+        for key in turn.panelOrder {
+            let text = (turn.responses[key] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { continue }
+            let name = turn.providerSnapshot[key]?.displayName ?? "模型"
+            answers.append(.init(name: name, text: text))
+        }
+        guard answers.count >= 2 else {
+            synthesisErrors[turnID] = "至少需要两家有效回答才能合成终稿。"
+            return
+        }
+        guard let cfg = chairProvider ?? providers.first(where: { $0.enabled && !$0.kind.isCLI }), !cfg.kind.isCLI else {
+            synthesisErrors[turnID] = "没有可用的 API provider(CLI 不支持)。到配置里启用一个。"
+            return
+        }
+        let question = turn.prompt
+        let consensus = turn.consensusAnalysis
+        synthesizingTurns.insert(turnID)
+        synthesisErrors[turnID] = nil
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.synthesizingTurns.remove(turnID) }
+            guard let result = await SynthesisService.synthesize(
+                question: question, answers: answers, consensus: consensus, provider: cfg
+            ) else {
+                self.synthesisErrors[turnID] = "合成失败(\(cfg.displayName)):稍后再试。"
+                return
+            }
+            guard let cIdx = self.conversations.firstIndex(where: { $0.id == convID }),
+                  let tIdx = self.conversations[cIdx].turns.firstIndex(where: { $0.id == turnID }) else { return }
+            self.conversations[cIdx].turns[tIdx].synthesizedConclusion = SynthesizedConclusion(
+                text: result.text, providerID: cfg.id.uuidString, rationale: result.rationale
+            )
+            self.conversations[cIdx].updatedAt = Date()
+            ConversationStore.save(self.conversations[cIdx])
+        }
+    }
 }

@@ -62,6 +62,10 @@ final class AppViewModel {
     var factCheckingTurns: Set<UUID> = []
     /// 事实核查失败原因,key = turnID。
     var factCheckErrors: [UUID: String] = [:]
+    /// 正在做「合成最优终稿」的 turn 集合(Council / Compare)。
+    var synthesizingTurns: Set<UUID> = []
+    /// 合成失败原因,key = turnID。
+    var synthesisErrors: [UUID: String] = [:]
     /// GitHub 集成:是否已连接(token 存在)。连接 / 断开后刷新,驱动 UI 显示。
     var gitHubConnected: Bool = GitHubAuth.isConnected()
     /// 当前用户的 GitHub 仓库列表(选仓库菜单用,首次打开时按需拉取后缓存)。
@@ -137,8 +141,18 @@ final class AppViewModel {
     var autoTagEnabled: Bool {
         didSet { UserDefaults.standard.set(autoTagEnabled, forKey: Self.autoTagKey) }
     }
+    /// 输入栏「MCP」开关 — 开启后本次发送连接已启用的 MCP server,把它们的工具暴露给模型。持久化。
+    var mcpEnabledForNextSend: Bool {
+        didSet { UserDefaults.standard.set(mcpEnabledForNextSend, forKey: Self.mcpToggleKey) }
+    }
+    /// 输入栏「深入模式」开关(仅 Direct)— 开启后本次发送走多步 Agent:规划→多轮工具→自检→交付。持久化。
+    var deepAgentEnabledForNextSend: Bool {
+        didSet { UserDefaults.standard.set(deepAgentEnabledForNextSend, forKey: Self.deepAgentToggleKey) }
+    }
     /// 技能库(命名的「系统提示 + 工具白名单」能力包)。
     let skillsStore = SkillsStore()
+    /// 已挂载的 MCP server 配置库。
+    let mcpStore = MCPStore()
     /// 最近一次发送被自动触发命中的技能 id(手动绑定时为 nil)。供 UI 显示「本次生效技能」徽标,非持久化。
     var autoTriggeredSkillID: UUID?
 
@@ -200,6 +214,8 @@ final class AppViewModel {
     private static let autoRouteKey = "kown.autoRoute.v1"
     private static let memoryInjectionKey = "kown.memory.injection.v1"
     private static let deviceToolsToggleKey = "kown.deviceTools.toggle.v1"
+    private static let mcpToggleKey = "kown.mcp.toggle.v1"
+    private static let deepAgentToggleKey = "kown.deepAgent.toggle.v1"
     private static let skillAutoTriggerKey = "kown.skill.autoTrigger.v1"
     private static let autoTagKey = "kown.autoTag.v1"
     // 发送编排已移到 AppViewModel+Send.swift,以下原 private 状态降为 internal 供其访问。
@@ -235,6 +251,8 @@ final class AppViewModel {
         self.autoRouteEnabled = UserDefaults.standard.bool(forKey: Self.autoRouteKey)
         self.memoryInjectionEnabled = UserDefaults.standard.bool(forKey: Self.memoryInjectionKey)
         self.deviceToolsEnabledForNextSend = UserDefaults.standard.bool(forKey: Self.deviceToolsToggleKey)
+        self.mcpEnabledForNextSend = UserDefaults.standard.bool(forKey: Self.mcpToggleKey)
+        self.deepAgentEnabledForNextSend = UserDefaults.standard.bool(forKey: Self.deepAgentToggleKey)
         self.fileToolsEnabledForNextSend = UserDefaults.standard.bool(forKey: Self.fileToolsToggleKey)
         // 自动触发默认开:首次启动 UserDefaults 没有该键时取 true。
         self.skillAutoTriggerEnabled = (UserDefaults.standard.object(forKey: Self.skillAutoTriggerKey) as? Bool) ?? true

@@ -222,6 +222,22 @@ struct ConsensusAnalysis: Codable, Hashable, Sendable {
     }
 }
 
+/// 多家回答合成的「最优终稿」(Council / Compare 的「合成最优答案」按钮触发)。
+struct SynthesizedConclusion: Codable, Hashable, Sendable {
+    /// 合成后的最优答案正文(Markdown)。
+    var text: String
+    /// 执行合成的 provider id(uuidString)。
+    var providerID: String
+    /// 一两句合成说明:采纳了谁的哪些要点、如何处理分歧。
+    var rationale: String
+
+    init(text: String, providerID: String, rationale: String = "") {
+        self.text = text
+        self.providerID = providerID
+        self.rationale = rationale
+    }
+}
+
 /// 自我反思修订:让模型回看自己的答案,先批评再产出改进版。opt-in「自我反思」按钮触发。
 struct SelfRevision: Codable, Hashable, Sendable {
     /// 对原答案的批评 / 发现的问题(bullet 文本)。
@@ -342,6 +358,11 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
     /// 自动升级建议(建议式):答完后本地启发式检测到「低置信 / 回避」时给出,UI 在答卡下方
     /// 非侵入地提示「换更强模型 / 转 Council 重答」。默认仅建议,绝不自动重跑。旧会话没有,保持 optional。
     var escalationSuggestion: EscalationSuggestion?
+    /// 主答案(panel 首家)的工具调用步骤树。深入模式 / 任意带工具的回答都会留痕,
+    /// 刷新会话后仍能在答卡上方看到 Agent 做了哪些步骤。旧会话没有,保持 optional。
+    var toolSteps: [ToolStep]?
+    /// 多家回答合成的最优终稿(Council / Compare 的「合成最优答案」按钮触发)。旧会话没有,保持 optional。
+    var synthesizedConclusion: SynthesizedConclusion?
 
     init(id: UUID = UUID(),
          timestamp: Date = Date(),
@@ -374,7 +395,9 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
          selfRevision: SelfRevision? = nil,
          factCheck: FactCheckResult? = nil,
          knowledgeSources: [KnowledgeSourceRef]? = nil,
-         escalationSuggestion: EscalationSuggestion? = nil) {
+         escalationSuggestion: EscalationSuggestion? = nil,
+         toolSteps: [ToolStep]? = nil,
+         synthesizedConclusion: SynthesizedConclusion? = nil) {
         self.id = id
         self.timestamp = timestamp
         self.prompt = prompt
@@ -407,6 +430,8 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
         self.factCheck = factCheck
         self.knowledgeSources = knowledgeSources
         self.escalationSuggestion = escalationSuggestion
+        self.toolSteps = toolSteps
+        self.synthesizedConclusion = synthesizedConclusion
     }
 
     // 兼容旧 JSON(缺新字段时 sources 等以 decodeIfPresent 解码,默认 nil),不破坏现有存档/同步。
@@ -418,6 +443,7 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
         case reasoningByProvider, tokenUsage, councilVotes, sourcesByProvider
         case generatedImages, compareVerdict, consensusAnalysis, generatedImagesByProvider, imageGenErrors
         case selfRevision, factCheck, knowledgeSources, escalationSuggestion
+        case toolSteps, synthesizedConclusion
     }
 
     init(from decoder: Decoder) throws {
@@ -454,6 +480,8 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
         self.factCheck = try c.decodeIfPresent(FactCheckResult.self, forKey: .factCheck)
         self.knowledgeSources = try c.decodeIfPresent([KnowledgeSourceRef].self, forKey: .knowledgeSources)
         self.escalationSuggestion = try c.decodeIfPresent(EscalationSuggestion.self, forKey: .escalationSuggestion)
+        self.toolSteps = try c.decodeIfPresent([ToolStep].self, forKey: .toolSteps)
+        self.synthesizedConclusion = try c.decodeIfPresent(SynthesizedConclusion.self, forKey: .synthesizedConclusion)
     }
 
     /// 取顺序化的 panel 配置（按发送顺序，Chair 不在内）
