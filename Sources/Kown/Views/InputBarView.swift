@@ -366,7 +366,10 @@ struct InputBarView: View {
             .padding(.horizontal, promptHorizontalPadding)
             .padding(.vertical, promptVerticalPadding)
             .frame(minHeight: promptMinHeight)
-            .frame(maxWidth: .infinity)
+            // idealWidth 关键:macOS 把 promptField 包在 ViewThatFits(in:.horizontal) 里,
+            // ViewThatFits 会用「无限宽度」探测候选理想尺寸 → 文本编辑器把全文按一行铺开算宽度 → 大文本卡死。
+            // 给一个有限 idealWidth,探测时返回有限尺寸,真正布局仍可撑满(maxWidth:.infinity)。
+            .frame(idealWidth: 360, maxWidth: .infinity)
             .background {
                 ZStack {
                     RoundedRectangle(cornerRadius: promptCornerRadius, style: .continuous)
