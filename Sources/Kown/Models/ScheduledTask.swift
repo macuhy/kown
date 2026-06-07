@@ -19,6 +19,9 @@ struct ScheduledTask: Identifiable, Codable, Hashable, Sendable {
     var minute: Int
     /// 每天重复。当前实现固定为按天重复(预留位,关掉后即一次性任务)。
     var repeatsDaily: Bool
+    /// 每周触发的星期几(Calendar 约定:1=周日 … 7=周六)。nil = 每天触发(默认,沿用旧行为)。
+    /// 设了具体星期时,仅当天为该星期 + 到点 + 当天未跑过才发火 → 支持「每周一早上总结」式订阅。
+    var weekday: Int?
     /// 是否启用(关掉后不发火)。
     var enabled: Bool
     /// 上次实际发火的时间(用于「当天已跑过就不再重复」判断)。
@@ -32,6 +35,7 @@ struct ScheduledTask: Identifiable, Codable, Hashable, Sendable {
         hour: Int = 9,
         minute: Int = 0,
         repeatsDaily: Bool = true,
+        weekday: Int? = nil,
         enabled: Bool = true,
         lastRun: Date? = nil
     ) {
@@ -42,13 +46,14 @@ struct ScheduledTask: Identifiable, Codable, Hashable, Sendable {
         self.hour = hour
         self.minute = minute
         self.repeatsDaily = repeatsDaily
+        self.weekday = weekday
         self.enabled = enabled
         self.lastRun = lastRun
     }
 
     // 兼容旧 JSON(缺字段容错,避免整份解码失败丢任务)。
     enum CodingKeys: String, CodingKey {
-        case id, title, prompt, mode, hour, minute, repeatsDaily, enabled, lastRun
+        case id, title, prompt, mode, hour, minute, repeatsDaily, weekday, enabled, lastRun
     }
 
     init(from decoder: Decoder) throws {
@@ -60,6 +65,7 @@ struct ScheduledTask: Identifiable, Codable, Hashable, Sendable {
         self.hour = try c.decodeIfPresent(Int.self, forKey: .hour) ?? 9
         self.minute = try c.decodeIfPresent(Int.self, forKey: .minute) ?? 0
         self.repeatsDaily = try c.decodeIfPresent(Bool.self, forKey: .repeatsDaily) ?? true
+        self.weekday = try c.decodeIfPresent(Int.self, forKey: .weekday)
         self.enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
         self.lastRun = try c.decodeIfPresent(Date.self, forKey: .lastRun)
     }
@@ -67,6 +73,21 @@ struct ScheduledTask: Identifiable, Codable, Hashable, Sendable {
     /// 触发时刻的展示文本,如 `09:05`。
     var timeText: String {
         String(format: "%02d:%02d", hour, minute)
+    }
+
+    /// 周期的展示文本:`每天 09:05` / `每周一 09:05`。
+    var scheduleText: String {
+        if let wd = weekday, let name = Self.weekdayName(wd) {
+            return "每\(name) \(timeText)"
+        }
+        return "每天 \(timeText)"
+    }
+
+    /// Calendar weekday(1=周日…7=周六)→ 中文(周日…周六)。越界返回 nil。
+    static func weekdayName(_ wd: Int) -> String? {
+        let names = ["日", "一", "二", "三", "四", "五", "六"]
+        guard wd >= 1, wd <= 7 else { return nil }
+        return "周" + names[wd - 1]
     }
 }
 

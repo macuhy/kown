@@ -179,6 +179,14 @@ struct SchedulerView: View {
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
+            Text(task.weekday.flatMap { ScheduledTask.weekdayName($0) }.map { "每\($0)" } ?? "每天")
+                .font(.caption2.weight(.bold))
+                .lineLimit(1)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Color.secondary.opacity(0.14), in: Capsule())
+                .foregroundStyle(.secondary)
+                .fixedSize()
             Text(modeLabel(task.mode))
                 .font(.caption2.weight(.bold))
                 .lineLimit(1)
@@ -308,6 +316,9 @@ private struct SchedulerTaskEditor: View {
 
     /// 用 DatePicker 选时刻,保存时拆回 hour/minute。
     @State private var time: Date
+    /// 周期:false = 每天;true = 每周。每周时用 `weekday`(1=周日…7=周六)。
+    @State private var weekly: Bool
+    @State private var weekday: Int
 
     init(task: ScheduledTask, isNew: Bool,
          onSave: @escaping (ScheduledTask) -> Void,
@@ -320,6 +331,8 @@ private struct SchedulerTaskEditor: View {
         comps.hour = task.hour
         comps.minute = task.minute
         _time = State(initialValue: Calendar.current.date(from: comps) ?? Date())
+        _weekly = State(initialValue: task.weekday != nil)
+        _weekday = State(initialValue: task.weekday ?? 2)   // 默认周一
     }
 
     var body: some View {
@@ -359,7 +372,17 @@ private struct SchedulerTaskEditor: View {
                     }
                 }
                 DatePicker("触发时刻", selection: $time, displayedComponents: .hourAndMinute)
-                Toggle("每天重复", isOn: $task.repeatsDaily)
+                Picker("周期", selection: $weekly) {
+                    Text("每天").tag(false)
+                    Text("每周").tag(true)
+                }
+                if weekly {
+                    Picker("星期", selection: $weekday) {
+                        ForEach(1...7, id: \.self) { wd in
+                            Text(ScheduledTask.weekdayName(wd) ?? "").tag(wd)
+                        }
+                    }
+                }
                 Toggle("启用", isOn: $task.enabled)
             }
             Section("提问内容") {
@@ -391,6 +414,7 @@ private struct SchedulerTaskEditor: View {
         let comps = Calendar.current.dateComponents([.hour, .minute], from: time)
         updated.hour = comps.hour ?? 9
         updated.minute = comps.minute ?? 0
+        updated.weekday = weekly ? weekday : nil
         updated.title = updated.title.trimmingCharacters(in: .whitespacesAndNewlines)
         updated.prompt = updated.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         onSave(updated)

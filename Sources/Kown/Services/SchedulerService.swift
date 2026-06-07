@@ -105,6 +105,11 @@ final class SchedulerService {
         comps.minute = task.minute
         comps.second = 0
         guard let fireToday = cal.date(from: comps) else { return false }
+        // 每周任务:今天的星期几必须匹配,否则跳过。
+        if let wd = task.weekday {
+            let today = cal.component(.weekday, from: now)
+            guard today == wd else { return false }
+        }
         // 还没到今天的触发时刻 → 不发。
         guard now >= fireToday else { return false }
         // 今天已经跑过(lastRun 落在今天触发点之后)→ 不重复。
