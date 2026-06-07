@@ -931,7 +931,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.23.0;
+				MARKETING_VERSION = 0.23.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown.Share;
 				PROVISIONING_PROFILE_SPECIFIER = "Kown Share AppStore";
 				SDKROOT = iphoneos;
@@ -1076,7 +1076,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.23.0;
+				MARKETING_VERSION = 0.23.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown.Share;
 				PROVISIONING_PROFILE_SPECIFIER = "Kown Share AppStore";
 				SDKROOT = iphoneos;
@@ -1103,7 +1103,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.23.0;
+				MARKETING_VERSION = 0.23.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown;
 				PROVISIONING_PROFILE_SPECIFIER = "Kown AppStore";
 				SDKROOT = iphoneos;
@@ -1130,7 +1130,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.23.0;
+				MARKETING_VERSION = 0.23.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown;
 				PROVISIONING_PROFILE_SPECIFIER = "Kown AppStore";
 				SDKROOT = iphoneos;
