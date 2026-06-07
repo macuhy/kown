@@ -70,6 +70,63 @@ enum ToolCatalog {
         )
     )
 
+    static let createEvent = LLMTool(
+        name: "create_event",
+        description: """
+        Add an event to the user's system Calendar (iOS/macOS). Use when the user wants to schedule \
+        a meeting, appointment, or block of time. The current local time is given in the system \
+        context — convert relative times ("tomorrow 3pm", "next Monday 10am") to an absolute ISO 8601 \
+        local datetime for `start`. If no end time is given, the event defaults to 1 hour. Keep the \
+        title short and descriptive.
+        """,
+        parameters: ToolParameters(
+            properties: [
+                "title": ToolParameterSchema(
+                    type: "string",
+                    description: "Short title of the event (e.g. '产品评审会', not the whole sentence)."
+                ),
+                "start": ToolParameterSchema(
+                    type: "string",
+                    description: "Start datetime in ISO 8601 local time, e.g. 2026-06-07T15:00:00."
+                ),
+                "end": ToolParameterSchema(
+                    type: "string",
+                    description: "Optional end datetime in ISO 8601 local time. Omit to default to 1 hour after start."
+                ),
+                "location": ToolParameterSchema(
+                    type: "string",
+                    description: "Optional location of the event."
+                ),
+                "notes": ToolParameterSchema(
+                    type: "string",
+                    description: "Optional extra details / agenda for the event."
+                )
+            ],
+            required: ["title", "start"]
+        )
+    )
+
+    static let listEvents = LLMTool(
+        name: "list_events",
+        description: """
+        List the user's upcoming events from the system Calendar (iOS/macOS). Use when the user asks \
+        what's on their schedule, what they have coming up, or to check for conflicts before adding an event.
+        """,
+        parameters: ToolParameters(
+            properties: [
+                "days": ToolParameterSchema(
+                    type: "integer",
+                    description: "How many days ahead from now to look (default 7)."
+                ),
+                "limit": ToolParameterSchema(
+                    type: "integer",
+                    description: "Max events to return (default 20)."
+                )
+            ],
+            required: []
+        )
+    )
+
     static let createNote = LLMTool(
         name: "create_note",
         description: """
@@ -124,6 +181,8 @@ enum ToolCatalog {
         if webSearch != nil { tools.append(ToolCatalog.webSearch) }
         if deviceTools || extraToolNames.contains(ToolCatalog.createReminder.name) { tools.append(ToolCatalog.createReminder) }
         if deviceTools || extraToolNames.contains(ToolCatalog.listReminders.name) { tools.append(ToolCatalog.listReminders) }
+        if deviceTools || extraToolNames.contains(ToolCatalog.createEvent.name) { tools.append(ToolCatalog.createEvent) }
+        if deviceTools || extraToolNames.contains(ToolCatalog.listEvents.name) { tools.append(ToolCatalog.listEvents) }
         if deviceTools || extraToolNames.contains(ToolCatalog.createNote.name) { tools.append(ToolCatalog.createNote) }
         // 本会话绑定了 GitHub 仓库时,暴露「读文件」工具,让模型改文件前先看现状。
         if gitHub { tools.append(ToolCatalog.githubReadFile) }
@@ -187,6 +246,10 @@ struct ToolRouter: Sendable {
             return await runCreateReminder(call)
         case ToolCatalog.listReminders.name:
             return await runListReminders(call)
+        case ToolCatalog.createEvent.name:
+            return await runCreateEvent(call)
+        case ToolCatalog.listEvents.name:
+            return await runListEvents(call)
         case ToolCatalog.createNote.name:
             return await runCreateNote(call)
         case ToolCatalog.githubReadFile.name:
@@ -289,6 +352,62 @@ struct ToolRouter: Sendable {
                           isError: false)
         #else
         return Self.errorResult(call, summary: "⚠ 当前平台不支持提醒", message: "reminders unsupported on this platform")
+        #endif
+    }
+
+    // MARK: - create_event
+
+    private func runCreateEvent(_ call: ToolCall) async -> ToolResult {
+        #if canImport(EventKit)
+        let args = (try? JSONSerialization.jsonObject(with: Data(call.argumentsJSON.utf8)) as? [String: Any]) ?? [:]
+        let title = (args["title"] as? String) ?? ""
+        let notes = args["notes"] as? String
+        let location = args["location"] as? String
+        guard let start = (args["start"] as? String).flatMap(Self.parseDate) else {
+            return Self.errorResult(call, summary: "⚠ 缺少开始时间", message: "missing or invalid start time")
+        }
+        let end = (args["end"] as? String).flatMap(Self.parseDate)
+        do {
+            let r = try await EventKitService.shared.createEvent(
+                title: title, notes: notes, start: start, end: end, location: location)
+            let payload: [String: Any] = ["success": true, "title": r.title,
+                                          "start": (args["start"] as? String) ?? ""]
+            return ToolResult(callID: call.id, name: call.name,
+                              content: Self.jsonString(payload),
+                              summary: "✓ 已添加日程:\(r.title) · \(Self.humanDate(r.start))",
+                              isError: false)
+        } catch {
+            let msg = error.localizedDescription
+            return Self.errorResult(call, summary: "⚠ 创建日程失败: \(msg)", message: msg)
+        }
+        #else
+        return Self.errorResult(call, summary: "⚠ 当前平台不支持日历", message: "calendar unsupported on this platform")
+        #endif
+    }
+
+    // MARK: - list_events
+
+    private func runListEvents(_ call: ToolCall) async -> ToolResult {
+        #if canImport(EventKit)
+        let args = (try? JSONSerialization.jsonObject(with: Data(call.argumentsJSON.utf8)) as? [String: Any]) ?? [:]
+        let days = (args["days"] as? Int) ?? 7
+        let limit = (args["limit"] as? Int) ?? 20
+        let items = await EventKitService.shared.listEvents(daysAhead: days, limit: limit)
+        let payload: [String: Any] = [
+            "count": items.count,
+            "events": items.map { item -> [String: Any] in
+                ["title": item.title,
+                 "start": item.start.map(Self.iso) ?? "",
+                 "end": item.end.map(Self.iso) ?? "",
+                 "location": item.location ?? ""]
+            }
+        ]
+        return ToolResult(callID: call.id, name: call.name,
+                          content: Self.jsonString(payload),
+                          summary: "✓ 找到 \(items.count) 个日程",
+                          isError: false)
+        #else
+        return Self.errorResult(call, summary: "⚠ 当前平台不支持日历", message: "calendar unsupported on this platform")
         #endif
     }
 

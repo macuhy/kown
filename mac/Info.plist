@@ -37,6 +37,8 @@
 	<string>14.0</string>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Kown 用自动化把整理好的内容写进「备忘录」。</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Kown 可以把你的日程写进系统「日历」,并读取你最近的安排。</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>© 2026 bo xiao</string>
 	<key>NSMicrophoneUsageDescription</key>

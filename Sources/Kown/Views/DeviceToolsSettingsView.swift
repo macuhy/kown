@@ -8,7 +8,9 @@ struct DeviceToolsSettingsView: View {
     private static let tint = Color(red: 0.20, green: 0.60, blue: 0.62)
 
     @State private var reminderAuthorized: Bool = false
+    @State private var calendarAuthorized: Bool = false
     @State private var requesting = false
+    @State private var requestingCalendar = false
 
     var body: some View {
         ScrollView {
@@ -16,6 +18,7 @@ struct DeviceToolsSettingsView: View {
                 hero
                 LazyVGrid(columns: toolColumns, alignment: .leading, spacing: 12) {
                     remindersCard
+                    calendarCard
                     notesCard
                 }
                 usageCard
@@ -62,6 +65,11 @@ struct DeviceToolsSettingsView: View {
                         icon: reminderAuthorized ? "checkmark.circle.fill" : "exclamationmark.circle.fill",
                         color: reminderAuthorized ? .green : .orange
                     )
+                    statusChip(
+                        title: calendarAuthorized ? "日历已授权" : "日历待授权",
+                        icon: calendarAuthorized ? "checkmark.circle.fill" : "exclamationmark.circle.fill",
+                        color: calendarAuthorized ? .green : .orange
+                    )
                     #if os(macOS)
                     statusChip(title: "备忘录自动化", icon: "note.text", color: .teal)
                     #else
@@ -106,7 +114,7 @@ struct DeviceToolsSettingsView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("本次发送可用的设备能力")
                     .font(.headline.weight(.bold))
-                Text("和输入栏的设备工具按钮同步;开启后模型可在需要时创建提醒或备忘录。")
+                Text("和输入栏的设备工具按钮同步;开启后模型可在需要时创建提醒、日程或备忘录。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -140,6 +148,26 @@ struct DeviceToolsSettingsView: View {
                 }
             }
             Text("模型创建提醒时会按当前时间换算「明天 / 下周一」等相对时间,并挂一个到点闹钟。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var calendarCard: some View {
+        card(icon: "calendar", title: "日历") {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    calendarAuthPill
+                    Spacer(minLength: 12)
+                    calendarAuthButton
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    calendarAuthPill
+                    calendarAuthButton
+                }
+            }
+            Text("模型添加日程时会按当前时间换算「明天下午 3 点」等相对时间;没给结束时间则默认 1 小时。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -211,6 +239,27 @@ struct DeviceToolsSettingsView: View {
         .fixedSize()
     }
 
+    private var calendarAuthPill: some View {
+        statusChip(
+            title: calendarAuthorized ? "已授权" : "未授权",
+            icon: calendarAuthorized ? "checkmark.circle.fill" : "exclamationmark.circle.fill",
+            color: calendarAuthorized ? .green : .orange
+        )
+    }
+
+    private var calendarAuthButton: some View {
+        Button {
+            requestCalendar()
+        } label: {
+            Label(requestingCalendar ? "请求中…" : "授权访问", systemImage: "lock.open")
+                .font(.caption.weight(.semibold))
+        }
+        .buttonStyle(.bordered)
+        .tint(Self.tint)
+        .disabled(requestingCalendar || calendarAuthorized)
+        .fixedSize()
+    }
+
     private func statusChip(title: String, icon: String, color: Color) -> some View {
         Label(title, systemImage: icon)
             .font(.caption2.weight(.bold))
@@ -255,6 +304,7 @@ struct DeviceToolsSettingsView: View {
     private func refreshAuth() {
         #if canImport(EventKit)
         reminderAuthorized = EventKitService.shared.isAuthorized
+        calendarAuthorized = EventKitService.shared.isEventAuthorized
         #endif
     }
 
@@ -266,6 +316,19 @@ struct DeviceToolsSettingsView: View {
             await MainActor.run {
                 reminderAuthorized = granted
                 requesting = false
+            }
+        }
+        #endif
+    }
+
+    private func requestCalendar() {
+        #if canImport(EventKit)
+        requestingCalendar = true
+        Task {
+            let granted = await EventKitService.shared.requestEventAccess()
+            await MainActor.run {
+                calendarAuthorized = granted
+                requestingCalendar = false
             }
         }
         #endif

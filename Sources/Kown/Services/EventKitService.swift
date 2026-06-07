@@ -25,15 +25,33 @@ actor EventKitService {
         let due: Date?
     }
 
+    /// 一次日历事件创建结果。
+    struct EventCreateResult: Sendable {
+        let title: String
+        let start: Date
+    }
+
+    /// 列出日历事件时返回的精简条目(EKEvent 非 Sendable,转成值类型再跨边界)。
+    struct EventItem: Sendable {
+        let title: String
+        let start: Date?
+        let end: Date?
+        let location: String?
+    }
+
     enum EventKitError: LocalizedError {
         case denied
         case noDefaultList
+        case calendarDenied
+        case noDefaultCalendar
         case underlying(String)
 
         var errorDescription: String? {
             switch self {
             case .denied:        return "没有「提醒事项」访问权限,请在系统设置 ▸ 隐私 里允许 Kown 访问提醒事项。"
             case .noDefaultList: return "找不到可用的提醒事项列表(请在「提醒事项」App 里至少建一个列表)。"
+            case .calendarDenied: return "没有「日历」访问权限,请在系统设置 ▸ 隐私 里允许 Kown 访问日历。"
+            case .noDefaultCalendar: return "找不到可用的日历(请在「日历」App 里至少建一个日历)。"
             case .underlying(let m): return m
             }
         }
@@ -99,6 +117,69 @@ actor EventKitService {
                 cont.resume(returning: items)
             }
         }
+    }
+
+    // MARK: - 日历事件(Calendar)
+    //
+    // 日历授权与提醒**相互独立**(`.event` ≠ `.reminder`),但共用同一个 store 实例。
+
+    /// 当前是否已拿到日历完全访问权限(同步查询,不弹窗)。
+    nonisolated var isEventAuthorized: Bool {
+        EKEventStore.authorizationStatus(for: .event) == .fullAccess
+    }
+
+    /// 请求日历完全访问权限。已授权直接返回 true;被拒/出错返回 false(不抛)。
+    @discardableResult
+    func requestEventAccess() async -> Bool {
+        if EKEventStore.authorizationStatus(for: .event) == .fullAccess { return true }
+        do {
+            return try await store.requestFullAccessToEvents()
+        } catch {
+            return false
+        }
+    }
+
+    /// 新建一个日历事件。`end` 为空时默认 1 小时时长。
+    func createEvent(title: String, notes: String?, start: Date,
+                     end: Date?, location: String?) async throws -> EventCreateResult {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw EventKitError.underlying("日程标题不能为空。") }
+        guard await requestEventAccess() else { throw EventKitError.calendarDenied }
+
+        let event = EKEvent(eventStore: store)
+        event.title = trimmed
+        if let notes, !notes.isEmpty { event.notes = notes }
+        if let location, !location.isEmpty { event.location = location }
+        event.startDate = start
+        event.endDate = end ?? start.addingTimeInterval(3600)
+        guard let calendar = store.defaultCalendarForNewEvents else {
+            throw EventKitError.noDefaultCalendar
+        }
+        event.calendar = calendar
+
+        do {
+            try store.save(event, span: .thisEvent, commit: true)
+        } catch {
+            throw EventKitError.underlying(error.localizedDescription)
+        }
+        return EventCreateResult(title: trimmed, start: start)
+    }
+
+    /// 列出从现在起 `daysAhead` 天内的日历事件(最多 `limit` 条,按开始时间排序)。
+    /// 无权限或出错返回空数组,不抛。
+    func listEvents(daysAhead: Int, limit: Int) async -> [EventItem] {
+        guard await requestEventAccess() else { return [] }
+        let now = Date()
+        let days = max(1, daysAhead)
+        let end = now.addingTimeInterval(TimeInterval(days) * 86_400)
+        let predicate = store.predicateForEvents(withStart: now, end: end, calendars: nil)
+        let n = max(1, limit)
+        // store.events(matching:) 同步返回;EKEvent 非 Sendable —— 就地转成 EventItem。
+        return store.events(matching: predicate)
+            .sorted { ($0.startDate ?? .distantFuture) < ($1.startDate ?? .distantFuture) }
+            .prefix(n)
+            .map { EventItem(title: $0.title ?? "", start: $0.startDate,
+                             end: $0.endDate, location: $0.location) }
     }
 }
 #endif
