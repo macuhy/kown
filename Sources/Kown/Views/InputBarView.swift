@@ -603,6 +603,16 @@ struct InputBarView: View {
             Label(viewModel.deviceToolsEnabledForNextSend ? "关闭设备工具" : "启用设备工具",
                   systemImage: viewModel.deviceToolsEnabledForNextSend ? "checkmark.circle" : "wrench.and.screwdriver.fill")
         }
+        #if os(macOS)
+        if LocalFileToolState.shared.isAuthorized {
+            Button {
+                viewModel.fileToolsEnabledForNextSend.toggle()
+            } label: {
+                Label(viewModel.fileToolsEnabledForNextSend ? "关闭本地文件工具" : "启用本地文件工具",
+                      systemImage: viewModel.fileToolsEnabledForNextSend ? "checkmark.circle" : "folder.fill")
+            }
+        }
+        #endif
         iOSSkillBindingMenu
         iOSGitHubMenu
         if !viewModel.canEnableWebSearch {

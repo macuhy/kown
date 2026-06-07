@@ -169,6 +169,55 @@ enum ToolCatalog {
         )
     )
 
+    static let localReadFile = LLMTool(
+        name: "local_read_file",
+        description: """
+        Read a text file inside the user's authorized local folder (macOS only). Paths are relative \
+        to that folder. Use this to inspect current content before proposing a change with local_write_file.
+        """,
+        parameters: ToolParameters(
+            properties: [
+                "path": ToolParameterSchema(type: "string",
+                    description: "Folder-relative file path, e.g. 'notes/todo.md'. No leading slash, no '..'.")
+            ],
+            required: ["path"]
+        )
+    )
+
+    static let localListDir = LLMTool(
+        name: "local_list_dir",
+        description: """
+        List entries (files + subfolders) inside the user's authorized local folder (macOS only). \
+        Pass an empty path or a relative subfolder path. Use to discover what files exist.
+        """,
+        parameters: ToolParameters(
+            properties: [
+                "path": ToolParameterSchema(type: "string",
+                    description: "Folder-relative subdirectory, or empty for the root. No '..'.")
+            ],
+            required: []
+        )
+    )
+
+    static let localWriteFile = LLMTool(
+        name: "local_write_file",
+        description: """
+        Propose writing / overwriting a text file inside the user's authorized local folder (macOS only). \
+        IMPORTANT: this does NOT write immediately — it STAGES the change for the user to review a diff and \
+        confirm. Provide the COMPLETE new file content (not a diff). Read the file first with local_read_file \
+        when editing an existing file so you edit on top of the real content.
+        """,
+        parameters: ToolParameters(
+            properties: [
+                "path": ToolParameterSchema(type: "string",
+                    description: "Folder-relative file path, e.g. 'notes/summary.md'. No leading slash, no '..'."),
+                "content": ToolParameterSchema(type: "string",
+                    description: "The COMPLETE new content of the file (full text, not a diff).")
+            ],
+            required: ["path", "content"]
+        )
+    )
+
     /// 按 context + 技能白名单拼出本次暴露给模型的工具集合。
     /// - webSearch:配置就绪才暴露 `web_search`。
     /// - deviceTools:用户开了「设备工具」总开关时暴露提醒/备忘。
@@ -176,7 +225,8 @@ enum ToolCatalog {
     static func enabledTools(webSearch: WebSearchSession?,
                              deviceTools: Bool,
                              extraToolNames: Set<String>,
-                             gitHub: Bool = false) -> [LLMTool] {
+                             gitHub: Bool = false,
+                             fileSystem: Bool = false) -> [LLMTool] {
         var tools: [LLMTool] = []
         if webSearch != nil { tools.append(ToolCatalog.webSearch) }
         if deviceTools || extraToolNames.contains(ToolCatalog.createReminder.name) { tools.append(ToolCatalog.createReminder) }
@@ -186,6 +236,12 @@ enum ToolCatalog {
         if deviceTools || extraToolNames.contains(ToolCatalog.createNote.name) { tools.append(ToolCatalog.createNote) }
         // 本会话绑定了 GitHub 仓库时,暴露「读文件」工具,让模型改文件前先看现状。
         if gitHub { tools.append(ToolCatalog.githubReadFile) }
+        // 本地文件工具(macOS,授权目录已设 + 本次开启时):读 / 列即时,写需用户确认。
+        if fileSystem {
+            tools.append(ToolCatalog.localReadFile)
+            tools.append(ToolCatalog.localListDir)
+            tools.append(ToolCatalog.localWriteFile)
+        }
         return tools
     }
 }
@@ -213,6 +269,8 @@ struct ToolContext: Sendable {
     var webSearch: WebSearchSession?
     /// 本会话绑定的 GitHub 写入目标;非 nil 时 `github_read_file` 工具可用。
     var github: GitHubWriteTarget?
+    /// 本地文件工具授权目录的 security-scoped bookmark(macOS);非 nil 时本地文件工具可用。
+    var localFileBookmark: Data?
 }
 
 /// 执行模型发出的 ToolCall。线程安全,无可变状态。
@@ -254,6 +312,12 @@ struct ToolRouter: Sendable {
             return await runCreateNote(call)
         case ToolCatalog.githubReadFile.name:
             return await runGitHubReadFile(call)
+        case ToolCatalog.localReadFile.name:
+            return await runLocalReadFile(call)
+        case ToolCatalog.localListDir.name:
+            return await runLocalListDir(call)
+        case ToolCatalog.localWriteFile.name:
+            return await runLocalWriteFile(call)
         default:
             return ToolResult(
                 callID: call.id,
@@ -473,6 +537,97 @@ struct ToolRouter: Sendable {
             let msg = error.localizedDescription
             return Self.errorResult(call, summary: "⚠ 读取失败: \(msg)", message: msg)
         }
+    }
+
+    // MARK: - 本地文件工具(macOS only)
+
+    private func runLocalReadFile(_ call: ToolCall) async -> ToolResult {
+        #if os(macOS)
+        guard let data = context.localFileBookmark else {
+            return Self.errorResult(call, summary: "⚠ 未授权本地文件目录", message: "no authorized local folder")
+        }
+        let args = (try? JSONSerialization.jsonObject(with: Data(call.argumentsJSON.utf8)) as? [String: Any]) ?? [:]
+        let path = (args["path"] as? String) ?? ""
+        return await MainActor.run {
+            do {
+                let (root, _) = try WorkspaceManager.resolveBookmark(data)
+                let scoped = root.startAccessingSecurityScopedResource()
+                defer { if scoped { root.stopAccessingSecurityScopedResource() } }
+                let url = try LocalFilesystem.resolved(root: root, rel: path)
+                let content = try LocalFilesystem.read(at: url)
+                let payload: [String: Any] = ["path": path, "content": content]
+                return ToolResult(callID: call.id, name: call.name,
+                                  content: Self.jsonString(payload),
+                                  summary: "✓ 已读取 \(path)(\(content.count) 字)", isError: false)
+            } catch {
+                let msg = error.localizedDescription
+                return Self.errorResult(call, summary: "⚠ 读取失败: \(msg)", message: msg)
+            }
+        }
+        #else
+        return Self.errorResult(call, summary: "⚠ 本地文件工具仅 macOS 支持", message: "local file tools are macOS only")
+        #endif
+    }
+
+    private func runLocalListDir(_ call: ToolCall) async -> ToolResult {
+        #if os(macOS)
+        guard let data = context.localFileBookmark else {
+            return Self.errorResult(call, summary: "⚠ 未授权本地文件目录", message: "no authorized local folder")
+        }
+        let args = (try? JSONSerialization.jsonObject(with: Data(call.argumentsJSON.utf8)) as? [String: Any]) ?? [:]
+        let path = (args["path"] as? String) ?? ""
+        return await MainActor.run {
+            do {
+                let (root, _) = try WorkspaceManager.resolveBookmark(data)
+                let scoped = root.startAccessingSecurityScopedResource()
+                defer { if scoped { root.stopAccessingSecurityScopedResource() } }
+                let url = try LocalFilesystem.resolved(root: root, rel: path)
+                let entries = try LocalFilesystem.list(at: url)
+                let payload: [String: Any] = ["path": path.isEmpty ? "." : path, "entries": entries]
+                return ToolResult(callID: call.id, name: call.name,
+                                  content: Self.jsonString(payload),
+                                  summary: "✓ 列出 \(entries.count) 个条目", isError: false)
+            } catch {
+                let msg = error.localizedDescription
+                return Self.errorResult(call, summary: "⚠ 列目录失败: \(msg)", message: msg)
+            }
+        }
+        #else
+        return Self.errorResult(call, summary: "⚠ 本地文件工具仅 macOS 支持", message: "local file tools are macOS only")
+        #endif
+    }
+
+    private func runLocalWriteFile(_ call: ToolCall) async -> ToolResult {
+        #if os(macOS)
+        guard let data = context.localFileBookmark else {
+            return Self.errorResult(call, summary: "⚠ 未授权本地文件目录", message: "no authorized local folder")
+        }
+        let args = (try? JSONSerialization.jsonObject(with: Data(call.argumentsJSON.utf8)) as? [String: Any]) ?? [:]
+        let path = ((args["path"] as? String) ?? "").trimmingCharacters(in: CharacterSet(charactersIn: "/ \t\n"))
+        let newContent = (args["content"] as? String) ?? ""
+        return await MainActor.run {
+            do {
+                let (root, _) = try WorkspaceManager.resolveBookmark(data)
+                let scoped = root.startAccessingSecurityScopedResource()
+                defer { if scoped { root.stopAccessingSecurityScopedResource() } }
+                // 校验路径 / 后缀(forWrite),不通过直接报错,不暂存。
+                let url = try LocalFilesystem.resolved(root: root, rel: path, forWrite: true)
+                let old = LocalFilesystem.tryRead(at: url)
+                LocalFileToolState.shared.stage(PendingFileWrite(
+                    relativePath: path, oldContent: old, newContent: newContent))
+                let payload: [String: Any] = ["staged": true, "path": path,
+                    "note": "改动已暂存,需用户在界面看 diff 后点「应用」才会写入磁盘。"]
+                return ToolResult(callID: call.id, name: call.name,
+                                  content: Self.jsonString(payload),
+                                  summary: "✓ 已暂存改动 \(path),待确认", isError: false)
+            } catch {
+                let msg = error.localizedDescription
+                return Self.errorResult(call, summary: "⚠ 暂存写入失败: \(msg)", message: msg)
+            }
+        }
+        #else
+        return Self.errorResult(call, summary: "⚠ 本地文件工具仅 macOS 支持", message: "local file tools are macOS only")
+        #endif
     }
 
     // MARK: - helpers

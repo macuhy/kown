@@ -1,4 +1,7 @@
 import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
 
 /// 设备工具设置(设置 ▸ 设备工具)。让模型能在系统「提醒事项 / 备忘录」里创建条目。
 /// 提供总开关、提醒事项权限申请与状态、平台说明。macOS / iOS 通用。
@@ -20,6 +23,9 @@ struct DeviceToolsSettingsView: View {
                     remindersCard
                     calendarCard
                     notesCard
+                    #if os(macOS)
+                    localFilesCard
+                    #endif
                 }
                 usageCard
             }
@@ -194,6 +200,60 @@ struct DeviceToolsSettingsView: View {
             #endif
         }
     }
+
+    #if os(macOS)
+    @Bindable private var fileToolState = LocalFileToolState.shared
+
+    private var localFilesCard: some View {
+        card(icon: "folder", title: "本地文件(macOS)") {
+            if let path = fileToolState.displayPath {
+                statusChip(title: "已授权目录", icon: "checkmark.circle.fill", color: .green)
+                Text(path)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .truncationMode(.middle)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                statusChip(title: "未授权目录", icon: "exclamationmark.circle.fill", color: .orange)
+            }
+            Text("授权一个文件夹后,模型可读取 / 列出其中的文本文件;写文件会先暂存,你在输入栏上方看 diff 点「应用」才落盘。仅限该目录内,自动挡掉越权路径。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 8) {
+                Button {
+                    pickLocalFolder()
+                } label: {
+                    Label(fileToolState.isAuthorized ? "重选目录" : "选择目录", systemImage: "folder.badge.plus")
+                        .font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.bordered)
+                if fileToolState.isAuthorized {
+                    Button(role: .destructive) {
+                        fileToolState.clearAuthorization()
+                    } label: {
+                        Label("移除", systemImage: "xmark")
+                            .font(.caption.weight(.semibold))
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+        }
+    }
+
+    private func pickLocalFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "授权"
+        panel.message = "选择一个文件夹,允许 Kown 的模型在其中读写文本文件"
+        if panel.runModal() == .OK, let url = panel.url {
+            fileToolState.setAuthorized(url: url)
+        }
+    }
+    #endif
 
     private var usageCard: some View {
         VStack(alignment: .leading, spacing: 10) {
