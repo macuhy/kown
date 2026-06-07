@@ -18,6 +18,9 @@ struct DirectTurnsView: View {
     var onRegenerate: ((UUID, UUID) -> Void)? = nil
     /// 撤销某轮的 workspace 写入(turnID, write)。
     var onUndoWrite: ((UUID, AppliedWrite) -> Void)? = nil
+    /// 自动升级建议:换更强模型重答 / 转 Council 重答(turnID)。
+    var onEscalateStronger: ((UUID) -> Void)? = nil
+    var onEscalateCouncil: ((UUID) -> Void)? = nil
 
     @State private var collapsedTurns: Set<UUID> = []
     @Environment(\.horizontalSizeClass) private var hSizeClass
@@ -69,6 +72,7 @@ struct DirectTurnsView: View {
                         tokenUsage: turn.tokenUsage?[key],
                         showActions: true,
                         sources: turn.sourcesByProvider?[key] ?? (turn.sources ?? []),
+                        knowledgeSources: turn.knowledgeSources ?? [],
                         onRegenerate: onRegenerate.map { f in { pid in f(turn.id, pid) } }
                     )
                 }
@@ -79,6 +83,13 @@ struct DirectTurnsView: View {
             if let writes = turn.appliedWrites, !writes.isEmpty {
                 AppliedWritesStrip(writes: writes, onUndo: onUndoWrite.map { cb in { cb(turn.id, $0) } })
             }
+            if let suggestion = turn.escalationSuggestion, onEscalateStronger != nil || onEscalateCouncil != nil {
+                EscalationBanner(
+                    suggestion: suggestion,
+                    onStronger: onEscalateStronger.map { cb in { cb(turn.id) } },
+                    onCouncil: onEscalateCouncil.map { cb in { cb(turn.id) } }
+                )
+            }
             TurnSourcesStrip(turn: turn)
         }
     }
@@ -87,6 +98,9 @@ struct DirectTurnsView: View {
         directTurnShell(isLive: true) {
             userBubble(prompt: prompt, timestamp: Date(), images: liveImages)
             if let cfg = livePanel.first, let state = liveStates[cfg.id] {
+                if !state.toolSteps.isEmpty {
+                    AgentStepsView(steps: state.toolSteps)
+                }
                 assistantBubble(
                     config: cfg,
                     text: state.text,
@@ -237,6 +251,7 @@ struct DirectTurnsView: View {
     private func assistantBubble(config: ProviderConfig, text: String, error: String?, streaming: Bool,
                                  reasoning: String? = nil, tokenUsage: TurnTokenUsage? = nil,
                                  showActions: Bool = false, sources: [SourceRef] = [],
+                                 knowledgeSources: [KnowledgeSourceRef] = [],
                                  onRegenerate: ((UUID) -> Void)? = nil) -> some View {
         HStack(alignment: .top, spacing: assistantSpacing) {
             ZStack {
@@ -278,8 +293,9 @@ struct DirectTurnsView: View {
                         .foregroundStyle(.tertiary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
-                    MarkdownText(text: streaming ? text : citationLinkified(text, sources: sources),
+                    MarkdownText(text: streaming ? text : citationLinkified(text, sources: sources, knowledgeSources: knowledgeSources),
                                  streaming: streaming)
+                        .knowledgeCitationHost(streaming ? [] : knowledgeSources)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 if showActions, error == nil, !text.isEmpty {
@@ -432,5 +448,61 @@ struct DirectTurnsView: View {
 
     private var directTint: Color {
         ConversationMode.direct.kownTint
+    }
+}
+
+/// 自动升级建议横幅(建议式):答卡下方非侵入提示,点按钮才重答,默认仅建议。
+struct EscalationBanner: View {
+    let suggestion: EscalationSuggestion
+    /// nil 表示不提供该动作(隐藏对应按钮)。
+    var onStronger: (() -> Void)? = nil
+    var onCouncil: (() -> Void)? = nil
+
+    private var tint: Color { Color(red: 0.92, green: 0.55, blue: 0.22) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "wand.and.stars")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(tint)
+                    .padding(.top, 1)
+                Text("可能想更稳一点?\(suggestion.reason),要不要换更强的方式再答一次?")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+            }
+            HStack(spacing: 8) {
+                if let onStronger {
+                    actionButton("换更强模型重答", icon: "arrow.up.circle.fill", action: onStronger)
+                }
+                if let onCouncil {
+                    actionButton("转 Council 重答", icon: "person.3.fill", action: onCouncil)
+                }
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(11)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(tint.opacity(0.20), lineWidth: 1)
+        }
+    }
+
+    private func actionButton(_ title: String, icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: icon)
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+                .padding(.horizontal, 11)
+                .padding(.vertical, 6)
+                .background(tint.opacity(0.14), in: Capsule())
+                .overlay(Capsule().strokeBorder(tint.opacity(0.30), lineWidth: 1))
+                .foregroundStyle(tint)
+        }
+        .buttonStyle(.plain)
     }
 }

@@ -124,6 +124,11 @@ final class AppViewModel {
     var deviceToolsEnabledForNextSend: Bool {
         didSet { UserDefaults.standard.set(deviceToolsEnabledForNextSend, forKey: Self.deviceToolsToggleKey) }
     }
+    /// 输入栏「本地文件工具」开关(macOS)— 开启 + 已授权目录时,本次发送暴露 读/列/写(暂存)工具。持久化。
+    static let fileToolsToggleKey = "kown.fileTools.enabledForNextSend"
+    var fileToolsEnabledForNextSend: Bool {
+        didSet { UserDefaults.standard.set(fileToolsEnabledForNextSend, forKey: Self.fileToolsToggleKey) }
+    }
     /// 是否按输入自动匹配技能(纯启发式,零成本)。默认开;关掉则只用手动绑定的技能。
     var skillAutoTriggerEnabled: Bool {
         didSet { UserDefaults.standard.set(skillAutoTriggerEnabled, forKey: Self.skillAutoTriggerKey) }
@@ -230,6 +235,7 @@ final class AppViewModel {
         self.autoRouteEnabled = UserDefaults.standard.bool(forKey: Self.autoRouteKey)
         self.memoryInjectionEnabled = UserDefaults.standard.bool(forKey: Self.memoryInjectionKey)
         self.deviceToolsEnabledForNextSend = UserDefaults.standard.bool(forKey: Self.deviceToolsToggleKey)
+        self.fileToolsEnabledForNextSend = UserDefaults.standard.bool(forKey: Self.fileToolsToggleKey)
         // 自动触发默认开:首次启动 UserDefaults 没有该键时取 true。
         self.skillAutoTriggerEnabled = (UserDefaults.standard.object(forKey: Self.skillAutoTriggerKey) as? Bool) ?? true
         // 自动打标签默认开:首次启动 UserDefaults 没有该键时取 true。
@@ -393,6 +399,14 @@ final class AppViewModel {
     var budgetGate: BudgetGate?
     /// 确认「仍要发送」后置 true,让紧接着的 send() 跳过预算闸(发完即复位)。
     var bypassBudgetOnce = false
+    /// 「换更强模型重答」置 true,让紧接着的 send() 把 Direct panel[0] 强制路由到旗舰档(发完即复位)。
+    var forceFlagshipOnce = false
+
+    /// 自动升级建议开关(建议式)。默认开;在「设置 ▸ 性能」里可关。
+    static let escalationSuggestionsKey = "kown.escalation.enabled"
+    var escalationSuggestionsEnabled: Bool {
+        UserDefaults.standard.object(forKey: Self.escalationSuggestionsKey) as? Bool ?? true
+    }
 
     /// 正在生成图片(用于按钮 loading 态)。
     var isGeneratingImage = false

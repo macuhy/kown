@@ -25,6 +25,27 @@ extension AppViewModel {
         send()
     }
 
+    // MARK: - 自动升级建议(建议式)的重答动作
+
+    /// 「换更强模型重答」:用同一 prompt 在当前 Direct 会话里再发一轮,本次把模型强制升到旗舰档。
+    func escalateToStrongerModel(turnID: UUID) {
+        guard let conv = conversations.first(where: { $0.id == selectedConversationID }),
+              let turn = conv.turns.first(where: { $0.id == turnID }) else { return }
+        forceFlagshipOnce = true
+        prompt = turn.prompt
+        send()
+    }
+
+    /// 「转 Council 重答」:用同一 prompt 新建一个 Council 会话再问一遍(会话模式固定,故新建会话)。
+    func escalateToCouncil(turnID: UUID) {
+        guard let conv = conversations.first(where: { $0.id == selectedConversationID }),
+              let turn = conv.turns.first(where: { $0.id == turnID }) else { return }
+        let p = turn.prompt
+        newConversation(mode: .council)
+        prompt = p
+        send()
+    }
+
     func send() {
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -43,6 +64,15 @@ extension AppViewModel {
         if autoRouteEnabled, currentMode == .direct, let first = panel.first {
             let routed = QuestionRouter.route(first, prompt: trimmed)
             if routed.changed { panel[0] = routed.config }
+        }
+        // 「换更强模型重答」:本次发送把 Direct panel[0] 强制换成该 vendor 的旗舰档(发完即复位)。
+        if forceFlagshipOnce {
+            forceFlagshipOnce = false
+            if currentMode == .direct, let first = panel.first,
+               let flagship = QuestionRouter.routedModel(for: first, difficulty: .hard),
+               flagship != first.model {
+                var c = first; c.model = flagship; panel[0] = c
+            }
         }
 
         // 没有当前会话就新建
@@ -127,14 +157,23 @@ extension AppViewModel {
         // 工具集:web_search(开 🌐 + Firecrawl 已配置)+ 设备工具(总开关或当前技能点名)。
         let webSessionSnapshot = WebSearchSession.makeIfReady(userToggle: webSearchEnabledForNextSend)
         let skillToolNames = Set(activeSkill?.allowedTools ?? [])
+        // 本地文件工具(macOS):开关开 + 已授权目录时,带上 bookmark。
+        #if os(macOS)
+        let fileToolsBookmark: Data? = (fileToolsEnabledForNextSend && LocalFileToolState.shared.isAuthorized)
+            ? LocalFileToolState.shared.bookmark : nil
+        #else
+        let fileToolsBookmark: Data? = nil
+        #endif
         let toolsSnapshot: [LLMTool] = ToolCatalog.enabledTools(
             webSearch: webSessionSnapshot,
             deviceTools: deviceToolsEnabledForNextSend,
             extraToolNames: skillToolNames,
-            gitHub: gitHubTargetForSend != nil)
+            gitHub: gitHubTargetForSend != nil,
+            fileSystem: fileToolsBookmark != nil)
         // 有任一工具才建 context;否则 nil(客户端据此跳过工具循环、不注入当前时间)。
         let toolContextSnapshot: ToolContext? = toolsSnapshot.isEmpty
-            ? nil : ToolContext(webSearch: webSessionSnapshot, github: gitHubTargetForSend)
+            ? nil : ToolContext(webSearch: webSessionSnapshot, github: gitHubTargetForSend,
+                                localFileBookmark: fileToolsBookmark)
         let modeSnapshot = currentMode
         let debateRoundsSnapshot = debateRoundsForNextSend
         // Summary 只在 Council 模式跑
@@ -181,8 +220,9 @@ extension AppViewModel {
         knowledgeQuery: String,
         memoryItems: [MemoryItem],
         memoryQuery: String?
-    ) async -> String {
+    ) async -> (prompt: String, knowledgeSources: [KnowledgeSourceRef]) {
         var parts: [String] = []
+        var knowledgeSources: [KnowledgeSourceRef] = []
         if let url = workspaceContextURL, let ctx = WorkspaceManager.buildContext(workspaceURL: url) {
             parts.append(ctx)
         }
@@ -194,17 +234,30 @@ extension AppViewModel {
             parts.append(GitHubClient.writeInstructions(repo: gh.fullName, branch: gh.branch, paths: paths))
         }
         if let folder = knowledgeFolder {
-            let hits = await LocalRAG.retrieve(query: knowledgeQuery, folder: folder, topK: 4)
+            let hits = await LocalRAG.retrieveDetailed(query: knowledgeQuery, folder: folder, topK: 4)
             if !hits.isEmpty {
-                parts.append("[相关资料 — 来自知识库「\(folder.name)」,回答时优先参考以下片段]\n\n"
-                    + hits.joined(separator: "\n\n---\n\n"))
+                // 给每个片段编号 [n],并要求模型在引用某片段时用 [n] 标注 → 答案可句级溯源。
+                var blocks: [String] = []
+                for (i, h) in hits.enumerated() {
+                    let n = i + 1
+                    blocks.append("[\(n)] 【\(h.docName)】\n\(h.text)")
+                    knowledgeSources.append(KnowledgeSourceRef(
+                        index: n, docId: h.docId, docName: h.docName, excerpt: h.text))
+                }
+                parts.append("""
+                [相关资料 — 来自知识库「\(folder.name)」,回答时优先参考以下片段。\
+                **当某句话的依据直接来自某个片段时,请在该句末尾用 [n] 标注对应编号**(n = 片段前的数字),\
+                方便用户点开核对原文;没有用到的片段不必标注]
+
+                \(blocks.joined(separator: "\n\n---\n\n"))
+                """)
             }
         }
         if let q = memoryQuery, let mem = MemoryStore.relevanceBlock(items: memoryItems, query: q) {
             parts.append(mem)
         }
         if !base.isEmpty { parts.append(base) }
-        return parts.joined(separator: "\n\n")
+        return (parts.joined(separator: "\n\n"), knowledgeSources)
     }
 
     /// 真正执行一次发送编排:种 live 状态 → 跑 panel/chair/summary → 建 Turn 落盘。
@@ -312,7 +365,7 @@ extension AppViewModel {
 
             // 上下文打包(扫 workspace 文件树 / 知识库 RAG / 记忆 BM25)挪到后台线程算,避免卡主线程。
             // live 卡已在上面同步种好,这里只是把最终 system prompt 算出来再发网络。
-            let sysSnapshot = await Self.assembleSystemPrompt(
+            let assembled = await Self.assembleSystemPrompt(
                 base: systemPromptText,
                 workspaceContextURL: workspaceContextURL,
                 gitHubTarget: gitHubTarget,
@@ -321,6 +374,8 @@ extension AppViewModel {
                 memoryItems: memoryItems,
                 memoryQuery: memoryQuery
             )
+            let sysSnapshot = assembled.prompt
+            let knowledgeSourcesSnapshot = assembled.knowledgeSources
             if Task.isCancelled {
                 self.liveStates.values.forEach { $0.fail("已取消") }
                 self.isRunning = false
@@ -676,6 +731,14 @@ extension AppViewModel {
                 }
             }
 
+            // 2.8) 自动升级建议(建议式):仅 Direct 单答 + 开关开时,本地启发式扫低置信/回避信号。
+            var escalationSuggestion: EscalationSuggestion? = nil
+            if self.escalationSuggestionsEnabled, modeSnapshot == .direct,
+               let firstKey = panelOrder.first, errors[firstKey] == nil,
+               let primary = responses[firstKey] {
+                escalationSuggestion = EscalationAdvisor.evaluate(answer: primary)
+            }
+
             // 3) 落盘
             if let idx = self.conversations.firstIndex(where: { $0.id == convID }) {
                 if let summary = summarySnapshot {
@@ -703,7 +766,9 @@ extension AppViewModel {
                     reasoningByProvider: reasoningByProvider.isEmpty ? nil : reasoningByProvider,
                     tokenUsage: tokenUsage.isEmpty ? nil : tokenUsage,
                     councilVotes: councilVotes,
-                    sourcesByProvider: sourcesByProvider.isEmpty ? nil : sourcesByProvider
+                    sourcesByProvider: sourcesByProvider.isEmpty ? nil : sourcesByProvider,
+                    knowledgeSources: knowledgeSourcesSnapshot.isEmpty ? nil : knowledgeSourcesSnapshot,
+                    escalationSuggestion: escalationSuggestion
                 )
                 self.conversations[idx].turns.append(turn)
                 self.conversations[idx].updatedAt = Date()
@@ -1155,6 +1220,7 @@ extension AppViewModel {
                     case .text(let t): collected += t
                     case .reasoning(let r): collectedReasoning += r
                     case .toolEvent: break
+                    case .toolStep: break
                     case .sources: break
                     case .usage(let input, let output, let cached):
                         usage = TurnTokenUsage(input: input, output: output, cachedInput: cached)
@@ -1357,6 +1423,7 @@ extension AppViewModel {
                     case .text(let t): collected += t
                     case .reasoning(let r): collectedReasoning += r
                     case .toolEvent: break
+                    case .toolStep: break
                     case .sources: break
                     case .usage(let input, let output, let cached):
                         usage = TurnTokenUsage(input: input, output: output, cachedInput: cached)
@@ -1683,6 +1750,7 @@ extension AppViewModel {
                 case .text(let t):       state.append(t)
                 case .reasoning(let r):  state.appendReasoning(r)
                 case .toolEvent(let e):  state.logEvent(e)
+                case .toolStep(let s):   state.upsertToolStep(s)
                 case .sources(let refs):
                     // web_search 命中的来源:累积到本轮 liveSources(全轮合并,落盘进 Turn.sources),
                     // 同时按本卡 state 单独留一份(各 panel 小卡显示自己引用的地址),都按 url 去重。

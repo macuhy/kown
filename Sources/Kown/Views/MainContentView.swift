@@ -40,6 +40,9 @@ struct MainContentView: View {
                 #if os(iOS)
                 mobileComposerDock
                 #else
+                PendingFileWritesView()
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 6)
                 ActiveProviderBar(viewModel: viewModel)
                 InputBarView(
                     viewModel: viewModel,
@@ -703,7 +706,9 @@ struct MainContentView: View {
                                 onShareTurn: { shareTurnImage($0) },
                                 regenerateProviders: viewModel.regenerateCandidates,
                                 onRegenerate: { viewModel.regenerateDirectWithModel(turnID: $0, newProviderID: $1) },
-                                onUndoWrite: { viewModel.undoWrite(turnID: $0, write: $1) }
+                                onUndoWrite: { viewModel.undoWrite(turnID: $0, write: $1) },
+                                onEscalateStronger: { viewModel.escalateToStrongerModel(turnID: $0) },
+                                onEscalateCouncil: { viewModel.escalateToCouncil(turnID: $0) }
                             )
                         case .compare:
                             CompareTurnsView(

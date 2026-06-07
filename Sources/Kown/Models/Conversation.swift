@@ -335,6 +335,13 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
     var selfRevision: SelfRevision?
     /// 事实核查结果(opt-in「事实核查」按钮触发)。旧会话没有,保持 optional。
     var factCheck: FactCheckResult?
+    /// 本轮注入的知识库片段(带来源元数据),用于「句级溯源」:答案里的 `[n]` 角标
+    /// 映射到第 n 条,点开弹出原文。RAG 每次 send 检索一次、跨 provider 共享,故 turn 级即可。
+    /// 旧会话没有,保持 optional。
+    var knowledgeSources: [KnowledgeSourceRef]?
+    /// 自动升级建议(建议式):答完后本地启发式检测到「低置信 / 回避」时给出,UI 在答卡下方
+    /// 非侵入地提示「换更强模型 / 转 Council 重答」。默认仅建议,绝不自动重跑。旧会话没有,保持 optional。
+    var escalationSuggestion: EscalationSuggestion?
 
     init(id: UUID = UUID(),
          timestamp: Date = Date(),
@@ -365,7 +372,9 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
          generatedImagesByProvider: [String: [TurnImage]]? = nil,
          imageGenErrors: [String: String]? = nil,
          selfRevision: SelfRevision? = nil,
-         factCheck: FactCheckResult? = nil) {
+         factCheck: FactCheckResult? = nil,
+         knowledgeSources: [KnowledgeSourceRef]? = nil,
+         escalationSuggestion: EscalationSuggestion? = nil) {
         self.id = id
         self.timestamp = timestamp
         self.prompt = prompt
@@ -396,6 +405,8 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
         self.imageGenErrors = imageGenErrors
         self.selfRevision = selfRevision
         self.factCheck = factCheck
+        self.knowledgeSources = knowledgeSources
+        self.escalationSuggestion = escalationSuggestion
     }
 
     // 兼容旧 JSON(缺新字段时 sources 等以 decodeIfPresent 解码,默认 nil),不破坏现有存档/同步。
@@ -406,7 +417,7 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
         case providerSnapshot, panelOrder, debateRounds, tournamentRounds, appliedWrites, images, sources
         case reasoningByProvider, tokenUsage, councilVotes, sourcesByProvider
         case generatedImages, compareVerdict, consensusAnalysis, generatedImagesByProvider, imageGenErrors
-        case selfRevision, factCheck
+        case selfRevision, factCheck, knowledgeSources, escalationSuggestion
     }
 
     init(from decoder: Decoder) throws {
@@ -441,6 +452,8 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
         self.imageGenErrors = try c.decodeIfPresent([String: String].self, forKey: .imageGenErrors)
         self.selfRevision = try c.decodeIfPresent(SelfRevision.self, forKey: .selfRevision)
         self.factCheck = try c.decodeIfPresent(FactCheckResult.self, forKey: .factCheck)
+        self.knowledgeSources = try c.decodeIfPresent([KnowledgeSourceRef].self, forKey: .knowledgeSources)
+        self.escalationSuggestion = try c.decodeIfPresent(EscalationSuggestion.self, forKey: .escalationSuggestion)
     }
 
     /// 取顺序化的 panel 配置（按发送顺序，Chair 不在内）
@@ -476,6 +489,38 @@ struct SourceRef: Identifiable, Codable, Hashable, Sendable {
         self.title = title
         self.url = url
         self.snippet = snippet
+    }
+}
+
+/// 一条知识库引用来源(句级溯源):答案里的 `[n]` 角标映射到 `index == n` 的这条,
+/// 点开底部弹层展示 `docName` 文档里被引用的 `excerpt` 原文。随 Turn 一起存盘/同步。
+struct KnowledgeSourceRef: Identifiable, Codable, Hashable, Sendable {
+    /// 引用编号(同一回合内唯一,等于注入 prompt 时该片段前的 `[n]`)。
+    var index: Int
+    var id: Int { index }
+    /// 来源文档 ID(回溯到 KnowledgeDoc)。
+    var docId: UUID
+    /// 来源文档名(展示用)。
+    var docName: String
+    /// 被引用的片段原文。
+    var excerpt: String
+
+    init(index: Int, docId: UUID, docName: String, excerpt: String) {
+        self.index = index
+        self.docId = docId
+        self.docName = docName
+        self.excerpt = excerpt
+    }
+}
+
+/// 自动升级建议(建议式):答完后本地启发式给出的「这条回答也许值得用更强的方式再来一次」提示。
+/// 只承载理由文案;具体重答动作(换更强模型 / 转 Council)由 UI 两个按钮触发,绝不自动执行。
+struct EscalationSuggestion: Codable, Hashable, Sendable {
+    /// 给用户看的一句理由,如「回答中出现多处不确定措辞」。
+    var reason: String
+
+    init(reason: String) {
+        self.reason = reason
     }
 }
 
