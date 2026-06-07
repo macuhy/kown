@@ -241,18 +241,23 @@ struct InputBarView: View {
     @ViewBuilder
     private var barRow: some View {
         #if os(iOS)
-        if iOSKeyboardCompact {
+        // promptField 必须在 compact 切换时保持同一个结构身份(始终是顶部 HStack 的固定一项)。
+        // 若让它在 VStack/HStack 两个分支间跳转,聚焦瞬间 SwiftUI 会销毁并重建 TextField →
+        // 新字段无焦点 → inputFocused 被打回 false → 布局又切回去 → 重入死循环(点击输入框即卡死)。
+        // 这里只增删 promptField 周围的工具条,字段本体位置不变。
+        VStack(spacing: 6) {
             HStack(alignment: .bottom, spacing: 7) {
-                iOSCompactToolsMenu
+                if iOSKeyboardCompact {
+                    iOSCompactToolsMenu
+                }
                 promptField
                     .layoutPriority(1)
-                micButton
-                sendButton
+                if iOSKeyboardCompact {
+                    micButton
+                    sendButton
+                }
             }
-            .transition(.opacity.combined(with: .move(edge: .bottom)))
-        } else {
-            VStack(spacing: 6) {
-                promptField
+            if !iOSKeyboardCompact {
                 HStack(spacing: 8) {
                     ScrollView(.horizontal, showsIndicators: false) {
                         toolButtons
@@ -337,9 +342,8 @@ struct InputBarView: View {
         .onChange(of: viewModel.prompt) { _, _ in
             if !history.isBrowsing { history.resetBrowsing() }
         }
-        #if os(iOS)
-        .onTapGesture { inputFocused = true }
-        #endif
+        // iOS 不要再加 .onTapGesture 抢焦点:TextField/TextEditor 原生点击即聚焦,
+        // 额外的 tap 手势会吞掉用来定位光标/激活键盘的那一击 → 输入框点了没反应。
         #if os(macOS)
         // ⌘V 粘贴图片(位图字节)兜底 — file-url 由下面的 NSEvent monitor 抢在字段编辑器前拦。
         .onPasteCommand(of: ["public.image", "public.png", "public.jpeg", "public.tiff"]) { _ in
