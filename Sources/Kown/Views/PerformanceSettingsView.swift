@@ -13,6 +13,8 @@ struct PerformanceSettingsView: View {
     @AppStorage("kown.councilVoting.v1") private var councilVoting: Bool = false
     /// 与 AppViewModel.autoRouteEnabled 同一 key。
     @AppStorage("kown.autoRoute.v1") private var autoRoute: Bool = false
+    /// 与 AppViewModel.escalationSuggestionsEnabled 同一 key(默认开)。
+    @AppStorage("kown.escalation.enabled") private var escalationSuggestions: Bool = true
     /// 与 AppViewModel.autoTagEnabled 同一 key。默认开。
     @AppStorage("kown.autoTag.v1") private var autoTag: Bool = true
     /// 与 AnthropicClient.claudeThinkingEnabled 同一 key。
@@ -44,6 +46,7 @@ struct PerformanceSettingsView: View {
                 autoFailoverCard
                 councilVotingCard
                 autoRouteCard
+                escalationCard
                 autoTagCard
                 claudeThinkingCard
                 guideCard
@@ -63,6 +66,7 @@ struct PerformanceSettingsView: View {
                 autoFailoverCard
                 councilVotingCard
                 autoRouteCard
+                escalationCard
                 autoTagCard
                 claudeThinkingCard
                 guideCard
@@ -82,6 +86,31 @@ struct PerformanceSettingsView: View {
                     Text("自动容错切换")
                         .font(.body.weight(.semibold))
                     Text("某个模型回答失败时,自动换另一家已启用的模型重试一次(纯文本)。回答会标注已切换到哪家。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .tint(tint)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(tint.opacity(0.16), lineWidth: 1)
+        }
+    }
+
+    // MARK: - 自动升级建议
+
+    private var escalationCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Toggle(isOn: $escalationSuggestions) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("答完给出升级建议")
+                        .font(.body.weight(.semibold))
+                    Text("Direct 模式答完后,本地检测到回答含较多「不确定」措辞或像在回避时,在答卡下方给一条非侵入提示,可一键换更强模型或转 Council 重答。仅建议,绝不自动重跑。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
