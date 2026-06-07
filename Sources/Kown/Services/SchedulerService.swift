@@ -118,6 +118,7 @@ final class SchedulerService {
     }
 
     /// 真正发火:用任务的 prompt + mode 新建会话并发送;更新 lastRun;发本地通知。
+    /// 简报任务(`morningBriefing`)需异步组装(读日历是 async),故整段发送放进 `Task`。
     private func fire(_ task: ScheduledTask, now: Date) {
         // 先标记 lastRun,避免同一分钟内定时器再次触发重复发(即便发送失败也算「今天已尝试」)。
         if let idx = tasks.firstIndex(where: { $0.id == task.id }) {
@@ -125,15 +126,85 @@ final class SchedulerService {
             persist()
         }
 
-        let trimmed = task.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let vm = viewModel, !trimmed.isEmpty {
-            // 新建该模式会话 → 填 prompt → 走既有发送流程。
-            vm.newConversation(mode: task.mode)
-            vm.prompt = trimmed
-            vm.send()
+        let vm = viewModel
+        Task { @MainActor in
+            let promptText: String
+            switch task.kind {
+            case .morningBriefing:
+                promptText = await Self.buildBriefingPrompt(task: task)
+            case .plainPrompt:
+                promptText = task.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            if let vm, !promptText.isEmpty {
+                // 新建该模式会话 → 填 prompt → 走既有发送流程。
+                vm.newConversation(mode: task.mode)
+                vm.prompt = promptText
+                vm.send()
+            }
         }
 
         notify(task: task)
+    }
+
+    // MARK: - 晨间简报组装
+
+    /// 把今日日程 + 长期关注点 + 订阅话题拼成一份简报 prompt。各部分缺失时优雅跳过。
+    /// 纯组装,不直接调模型 —— 拼好后交给 `vm.send()` 走既有发送流程。
+    static func buildBriefingPrompt(task: ScheduledTask) async -> String {
+        var sections: [String] = []
+
+        // 1) 今日日程(读系统日历;未授权/无日程则跳过)。
+        #if canImport(EventKit)
+        let events = await EventKitService.shared.listEvents(daysAhead: 1, limit: 20)
+        if !events.isEmpty {
+            let df = DateFormatter()
+            df.locale = Locale(identifier: "zh_CN")
+            df.dateFormat = "HH:mm"
+            let lines = events.map { e -> String in
+                let t = e.start.map { df.string(from: $0) } ?? "全天"
+                let loc = (e.location?.isEmpty == false) ? " @ \(e.location!)" : ""
+                return "- \(t) \(e.title)\(loc)"
+            }
+            sections.append("【今日日程】\n" + lines.joined(separator: "\n"))
+        }
+        #endif
+
+        // 2) 长期关注点 / 偏好(来自跨会话沉淀的记忆)。
+        let mem = MemoryStore.shared.items.prefix(12).map { "- " + $0.text }
+        if !mem.isEmpty {
+            sections.append("【我的长期关注点 / 偏好】\n" + mem.joined(separator: "\n"))
+        }
+
+        // 3) 订阅话题。
+        let topics = task.briefingTopics
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        if !topics.isEmpty {
+            sections.append("【我订阅的话题(请逐条简报最新进展)】\n"
+                + topics.map { "- " + $0 }.joined(separator: "\n"))
+        }
+
+        // 4) 用户的额外指示(可选)。
+        let extra = task.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !extra.isEmpty {
+            sections.append("【额外指示】\n" + extra)
+        }
+
+        let context = sections.isEmpty
+            ? "(暂无日程 / 关注点 / 话题数据)"
+            : sections.joined(separator: "\n\n")
+
+        return """
+        你是我的私人晨间助理。请基于下面的资料,给我写一份简短、可执行的「今日晨报」:
+        1. 先用一句话概括今天的重点;
+        2. 若有日程,按时间梳理并提醒可能的冲突或需提前准备的事项;
+        3. 若有订阅话题,逐条给最新进展 / 值得关注的点(可联网核实);
+        4. 结尾给 1-3 条今天的小建议。
+        语气简洁友好,用中文,控制在合理篇幅,不要复述原始资料。
+
+        ===== 今日资料 =====
+        \(context)
+        """
     }
 
     // MARK: - 本地通知
@@ -148,11 +219,17 @@ final class SchedulerService {
     /// 发一条本地通知,告知该定时任务已触发。
     private func notify(task: ScheduledTask) {
         let content = UNMutableNotificationContent()
-        content.title = "定时任务已触发"
+        content.title = task.isBriefing ? "晨间简报已生成" : "定时任务已触发"
         let name = task.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        content.body = name.isEmpty
-            ? "已自动发送一条定时提问(\(task.timeText))"
-            : "「\(name)」已自动发送(\(task.timeText))"
+        if task.isBriefing {
+            content.body = name.isEmpty
+                ? "今日晨报已为你准备好(\(task.timeText))"
+                : "「\(name)」已生成(\(task.timeText))"
+        } else {
+            content.body = name.isEmpty
+                ? "已自动发送一条定时提问(\(task.timeText))"
+                : "「\(name)」已自动发送(\(task.timeText))"
+        }
         content.sound = .default
         let req = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(req) { _ in }

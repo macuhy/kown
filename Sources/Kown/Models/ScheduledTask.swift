@@ -6,11 +6,22 @@ import Foundation
 /// **重要:仅在 app 运行(前台或被系统短暂保活)期间发火** —— 后台常驻定时执行受 OS 限制
 /// (macOS 可后台跑,iOS 被 suspend 后定时器停摆),所以本功能定位为「打开 app 时补跑当天该跑的任务」。
 struct ScheduledTask: Identifiable, Codable, Hashable, Sendable {
+    /// 任务类型:普通定时提问 vs 主动助理「晨间简报」。
+    /// 简报任务会在发火时即时组装(今日日程 + 长期关注点 + 订阅话题),`prompt` 仅作可选的额外指示。
+    enum Kind: String, Codable, Sendable {
+        case plainPrompt        // 固定 prompt 原样发出(旧行为,默认)
+        case morningBriefing    // 主动助理:组装日程/记忆/话题成一份简报
+    }
+
     let id: UUID
     /// 任务名(列表展示用)。
     var title: String
-    /// 要发送的 prompt 正文。
+    /// 要发送的 prompt 正文。简报任务里这是「额外指示」,可为空。
     var prompt: String
+    /// 任务类型。旧 JSON 没有该字段 → 默认 `.plainPrompt`,完全兼容。
+    var kind: Kind
+    /// 简报订阅话题(仅 `morningBriefing` 用):每条会被要求「联网/凭知识简报一下最新进展」。
+    var briefingTopics: [String]
     /// 用哪个对话模式发(council / direct / compare / debate / structured)。
     var mode: ConversationMode
     /// 触发时刻 — 小时(0...23)。
@@ -31,6 +42,8 @@ struct ScheduledTask: Identifiable, Codable, Hashable, Sendable {
         id: UUID = UUID(),
         title: String = "",
         prompt: String = "",
+        kind: Kind = .plainPrompt,
+        briefingTopics: [String] = [],
         mode: ConversationMode = .direct,
         hour: Int = 9,
         minute: Int = 0,
@@ -42,6 +55,8 @@ struct ScheduledTask: Identifiable, Codable, Hashable, Sendable {
         self.id = id
         self.title = title
         self.prompt = prompt
+        self.kind = kind
+        self.briefingTopics = briefingTopics
         self.mode = mode
         self.hour = hour
         self.minute = minute
@@ -53,7 +68,7 @@ struct ScheduledTask: Identifiable, Codable, Hashable, Sendable {
 
     // 兼容旧 JSON(缺字段容错,避免整份解码失败丢任务)。
     enum CodingKeys: String, CodingKey {
-        case id, title, prompt, mode, hour, minute, repeatsDaily, weekday, enabled, lastRun
+        case id, title, prompt, kind, briefingTopics, mode, hour, minute, repeatsDaily, weekday, enabled, lastRun
     }
 
     init(from decoder: Decoder) throws {
@@ -61,6 +76,8 @@ struct ScheduledTask: Identifiable, Codable, Hashable, Sendable {
         self.id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
         self.title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
         self.prompt = try c.decodeIfPresent(String.self, forKey: .prompt) ?? ""
+        self.kind = try c.decodeIfPresent(Kind.self, forKey: .kind) ?? .plainPrompt
+        self.briefingTopics = try c.decodeIfPresent([String].self, forKey: .briefingTopics) ?? []
         self.mode = try c.decodeIfPresent(ConversationMode.self, forKey: .mode) ?? .direct
         self.hour = try c.decodeIfPresent(Int.self, forKey: .hour) ?? 9
         self.minute = try c.decodeIfPresent(Int.self, forKey: .minute) ?? 0
@@ -69,6 +86,9 @@ struct ScheduledTask: Identifiable, Codable, Hashable, Sendable {
         self.enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
         self.lastRun = try c.decodeIfPresent(Date.self, forKey: .lastRun)
     }
+
+    /// 是否为简报任务。
+    var isBriefing: Bool { kind == .morningBriefing }
 
     /// 触发时刻的展示文本,如 `09:05`。
     var timeText: String {

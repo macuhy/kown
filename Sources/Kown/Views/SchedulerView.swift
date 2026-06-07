@@ -446,9 +446,9 @@ struct SchedulerView: View {
                 .font(.caption.weight(.black))
                 .foregroundStyle(tint)
                 .padding(.top, 2)
-            Text(task.prompt.isEmpty ? "尚未填写提问内容" : task.prompt)
+            Text(promptPreviewText(task))
                 .font(.caption)
-                .foregroundStyle(task.prompt.isEmpty ? .tertiary : .secondary)
+                .foregroundStyle(promptPreviewIsPlaceholder(task) ? .tertiary : .secondary)
                 .lineLimit(4)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
@@ -554,7 +554,23 @@ struct SchedulerView: View {
 
     private func taskDisplayTitle(_ task: ScheduledTask) -> String {
         let trimmed = task.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "未命名定时提问" : trimmed
+        if !trimmed.isEmpty { return trimmed }
+        return task.isBriefing ? "晨间简报" : "未命名定时提问"
+    }
+
+    /// 卡片正文预览:简报任务展示订阅话题(没有则给固定说明),普通任务展示 prompt。
+    private func promptPreviewText(_ task: ScheduledTask) -> String {
+        if task.isBriefing {
+            if !task.briefingTopics.isEmpty {
+                return "晨报 · 话题:" + task.briefingTopics.joined(separator: "、")
+            }
+            return "自动汇总今日日程与长期关注点"
+        }
+        return task.prompt.isEmpty ? "尚未填写提问内容" : task.prompt
+    }
+
+    private func promptPreviewIsPlaceholder(_ task: ScheduledTask) -> Bool {
+        !task.isBriefing && task.prompt.isEmpty
     }
 
     private func compactDateTime(_ date: Date) -> String {
@@ -605,6 +621,10 @@ private struct SchedulerTaskEditor: View {
     /// 周期:false = 每天;true = 每周。每周时用 `weekday`(1=周日…7=周六)。
     @State private var weekly: Bool
     @State private var weekday: Int
+    /// 任务类型(普通提问 / 晨间简报)。
+    @State private var kind: ScheduledTask.Kind
+    /// 简报订阅话题,编辑时用「每行一个」的文本承载,保存时拆成数组。
+    @State private var topicsText: String
 
     private var schedulerTint: Color { Color(red: 0.20, green: 0.56, blue: 0.78) }
     private var schedulerWarmTint: Color { Color(red: 0.92, green: 0.55, blue: 0.22) }
@@ -622,6 +642,8 @@ private struct SchedulerTaskEditor: View {
         _time = State(initialValue: Calendar.current.date(from: comps) ?? Date())
         _weekly = State(initialValue: task.weekday != nil)
         _weekday = State(initialValue: task.weekday ?? 2)   // 默认周一
+        _kind = State(initialValue: task.kind)
+        _topicsText = State(initialValue: task.briefingTopics.joined(separator: "\n"))
     }
 
     var body: some View {
@@ -694,6 +716,15 @@ private struct SchedulerTaskEditor: View {
             VStack(alignment: .leading, spacing: 16) {
                 editorHero
                 editorSection(
+                    "任务类型",
+                    subtitle: "普通提问按固定 Prompt 发出;晨间简报会即时组装日程、关注点和订阅话题。",
+                    icon: "sparkles",
+                    tint: schedulerTint
+                ) {
+                    kindPicker
+                }
+
+                editorSection(
                     "任务身份",
                     subtitle: "名字可选,模式决定自动发送后进入哪种对话编排。",
                     icon: "tag.fill",
@@ -701,6 +732,17 @@ private struct SchedulerTaskEditor: View {
                 ) {
                     titleField
                     modeGrid
+                }
+
+                if kind == .morningBriefing {
+                    editorSection(
+                        "订阅话题",
+                        subtitle: "每行一个话题,简报会逐条给最新进展(可联网核实)。可留空,只汇总日程与关注点。",
+                        icon: "newspaper.fill",
+                        tint: schedulerWarmTint
+                    ) {
+                        topicsField
+                    }
                 }
 
                 editorSection(
@@ -713,8 +755,10 @@ private struct SchedulerTaskEditor: View {
                 }
 
                 editorSection(
-                    "提问内容",
-                    subtitle: "保存前会自动去掉首尾空白;为空时不能保存。",
+                    kind == .morningBriefing ? "额外指示(可选)" : "提问内容",
+                    subtitle: kind == .morningBriefing
+                        ? "想让简报额外包含什么、用什么语气,可写在这里;留空也行。"
+                        : "保存前会自动去掉首尾空白;为空时不能保存。",
                     icon: "text.quote",
                     tint: schedulerTint
                 ) {
@@ -778,6 +822,23 @@ private struct SchedulerTaskEditor: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(Color.platformControlBackground.opacity(0.55), in: Capsule(style: .continuous))
+    }
+
+    private var kindPicker: some View {
+        Picker("类型", selection: $kind) {
+            Text("普通提问").tag(ScheduledTask.Kind.plainPrompt)
+            Text("晨间简报").tag(ScheduledTask.Kind.morningBriefing)
+        }
+        .pickerStyle(.segmented)
+    }
+
+    private var topicsField: some View {
+        TextField("每行一个话题,例如:\nAI 行业要闻\n我关注的球队", text: $topicsText, axis: .vertical)
+            .textFieldStyle(.plain)
+            .font(.callout)
+            .lineLimit(3...8)
+            .padding(13)
+            .background(inputBackground(tint: schedulerWarmTint))
     }
 
     private var titleField: some View {
@@ -1051,7 +1112,9 @@ private struct SchedulerTaskEditor: View {
     }
 
     private var canSave: Bool {
-        !task.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        // 简报任务不要求填 prompt(内容由日程/关注点/话题即时组装)。
+        if kind == .morningBriefing { return true }
+        return !task.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func save() {
@@ -1062,6 +1125,11 @@ private struct SchedulerTaskEditor: View {
         updated.weekday = weekly ? weekday : nil
         updated.title = updated.title.trimmingCharacters(in: .whitespacesAndNewlines)
         updated.prompt = updated.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        updated.kind = kind
+        updated.briefingTopics = topicsText
+            .split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
         onSave(updated)
     }
 }
