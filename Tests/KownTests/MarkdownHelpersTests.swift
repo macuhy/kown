@@ -37,9 +37,14 @@ final class MarkdownHelpersTests: XCTestCase {
         XCTAssertTrue(MD.hasBlockLevelExtras("```\ncode\n```"))
         XCTAssertTrue(MD.hasBlockLevelExtras("| a | b |\n|---|---|"))
         XCTAssertTrue(MD.hasBlockLevelExtras("- [ ] 待办\n- [x] 完成"))
-        XCTAssertTrue(MD.hasBlockLevelExtras("# 标题\n正文"))      // 标题走 MarkdownUI 才能放大
-        XCTAssertTrue(MD.hasBlockLevelExtras("正文\n### 三级标题"))
+        XCTAssertFalse(MD.hasBlockLevelExtras("# 标题\n正文"))     // 标题走单 Text,保证多列可选中
+        XCTAssertFalse(MD.hasBlockLevelExtras("正文\n### 三级标题"))
         XCTAssertFalse(MD.hasBlockLevelExtras("普通**加粗**文本"))
         XCTAssertFalse(MD.hasBlockLevelExtras("#标签不是标题(无空格)"))
+    }
+
+    func testSelectableRichMarkdownNormalizesHeadingsAndRules() {
+        let src = "### 立场：标题\n---\n正文"
+        XCTAssertEqual(MD.selectableRichMarkdown(src), "**立场：标题**\n────────\n正文")
     }
 }

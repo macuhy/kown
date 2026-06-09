@@ -30,7 +30,7 @@ func citationLinkified(_ text: String, sources: [SourceRef], knowledgeSources: [
 /// - **finished**: 双路径:
 ///   - 默认走 `Text(AttributedString(markdown:))` — **整个回答作为单个 Text view**,
 ///     支持跨段/跨标题/跨列表的全文拖选。内联格式(粗体/斜体/inline code/链接)保留。
-///     代价:H1/H2 标题不放大、列表无缩进 — 对 LLM chat 内容是可接受的取舍。
+///     常见块级语法(标题 / 分割线)会先折成可选富文本,避免多列卡片里一边能选一边不能选。
 ///   - 含代码块(```或 ~~~)/ 表格 / 任务列表(`- [ ]`)的回答 fallback 到 swift-markdown-ui,
 ///     保留代码块、表格、checkbox 视觉;完成态同样开启系统文本选择,可像备忘录一样选中拷贝片段。
 struct MarkdownText: View {
@@ -117,7 +117,7 @@ enum MD {
                 .markdownTheme(kownTheme)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
-        } else if let attr = try? AttributedString(markdown: linkify(src), options: .init(
+        } else if let attr = try? AttributedString(markdown: linkify(selectableRichMarkdown(src)), options: .init(
             allowsExtendedAttributes: true,
             interpretedSyntax: .inlineOnlyPreservingWhitespace,
             failurePolicy: .returnPartiallyParsedIfPossible
@@ -214,8 +214,39 @@ enum MD {
         || text.range(of: #"^\|.+\|"#, options: [.regularExpression, .anchored]) != nil
         || text.range(of: #"\n\|.+\|"#, options: .regularExpression) != nil
         || text.range(of: #"(?m)^[ \t]*[-*] \[[ xX]\] "#, options: .regularExpression) != nil
-        // 标题:行首 `# ` ~ `###### `。AttributedString 的 inlineOnly 不放大标题,走 MarkdownUI 才有层级。
-        || text.range(of: #"(?m)^#{1,6} "#, options: .regularExpression) != nil
+        // 普通标题 / 分割线仍走单个 Text 路径:多模型并排时 MarkdownUI 的块级 Text 选择不稳定,
+        // 单 Text 能保证每张卡都可像备忘录一样拖选复制。
+    }
+
+    private static let headingRe = try? NSRegularExpression(
+        pattern: #"(?m)^[ \t]{0,3}#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$"#
+    )
+    private static let horizontalRuleRe = try? NSRegularExpression(
+        pattern: #"(?m)^[ \t]{0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$"#
+    )
+
+    /// 单 `Text` 可选路径用的轻量块级规范化:
+    /// - `### 标题` → `**标题**`,保留标题的富文本感,同时避免落到 MarkdownUI 的多块选择路径。
+    /// - `---` 分割线 → 视觉分隔字符,避免显示 markdown 源码。
+    static func selectableRichMarkdown(_ s: String) -> String {
+        var out = replaceCapture(s, headingRe) { "**\($0)**" }
+        out = replaceMatches(out, horizontalRuleRe) { _ in "────────" }
+        return out
+    }
+
+    private static func replaceMatches(_ s: String, _ re: NSRegularExpression?, _ transform: (String) -> String) -> String {
+        guard let re else { return s }
+        let ns = s as NSString
+        var result = ""
+        var last = 0
+        re.enumerateMatches(in: s, range: NSRange(location: 0, length: ns.length)) { m, _, _ in
+            guard let m else { return }
+            result += ns.substring(with: NSRange(location: last, length: m.range.location - last))
+            result += transform(ns.substring(with: m.range))
+            last = m.range.location + m.range.length
+        }
+        result += ns.substring(from: last)
+        return result
     }
 
     /// `Theme` 不是 Sendable;计算属性每次实例化,SwiftUI 缓存渲染结果。
