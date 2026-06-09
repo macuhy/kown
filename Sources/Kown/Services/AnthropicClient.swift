@@ -311,6 +311,8 @@ struct AnthropicClient: LLMClient {
                 } else {
                     body = event.data
                 }
+                // 出错也要留痕:否则一 throw 就跳过了函数末尾的 dbgRecord,出错的请求反而不记日志。
+                dbgRecord(status: 200, raw: dbgRaw, error: body)
                 throw LLMError.httpError(status: 200, body: body)
             }
 
