@@ -1,6 +1,6 @@
 import Foundation
 
-/// 手机端写入 App Group、表盘端读取的精简 provider 配置(仅 OpenAI 兼容)。
+/// 手机经 WatchConnectivity 推送、表盘接收并本地缓存的精简 provider 配置(仅 OpenAI 兼容)。
 struct WatchProviderConfig: Codable, Equatable {
     var name: String
     var baseURL: String
@@ -8,18 +8,25 @@ struct WatchProviderConfig: Codable, Equatable {
     var model: String
 }
 
-/// 从共享 App Group 读取手机同步过来的 provider 配置。
+/// 表盘本地缓存(UserDefaults.standard):存最近一次从手机收到的配置,重启后仍在。
+/// 注意:**不能**用 App Group 从手机读 —— App Group 容器不跨 iPhone/Watch 设备,必须走 WCSession。
 enum WatchConfigStore {
-    static let appGroup = "group.com.xiaobo.kown"
     static let key = "kown.watch.provider.v1"
 
-    static func load() -> WatchProviderConfig? {
-        guard let defaults = UserDefaults(suiteName: appGroup),
-              let data = defaults.data(forKey: key),
+    static func loadLocal() -> WatchProviderConfig? {
+        guard let data = UserDefaults.standard.data(forKey: key),
               let cfg = try? JSONDecoder().decode(WatchProviderConfig.self, from: data),
               !cfg.apiKey.isEmpty, !cfg.baseURL.isEmpty
         else { return nil }
         return cfg
+    }
+
+    static func saveLocal(_ cfg: WatchProviderConfig?) {
+        guard let cfg, let data = try? JSONEncoder().encode(cfg) else {
+            UserDefaults.standard.removeObject(forKey: key)
+            return
+        }
+        UserDefaults.standard.set(data, forKey: key)
     }
 }
 

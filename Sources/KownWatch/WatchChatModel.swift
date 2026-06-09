@@ -5,7 +5,6 @@ import Observation
 @MainActor
 @Observable
 final class WatchChatModel {
-    var config: WatchProviderConfig?
     var answer: String = ""
     var error: String?
     var isStreaming: Bool = false
@@ -13,17 +12,10 @@ final class WatchChatModel {
     private let speaker = WatchSpeaker()
     private var task: Task<Void, Never>?
 
-    init() {
-        config = WatchConfigStore.load()
-    }
-
-    func reloadConfig() {
-        config = WatchConfigStore.load()
-    }
-
     var isSpeaking: Bool { speaker.isSpeaking }
 
-    func ask(mode: WatchMode, prompt: String) {
+    /// config 由 view 从 WatchConnectivityReceiver 传入(手机经 WCSession 推送过来的)。
+    func ask(mode: WatchMode, prompt: String, config: WatchProviderConfig?) {
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         if isStreaming { task?.cancel(); isStreaming = false; return }

@@ -3,13 +3,14 @@ import SwiftUI
 /// 表盘主界面:选模式 → 语音输入(听写)→ 流式回答 → 自动朗读。
 struct WatchRootView: View {
     @State private var model = WatchChatModel()
+    @StateObject private var conn = WatchConnectivityReceiver.shared
     @State private var mode: WatchMode = .direct
     @State private var input = ""
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
-                if model.config == nil {
+                if conn.config == nil {
                     notConfigured
                 } else {
                     modePicker
@@ -28,7 +29,6 @@ struct WatchRootView: View {
             .padding(.horizontal, 4)
         }
         .navigationTitle("Kown")
-        .onAppear { model.reloadConfig() }
     }
 
     private var notConfigured: some View {
@@ -38,11 +38,9 @@ struct WatchRootView: View {
                 .foregroundStyle(.secondary)
             Text("还没收到模型配置")
                 .font(.headline)
-            Text("在 iPhone 上的 Kown 设置里点「同步到 Apple Watch」,把一个 OpenAI 兼容模型推送过来。")
+            Text("在 iPhone 上打开 Kown(同一 Apple ID 配对的手表),进「设置 ▸ Provider」点「同步到 Apple Watch」,配置会通过手表连接推送过来。")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
-            Button("重新读取") { model.reloadConfig() }
-                .buttonStyle(.bordered)
         }
     }
 
@@ -66,7 +64,7 @@ struct WatchRootView: View {
 
     private var askButton: some View {
         Button {
-            model.ask(mode: mode, prompt: input)
+            model.ask(mode: mode, prompt: input, config: conn.config)
         } label: {
             HStack {
                 Image(systemName: model.isStreaming ? "stop.circle.fill" : "mic.fill")

@@ -18,6 +18,7 @@
 		0A142CA6FC562680E1EC9661 /* ConversationPromptSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6E3D82CE18FAF01C9C7F884 /* ConversationPromptSheet.swift */; };
 		0C232B91657AE51EBF9473DD /* PromptBuilders.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3217D675229F2C856721ACD3 /* PromptBuilders.swift */; };
 		0FA0EAB65F062049B93171A0 /* LLMStreamChunk.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0687940C49D7DC9598C4D2AE /* LLMStreamChunk.swift */; };
+		0FDA96CC8892FB3072BFB615 /* WatchConnectivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 554D05567971174A6D8ACF1E /* WatchConnectivity.swift */; };
 		11A00AC50A8D15B9C6DF0A23 /* PromptLibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C635BF4CA8D4A79975C77578 /* PromptLibraryStore.swift */; };
 		129D13C0D77DCE3668CFA9C6 /* NeuralTTS.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DA6D1FF8E4A123472626AAD /* NeuralTTS.swift */; };
 		142F973AE60AB8BC7115274C /* CommandPaletteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7535A84A46BDAE9B8137DC4 /* CommandPaletteView.swift */; };
@@ -279,6 +280,7 @@
 		54326FD74E1BB58DB142BD41 /* SpeechService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechService.swift; sourceTree = "<group>"; };
 		54B67667B508E117497DA079 /* SkillsLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkillsLibraryView.swift; sourceTree = "<group>"; };
 		553F6E511AFFCE5F05104903 /* ResponseColumnView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResponseColumnView.swift; sourceTree = "<group>"; };
+		554D05567971174A6D8ACF1E /* WatchConnectivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchConnectivity.swift; sourceTree = "<group>"; };
 		55807471674193550205CB3F /* TTSSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSSettingsView.swift; sourceTree = "<group>"; };
 		562385EBC43DEA8BBCE4DC0E /* LeaderboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeaderboardView.swift; sourceTree = "<group>"; };
 		59EBF4CDBC6CBE88276707F4 /* MemoryExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryExtractor.swift; sourceTree = "<group>"; };
@@ -510,6 +512,7 @@
 				2335E7779E6F9236FC62B98C /* WatchChatClient.swift */,
 				7E3BD57A30DA4346C357DC78 /* WatchChatModel.swift */,
 				F2B3F9C5296B8CFFC385426A /* WatchConfig.swift */,
+				554D05567971174A6D8ACF1E /* WatchConnectivity.swift */,
 				DBEF197F032B42027611144C /* WatchRootView.swift */,
 				74C4AEDAD18F703E02C776DB /* WatchSpeaker.swift */,
 			);
@@ -1020,6 +1023,7 @@
 				B925C1100C9695D0BF815915 /* WatchChatClient.swift in Sources */,
 				94510F5A29E456D65923E590 /* WatchChatModel.swift in Sources */,
 				A93778AC3AD80A405E91C720 /* WatchConfig.swift in Sources */,
+				0FDA96CC8892FB3072BFB615 /* WatchConnectivity.swift in Sources */,
 				5C9951A314C2DC4D6AE8E221 /* WatchRootView.swift in Sources */,
 				28F62A43CFE3D426EC7C0FB3 /* WatchSpeaker.swift in Sources */,
 			);
@@ -1060,7 +1064,7 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "KownWatch-Info.plist";
-				MARKETING_VERSION = 0.24.2;
+				MARKETING_VERSION = 0.24.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown.watchkitapp;
 				PROVISIONING_PROFILE_SPECIFIER = "Kown Watch AppStore";
 				SDKROOT = watchos;
@@ -1088,7 +1092,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.24.2;
+				MARKETING_VERSION = 0.24.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown.Share;
 				PROVISIONING_PROFILE_SPECIFIER = "Kown Share AppStore";
 				SDKROOT = iphoneos;
@@ -1231,7 +1235,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.24.2;
+				MARKETING_VERSION = 0.24.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown.Share;
 				PROVISIONING_PROFILE_SPECIFIER = "Kown Share AppStore";
 				SDKROOT = iphoneos;
@@ -1258,7 +1262,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.24.2;
+				MARKETING_VERSION = 0.24.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown;
 				PROVISIONING_PROFILE_SPECIFIER = "Kown AppStore";
 				SDKROOT = iphoneos;
@@ -1279,7 +1283,7 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "KownWatch-Info.plist";
-				MARKETING_VERSION = 0.24.2;
+				MARKETING_VERSION = 0.24.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown.watchkitapp;
 				PROVISIONING_PROFILE_SPECIFIER = "Kown Watch AppStore";
 				SDKROOT = watchos;
@@ -1308,7 +1312,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.24.2;
+				MARKETING_VERSION = 0.24.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown;
 				PROVISIONING_PROFILE_SPECIFIER = "Kown AppStore";
 				SDKROOT = iphoneos;
