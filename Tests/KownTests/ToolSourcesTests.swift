@@ -5,7 +5,7 @@ import XCTest
 /// 这是会驱动「回答下方引用卡片」的纯函数,容易随 JSON 字段名/去重逻辑回归。
 final class ToolSourcesTests: XCTestCase {
 
-    private func result(content: String, name: String = "web_search", isError: Bool = false) -> ToolResult {
+    private func result(content: String, name: String = ToolCatalog.webSearch.name, isError: Bool = false) -> ToolResult {
         ToolResult(callID: "1", name: name, content: content, summary: "", isError: isError)
     }
 

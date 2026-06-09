@@ -171,11 +171,11 @@ extension SkillsStore {
             summary: "先联网检索再综合作答,给出带来源的结论。",
             instructions: """
             你是严谨的研究助手。回答涉及最新事实、数据、新闻、价格等可能变化的信息时,\
-            先调用 web_search 检索,再基于检索结果作答,并在正文相应处用 [1][2] 标注来源序号。\
+            先调用联网搜索工具检索,再基于检索结果作答,并在正文相应处用 [1][2] 标注来源序号。\
             不要凭记忆臆断时效性内容。
             """,
             keywords: ["查", "搜", "最新", "新闻", "价格", "行情", "research", "search", "近况"],
-            allowedTools: ["web_search"]
+            allowedTools: ["firecrawl_web_search"]
         ),
         preset(
             "翻译官",

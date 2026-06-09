@@ -87,7 +87,7 @@ final class SkillsAndToolsTests: XCTestCase {
         XCTAssertTrue(names.contains("create_reminder"))
         XCTAssertTrue(names.contains("list_reminders"))
         XCTAssertTrue(names.contains("create_note"))
-        XCTAssertFalse(names.contains("web_search"), "未配置 Firecrawl 不应暴露 web_search")
+        XCTAssertFalse(names.contains(ToolCatalog.webSearch.name), "未配置 Firecrawl 不应暴露联网搜索工具")
     }
 
     func testSkillExtraToolNameExposesToolWithoutGlobalToggle() {
