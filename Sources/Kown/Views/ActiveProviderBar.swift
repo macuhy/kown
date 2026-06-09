@@ -262,6 +262,7 @@ struct ActiveProviderBar: View {
         case .tournament: return "参赛模型"
         case .council: return "参议模型"
         case .debate: return "辩论模型"
+        case .translate: return "翻译模型"
         }
     }
 
@@ -273,6 +274,7 @@ struct ActiveProviderBar: View {
         case .tournament: return "Non-CLI players judged in bracket"
         case .council: return "Enabled panel with chair summary"
         case .debate: return "Enabled panel in rebuttal rounds"
+        case .translate: return "Single responder, translate/rewrite"
         }
     }
 
@@ -385,7 +387,7 @@ struct ActiveProviderBar: View {
             : model
         return Button {
             switch mode {
-            case .direct:
+            case .direct, .translate:
                 viewModel.setDirectChoice(providerID: cfg.id, model: model)
             case .compare:
                 viewModel.toggleCompareChoice(providerID: cfg.id, model: model)

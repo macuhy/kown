@@ -28,6 +28,8 @@ struct InputBarView: View {
     @State private var showImageImporter = false
     /// ⌘V 本地事件监听:抢在字段编辑器前拦截图片/文件粘贴(否则 file-url 会被当文本贴成路径)。
     @State private var pasteMonitor: Any?
+    /// 截图提问:框选 → OCR 进行中。
+    @State private var ocrRunning = false
     #endif
     #if os(iOS)
     @State private var showPhotoPicker = false
@@ -69,6 +71,9 @@ struct InputBarView: View {
                 iOSContextChips
             }
             #endif
+            if viewModel.currentMode == .translate {
+                translateOptionsBar
+            }
             promptImprovePreview
             barRow
         }
@@ -220,6 +225,34 @@ struct InputBarView: View {
     #endif
 
     #if os(macOS)
+    /// 截图提问:系统框选 → OCR → 文字填入输入框。取消框选静默忽略。
+    private func captureScreenOCR() {
+        ocrRunning = true
+        Task {
+            defer { Task { @MainActor in ocrRunning = false } }
+            do {
+                let text = try await ScreenCaptureService.captureRegionAndRecognize()
+                await MainActor.run {
+                    appendOCRText(text)
+                    pickerError = nil
+                    inputFocused = true
+                }
+            } catch ScreenCaptureService.CaptureError.cancelled {
+                // 用户取消框选,不报错。
+            } catch {
+                await MainActor.run { pickerError = error.localizedDescription }
+            }
+        }
+    }
+
+    private func appendOCRText(_ text: String) {
+        if viewModel.promptIsBlank {
+            viewModel.prompt = text
+        } else {
+            viewModel.prompt += "\n\n" + text
+        }
+    }
+
     private func handlePicked(_ result: Result<URL, Error>, isImage: Bool) {
         switch result {
         case .success(let url):
@@ -426,6 +459,11 @@ struct InputBarView: View {
             iconButton("photo", help: viewModel.anyProviderSupportsImage
                                ? "附加图片（OpenAI 兼容 / Anthropic / Gemini 支持视觉）"
                                : "附加图片（当前面板里没有支持视觉的 provider，发送时会忽略）") { pickImage() }
+            iconButton(ocrRunning ? "hourglass" : "text.viewfinder",
+                       help: ocrRunning ? "正在识别文字" : "截图提问:框选屏幕区域,识别文字填入输入框") {
+                captureScreenOCR()
+            }
+            .disabled(ocrRunning)
             webSearchToggle
             deviceToolsToggle
             mcpToggle
@@ -799,6 +837,79 @@ struct InputBarView: View {
             viewModel.improvePrompt()
         }
         .disabled(empty || viewModel.improvingPrompt)
+    }
+
+    /// Translate 模式专属:目标语言选择 + 润色开关。语言写当前会话(粘性),回退全局默认。
+    private static let translateLanguages: [(label: String, value: String)] = [
+        ("自动互译(中⇄英)", ""),
+        ("English", "English"),
+        ("简体中文", "简体中文"),
+        ("繁體中文", "繁體中文"),
+        ("日本語", "日本語"),
+        ("한국어", "한국어"),
+        ("Français", "Français"),
+        ("Deutsch", "Deutsch"),
+        ("Español", "Español"),
+        ("Русский", "Русский")
+    ]
+
+    private var translateOptionsBar: some View {
+        let tint = ConversationMode.translate.kownTint
+        return HStack(spacing: 10) {
+            Image(systemName: "globe")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(tint)
+            Menu {
+                ForEach(Self.translateLanguages, id: \.value) { item in
+                    Button {
+                        viewModel.translateTargetLanguage = item.value
+                    } label: {
+                        if currentTranslateLabel == item.label {
+                            Label(item.label, systemImage: "checkmark")
+                        } else {
+                            Text(item.label)
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text("译为：\(currentTranslateLabel)")
+                        .font(.caption.weight(.semibold))
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.caption2)
+                }
+                .foregroundStyle(tint)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(tint.opacity(0.10), in: Capsule())
+                .overlay(Capsule().strokeBorder(tint.opacity(0.24), lineWidth: 1))
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+
+            Toggle(isOn: Binding(
+                get: { viewModel.translateRewrite },
+                set: { viewModel.translateRewrite = $0 }
+            )) {
+                Text("润色/改语气")
+                    .font(.caption.weight(.semibold))
+            }
+            .toggleStyle(.switch)
+            .controlSize(.mini)
+            .fixedSize()
+            .tint(tint)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 4)
+    }
+
+    /// 当前目标语言对应的展示文案(匹配预设;自定义/未命中回退到原值或「自动互译」)。
+    private var currentTranslateLabel: String {
+        let v = viewModel.translateTargetLanguage
+        if let hit = Self.translateLanguages.first(where: { $0.value == v }) { return hit.label }
+        return v.isEmpty ? "自动互译(中⇄英)" : v
     }
 
     /// 润色结果的内联预览(带「采用」「却下」按钮)、运行中指示与错误提示。

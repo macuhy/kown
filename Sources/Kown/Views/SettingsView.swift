@@ -381,12 +381,38 @@ struct SettingsView: View {
                         }
                     }
                 }
+
+                watchSyncCard
             }
             .padding(.horizontal, 14)
             .padding(.top, 10)
             .padding(.bottom, 20)
         }
         .scrollIndicators(.hidden)
+    }
+
+    @State private var watchSyncDone = false
+    /// Apple Watch 独立表盘:把当前 OpenAI 兼容模型推送到表盘(共享 App Group)。
+    private var watchSyncCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Apple Watch", systemImage: "applewatch")
+                .font(.headline)
+            Text("把一个 OpenAI 兼容、已填 API Key 的模型同步给表盘,即可在手表上独立提问(语音输入 + 朗读回答)。改动模型会自动同步,也可手动推送。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button {
+                watchSyncDone = viewModel.syncWatchProvider()
+            } label: {
+                Label(watchSyncDone ? "已同步" : "同步到 Apple Watch",
+                      systemImage: watchSyncDone ? "checkmark.circle.fill" : "arrow.up.circle")
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+        }
+        .padding(13)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     private var mobileProviderHero: some View {

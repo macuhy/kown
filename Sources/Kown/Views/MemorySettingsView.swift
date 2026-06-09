@@ -54,6 +54,17 @@ struct MemorySettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            Divider().padding(.vertical, 2)
+            Toggle(isOn: $viewModel.recallEnabled) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("启用跨对话语义召回")
+                        .font(.callout.weight(.semibold))
+                    Text("开启后:发送时自动从你过去的会话里捞与当前问题相关的片段,作为参考注入上下文。默认关闭(隐私优先)。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)

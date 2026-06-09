@@ -2,6 +2,8 @@ import SwiftUI
 
 /// Direct 模式：ChatGPT 风格的竖向气泡列表
 struct DirectTurnsView: View {
+    /// 驱动头部标签 / 主题色的模式。Translate 模式复用本视图(单模型气泡列表),只换标签与色。
+    var mode: ConversationMode = .direct
     let conversation: Conversation
     let liveStates: [UUID: ResponseState]
     let livePrompt: String?
@@ -136,10 +138,10 @@ struct DirectTurnsView: View {
                     }
                     .buttonStyle(.plain)
                 }
-                Image(systemName: "bubble.left.and.text.bubble.right.fill")
+                Image(systemName: mode == .direct ? "bubble.left.and.text.bubble.right.fill" : mode.symbol)
                     .font(.caption.weight(.bold))
                     .foregroundStyle(directTint)
-                Text("Direct")
+                Text(mode.displayName)
                     .font(.caption.weight(.bold))
                     .foregroundStyle(directTint)
                 if isLive {
@@ -451,7 +453,7 @@ struct DirectTurnsView: View {
     }
 
     private var directTint: Color {
-        ConversationMode.direct.kownTint
+        mode.kownTint
     }
 }
 

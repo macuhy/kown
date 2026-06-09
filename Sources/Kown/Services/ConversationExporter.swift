@@ -133,6 +133,8 @@ enum ConversationExporter {
                 out += renderCompare(turn)
             case .tournament:
                 out += renderTournament(turn)
+            case .translate:
+                out += renderDirect(turn)
             }
 
             out += "\n---\n"
@@ -158,6 +160,7 @@ enum ConversationExporter {
         case .debate:  out += renderDebate(turn)
         case .structured: out += renderCompare(turn)
         case .tournament: out += renderTournament(turn)
+        case .translate: out += renderDirect(turn)
         }
         out += "\n"
         return out

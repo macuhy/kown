@@ -42,6 +42,7 @@ extension ConversationMode {
         case .debate:  return Color(red: 0.88, green: 0.35, blue: 0.22)
         case .structured: return Color(red: 0.36, green: 0.42, blue: 0.92)
         case .tournament: return Color(red: 0.85, green: 0.62, blue: 0.13)
+        case .translate: return Color(red: 0.49, green: 0.34, blue: 0.78)
         }
     }
 
@@ -53,6 +54,7 @@ extension ConversationMode {
         case .debate:  return Color(red: 0.98, green: 0.46, blue: 0.28)
         case .structured: return Color(red: 0.50, green: 0.60, blue: 1.00)
         case .tournament: return Color(red: 0.96, green: 0.74, blue: 0.22)
+        case .translate: return Color(red: 0.64, green: 0.50, blue: 0.92)
         }
     }
 
@@ -64,6 +66,7 @@ extension ConversationMode {
         case .debate:  return "多轮辩论后给结论"
         case .structured: return "按 JSON Schema 输出并校验"
         case .tournament: return "模型擂台逐轮决出冠军"
+        case .translate: return "翻译 / 润色改写"
         }
     }
 
@@ -75,6 +78,7 @@ extension ConversationMode {
         case .debate:  return "Start a debate..."
         case .structured: return "Ask for structured JSON..."
         case .tournament: return "Start a tournament..."
+        case .translate: return "粘贴要翻译 / 改写的文本..."
         }
     }
 }

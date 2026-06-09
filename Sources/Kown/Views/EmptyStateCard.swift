@@ -82,6 +82,13 @@ struct EmptyStateCard: View {
                 "给「程序员的一天」写一个 100 字微小说,擂台决出冠军",
                 "设计一个 App 启动页的文案,各家 PK 选最佳"
             ]
+        case .translate:
+            return [
+                "把这段产品介绍翻译成地道英文",
+                "Translate this paragraph into natural Simplified Chinese",
+                "帮我把这封邮件翻成日语,语气礼貌得体",
+                "润色这段中文,让它更流畅自然(开启润色)"
+            ]
         }
     }
 
@@ -641,6 +648,7 @@ struct EmptyStateCard: View {
         case .debate: return "Your debaters"
         case .structured: return "结构化模型"
         case .tournament: return "Your contenders"
+        case .translate: return "翻译模型"
         }
     }
 
@@ -652,6 +660,7 @@ struct EmptyStateCard: View {
         case .debate: return "quote.bubble.fill"
         case .structured: return "curlybraces"
         case .tournament: return "trophy"
+        case .translate: return "globe"
         }
     }
 

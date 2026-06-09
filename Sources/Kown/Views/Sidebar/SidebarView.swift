@@ -468,6 +468,29 @@ struct SidebarView: View {
         }
     }
 
+    /// 分支血缘:与给定会话相关、可一键切换的会话 —— 父会话 + 同源兄弟分支 + 它的子分支。
+    /// 仅在存在血缘关系时返回非空,供行内「切换分支」子菜单使用。
+    private func branchRelatives(of conv: Conversation) -> [(id: UUID, title: String, isParent: Bool)] {
+        var out: [(id: UUID, title: String, isParent: Bool)] = []
+        let all = viewModel.conversations.filter { $0.deletedAt == nil }
+        func title(_ c: Conversation) -> String {
+            c.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "未命名会话" : c.title
+        }
+        // 父会话
+        if let pid = conv.parentConversationID, let parent = all.first(where: { $0.id == pid }) {
+            out.append((parent.id, title(parent), true))
+            // 同源兄弟分支(同一个父,排除自己)
+            for sib in all where sib.parentConversationID == pid && sib.id != conv.id {
+                out.append((sib.id, title(sib), false))
+            }
+        }
+        // 它自己的子分支
+        for child in all where child.parentConversationID == conv.id {
+            out.append((child.id, title(child), false))
+        }
+        return out
+    }
+
     /// 单条会话行(含搜索命中片段)。分组与平铺共用。
     @ViewBuilder
     private func conversationRow(_ conv: Conversation) -> some View {
@@ -504,7 +527,12 @@ struct SidebarView: View {
                 onRestore: { viewModel.restoreConversation(conv.id) },
                 onPurge: { viewModel.permanentlyDeleteConversation(conv.id) },
                 folders: viewModel.conversationFolders,
-                onMoveToFolder: { viewModel.setFolder(conv.id, folderID: $0) }
+                onMoveToFolder: { viewModel.setFolder(conv.id, folderID: $0) },
+                branchRelatives: isViewingTrash ? [] : branchRelatives(of: conv),
+                onSwitchTo: { id in
+                    viewModel.selectConversation(id)
+                    onSelectConversation()
+                }
             )
             if !isViewingTrash, let hit = cachedHitsByID[conv.id], let snippet = highlightedSnippet(hit) {
                 snippet

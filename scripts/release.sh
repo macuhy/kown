@@ -77,6 +77,11 @@ if [ -f ".build/release/Kown_Kown.bundle/CHANGELOG.md" ]; then
     echo "▶ Copying CHANGELOG.md to .app/Contents/Resources/..."
     cp -f ".build/release/Kown_Kown.bundle/CHANGELOG.md" "${APP_BUNDLE}/Contents/Resources/CHANGELOG.md"
 fi
+# mermaid.min.js(Artifacts 预览离线渲染库)同理:平铺进主 bundle,ArtifactHTMLBuilder 走 Bundle.main 读。
+if [ -f ".build/release/Kown_Kown.bundle/mermaid.min.js" ]; then
+    echo "▶ Copying mermaid.min.js to .app/Contents/Resources/..."
+    cp -f ".build/release/Kown_Kown.bundle/mermaid.min.js" "${APP_BUNDLE}/Contents/Resources/mermaid.min.js"
+fi
 # 清掉历史遗留的 SPM resource bundle(如果之前的脚本拷过)— 防止 codesign --deep 校验它
 rm -rf "${APP_BUNDLE}/Contents/Resources/Kown_Kown.bundle"
 

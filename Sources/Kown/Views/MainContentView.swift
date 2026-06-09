@@ -71,11 +71,11 @@ struct MainContentView: View {
         .sheet(item: $editRequest) { req in
             EditTurnSheet(viewModel: viewModel, turnID: req.id, initialText: req.text)
         }
-        .alert("成本预算提醒", isPresented: Binding(
+        .alert(viewModel.budgetGate?.isHardLimit == true ? "已超出本月预算上限" : "成本预算提醒", isPresented: Binding(
             get: { viewModel.budgetGate != nil },
             set: { if !$0 { viewModel.budgetGate = nil } }
-        ), presenting: viewModel.budgetGate) { _ in
-            Button("仍要发送", role: .destructive) { viewModel.confirmBudgetAndSend() }
+        ), presenting: viewModel.budgetGate) { gate in
+            Button(gate.isHardLimit ? "仍要发送(超预算)" : "仍要发送", role: .destructive) { viewModel.confirmBudgetAndSend() }
             Button("取消", role: .cancel) { viewModel.budgetGate = nil }
         } message: { gate in
             Text(gate.message)
@@ -796,6 +796,21 @@ struct MainContentView: View {
                                 liveImages: lImages,
                                 isRunning: lIsRunning,
                                 livePanel: viewModel.providersForCurrentSend().panel,
+                                onEditTurn: { requestEdit($0) },
+                                onFollowUpTurn: { requestFollowUp($0) },
+                                onExportTurn: { exportTurnReport($0) },
+                                onShareTurn: { shareTurnImage($0) }
+                            )
+                        case .translate:
+                            // Translate 复用 Direct 的单模型气泡列表(仅换头部标签/主题色)。
+                            DirectTurnsView(
+                                mode: .translate,
+                                conversation: conv ?? Conversation(),
+                                liveStates: lStates,
+                                livePrompt: lPrompt,
+                                liveImages: lImages,
+                                livePanel: viewModel.providersForCurrentSend().panel,
+                                onForkTurn: { viewModel.forkConversation(fromTurnID: $0) },
                                 onEditTurn: { requestEdit($0) },
                                 onFollowUpTurn: { requestFollowUp($0) },
                                 onExportTurn: { exportTurnReport($0) },

@@ -20,6 +20,9 @@ struct ConversationRowView: View {
     /// 「移动到文件夹」子菜单数据(空 = 不显示该项)。
     var folders: [ConversationFolder] = []
     var onMoveToFolder: (UUID?) -> Void = { _ in }
+    /// 分支血缘:与本会话相关的会话(父 + 兄弟分支),用于「切换分支」子菜单。空 = 不显示。
+    var branchRelatives: [(id: UUID, title: String, isParent: Bool)] = []
+    var onSwitchTo: (UUID) -> Void = { _ in }
 
     @State private var confirmPurge = false
     @FocusState private var renameFocused: Bool
@@ -48,6 +51,12 @@ struct ConversationRowView: View {
                                 .font(.caption2.weight(.bold))
                                 .foregroundStyle(modeColor)
                                 .rotationEffect(.degrees(45))
+                        }
+                        if conversation.parentConversationID != nil {
+                            Image(systemName: "arrow.triangle.branch")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(modeColor)
+                                .help("分支会话")
                         }
                         Text(displayTitle)
                             .font(.system(.subheadline, design: .rounded).weight(.bold))
@@ -182,6 +191,18 @@ struct ConversationRowView: View {
             Button { onEditSystemPrompt() } label: {
                 Label("会话设置(提示 / 参数)…", systemImage: "slider.horizontal.3")
             }
+            if !branchRelatives.isEmpty {
+                Menu("切换分支") {
+                    ForEach(branchRelatives, id: \.id) { rel in
+                        Button {
+                            onSwitchTo(rel.id)
+                        } label: {
+                            Label(rel.isParent ? "↑ \(rel.title)" : rel.title,
+                                  systemImage: rel.isParent ? "arrow.up.left" : "arrow.triangle.branch")
+                        }
+                    }
+                }
+            }
             if !folders.isEmpty {
                 Menu("移动到文件夹") {
                     ForEach(folders) { f in
@@ -247,6 +268,7 @@ struct ConversationRowView: View {
         case .debate:  return "Debate"
         case .structured: return "Structured"
         case .tournament: return "Tournament"
+        case .translate: return "Translate"
         }
     }
 

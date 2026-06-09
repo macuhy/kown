@@ -34,6 +34,10 @@ struct RootView: View {
             })
         } detail: {
             MainContentView(viewModel: viewModel, showSettings: $showSettings)
+                .inspector(isPresented: $viewModel.showArtifactPanel) {
+                    ArtifactPreviewPanel(viewModel: viewModel)
+                        .inspectorColumnWidth(min: 300, ideal: 420, max: 720)
+                }
         }
         .toolbar {
             ToolbarItem(placement: .principal) {
@@ -45,6 +49,9 @@ struct RootView: View {
                 settingsButton
             }
             #else
+            ToolbarItem(placement: .primaryAction) {
+                artifactToggleButton
+            }
             ToolbarItem(placement: .primaryAction) {
                 settingsButton
             }
@@ -124,6 +131,12 @@ struct RootView: View {
                 .presentationCornerRadius(28)
                 .presentationBackground(.regularMaterial)
         }
+        .sheet(isPresented: $viewModel.showArtifactPanel) {
+            ArtifactPreviewPanel(viewModel: viewModel)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .presentationCornerRadius(28)
+        }
     }
 
     private var iOSNavigationIdentity: some View {
@@ -159,6 +172,22 @@ struct RootView: View {
         }
     }
     #endif
+
+    /// 切换 Artifacts 预览面板。常驻显示(不依赖检测),无 artifact 时面板给空态。
+    private var artifactToggleButton: some View {
+        Button {
+            viewModel.showArtifactPanel.toggle()
+        } label: {
+            Image(systemName: viewModel.showArtifactPanel ? "rectangle.righthalf.inset.filled" : "rectangle.righthalf.inset.filled")
+                #if os(iOS)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(.primary)
+                .frame(width: 36, height: 36)
+                .background(.thinMaterial, in: Circle())
+                #endif
+        }
+        .help("Artifacts 预览")
+    }
 
     private var settingsButton: some View {
         Button {
@@ -230,6 +259,11 @@ struct RootView: View {
                 viewModel.showCommandPalette = true
             } label: {
                 Label("命令面板", systemImage: "command")
+            }
+            Button {
+                viewModel.showArtifactPanel = true
+            } label: {
+                Label("Artifacts 预览", systemImage: "rectangle.righthalf.inset.filled")
             }
             Button {
                 showSettings = true

@@ -1,14 +1,17 @@
-#if os(iOS)
 import Foundation
 import Vision
+#if os(iOS)
 import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
 
-/// OCR 文字识别(iOS)。用 Vision 的 `VNRecognizeTextRequest` 从图片里提取文字。
+/// OCR 文字识别(跨平台)。用 Vision 的 `VNRecognizeTextRequest` 从图片里提取文字。
 /// 识别语言固定中文简体 + 英文,开启语言纠错;按视觉行序拼接结果。
 enum OCRService {
 
     enum OCRError: LocalizedError {
-        case invalidImage          // UIImage 拿不到 CGImage(无法送进 Vision)
+        case invalidImage          // 拿不到 CGImage(无法送进 Vision)
         case noText                // 识别成功但没找到任何文字
 
         var errorDescription: String? {
@@ -19,15 +22,9 @@ enum OCRService {
         }
     }
 
-    /// 对一张 `UIImage` 做文字识别,返回拼好的多行文本。
-    /// - 识别语言:`["zh-Hans", "en-US"]`;`usesLanguageCorrection = true`。
-    /// - 没识别到任何文字时抛 `OCRError.noText`。
-    static func recognizeText(in image: UIImage) async throws -> String {
-        guard let cgImage = image.cgImage else {
-            throw OCRError.invalidImage
-        }
-
-        return try await withCheckedThrowingContinuation { continuation in
+    /// 核心:对一张 `CGImage` 做文字识别,返回拼好的多行文本。两平台共用。
+    static func recognizeText(in cgImage: CGImage, orientation: CGImagePropertyOrientation = .up) async throws -> String {
+        try await withCheckedThrowingContinuation { continuation in
             let request = VNRecognizeTextRequest { request, error in
                 if let error {
                     continuation.resume(throwing: error)
@@ -52,7 +49,7 @@ enum OCRService {
 
             // Vision 请求是同步阻塞的,丢到后台队列避免卡主线程。
             DispatchQueue.global(qos: .userInitiated).async {
-                let handler = VNImageRequestHandler(cgImage: cgImage, orientation: image.cgImageOrientation, options: [:])
+                let handler = VNImageRequestHandler(cgImage: cgImage, orientation: orientation, options: [:])
                 do {
                     try handler.perform([request])
                 } catch {
@@ -61,8 +58,25 @@ enum OCRService {
             }
         }
     }
+
+    #if os(iOS)
+    /// iOS:对一张 `UIImage` 做识别(保留 EXIF 旋转)。
+    static func recognizeText(in image: UIImage) async throws -> String {
+        guard let cgImage = image.cgImage else { throw OCRError.invalidImage }
+        return try await recognizeText(in: cgImage, orientation: image.cgImageOrientation)
+    }
+    #elseif os(macOS)
+    /// macOS:对一张 `NSImage` 做识别。
+    static func recognizeText(in image: NSImage) async throws -> String {
+        guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            throw OCRError.invalidImage
+        }
+        return try await recognizeText(in: cgImage, orientation: .up)
+    }
+    #endif
 }
 
+#if os(iOS)
 private extension UIImage {
     /// 把 `UIImage.imageOrientation` 映射成 Vision/CoreImage 用的 `CGImagePropertyOrientation`,
     /// 否则相机/相册里带 EXIF 旋转的照片会被横着识别,准确率骤降。

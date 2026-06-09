@@ -87,6 +87,7 @@ jobs:
         env:
           PROFILE_BASE64:       ${{ secrets.IOS_PROVISION_PROFILE }}
           SHARE_PROFILE_BASE64: ${{ secrets.IOS_SHARE_PROVISION_PROFILE }}
+          WATCH_PROFILE_BASE64: ${{ secrets.IOS_WATCH_PROVISION_PROFILE }}
         run: |
           set -euo pipefail
           DEST="$HOME/Library/MobileDevice/Provisioning Profiles"
@@ -100,9 +101,10 @@ jobs:
             cp "$tmp" "$DEST/$uuid.mobileprovision"
             echo "installed $name profile UUID=$uuid"
           }
-          # 主 app(com.xiaobo.kown)+ 分享扩展(com.xiaobo.kown.Share)各一张,都含 App Groups。
+          # 主 app(com.xiaobo.kown)+ 分享扩展(com.xiaobo.kown.Share)+ 表盘(com.xiaobo.kown.watchkitapp),都含 App Groups。
           install_profile "$PROFILE_BASE64" main
           install_profile "$SHARE_PROFILE_BASE64" share
+          install_profile "$WATCH_PROFILE_BASE64" watch
 
       - name: Write App Store Connect API key
         env:

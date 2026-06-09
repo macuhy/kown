@@ -342,7 +342,7 @@ final class VoiceLoopController: ObservableObject {
             let lastRound = turn.debateRounds?.sorted { $0.index < $1.index }.last
             let lastRoundReply = lastRound?.responses.values.first { !$0.isEmpty }
             return nonEmpty(turn.chairSummary) ?? lastRoundReply ?? firstResponse(turn)
-        case .structured: return firstResponse(turn)
+        case .structured, .translate: return firstResponse(turn)
         case .tournament:
             // 朗读冠军(最后一轮对决胜者)的回答;无冠军时退回第一份非空回答。
             if let champ = tournamentChampionKey(turn), let t = turn.responses[champ], !t.isEmpty { return t }
@@ -609,7 +609,7 @@ struct VoiceConversationView: View {
         case .debate:
             let last = turn.debateRounds?.sorted { $0.index < $1.index }.last?.responses.values.first { !$0.isEmpty }
             return nonEmpty(turn.chairSummary) ?? last ?? firstResponse()
-        case .structured: return firstResponse()
+        case .structured, .translate: return firstResponse()
         case .tournament:
             let champ = (turn.tournamentRounds ?? []).max(by: { $0.index < $1.index })?.matches.last?.winnerProviderID
             if let champ, let t = turn.responses[champ], !t.isEmpty { return t }

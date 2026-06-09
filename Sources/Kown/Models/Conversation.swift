@@ -7,6 +7,7 @@ enum ConversationMode: String, Codable, CaseIterable, Sendable {
     case debate
     case structured
     case tournament
+    case translate
 
     var displayName: String {
         switch self {
@@ -16,6 +17,7 @@ enum ConversationMode: String, Codable, CaseIterable, Sendable {
         case .debate:  return "Debate"
         case .structured: return "Structured"
         case .tournament: return "Tournament"
+        case .translate: return "Translate"
         }
     }
 
@@ -27,6 +29,7 @@ enum ConversationMode: String, Codable, CaseIterable, Sendable {
         case .debate:  return "quote.bubble.fill"
         case .structured: return "curlybraces"
         case .tournament: return "trophy"
+        case .translate: return "globe"
         }
     }
 
@@ -38,6 +41,7 @@ enum ConversationMode: String, Codable, CaseIterable, Sendable {
         case .debate:  return "Start a Model Debate"
         case .structured: return "Define a JSON Schema"
         case .tournament: return "Start a Model Tournament"
+        case .translate: return "翻译 / 改写"
         }
     }
 
@@ -49,6 +53,7 @@ enum ConversationMode: String, Codable, CaseIterable, Sendable {
         case .debate:  return "Let enabled models argue, rebut each other, then produce a moderated conclusion"
         case .structured: return "让所有启用的模型都按你定义的 JSON Schema 返回严格 JSON,自动校验后并排对比各家的结构化结果"
         case .tournament: return "让所有启用的模型先各自回答,再由裁判用单淘汰赛两两对决,逐轮决出最终冠军"
+        case .translate: return "把输入的文本翻译成目标语言;开启「润色」则在翻译的同时改善措辞与语气"
         }
     }
 }
@@ -604,6 +609,14 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
     var gitHubRepo: String?
     /// 提交到的分支。nil 回退到仓库默认分支(选仓库时填入)。
     var gitHubBranch: String?
+    /// Translate 模式:本会话的目标语言(如「English」「日本語」「简体中文」)。nil = 用全局默认。
+    var translateTargetLanguage: String?
+    /// Translate 模式:是否在翻译同时润色/改善语气。默认 false(纯翻译)。
+    var translateRewrite: Bool = false
+    /// 分支血缘:本会话从哪个会话 fork 来(nil = 非分支)。用于侧栏显示血缘 + 兄弟分支快速切换。
+    var parentConversationID: UUID?
+    /// 分支血缘:从父会话的哪一轮分叉(配合 parentConversationID)。
+    var forkedFromTurnID: UUID?
 
     init(id: UUID = UUID(),
          title: String = "New Conversation",
@@ -630,7 +643,11 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
          structuredSchema: String? = nil,
          selectedSkillID: UUID? = nil,
          gitHubRepo: String? = nil,
-         gitHubBranch: String? = nil) {
+         gitHubBranch: String? = nil,
+         translateTargetLanguage: String? = nil,
+         translateRewrite: Bool = false,
+         parentConversationID: UUID? = nil,
+         forkedFromTurnID: UUID? = nil) {
         self.id = id
         self.title = title
         self.mode = mode
@@ -657,6 +674,10 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
         self.selectedSkillID = selectedSkillID
         self.gitHubRepo = gitHubRepo
         self.gitHubBranch = gitHubBranch
+        self.translateTargetLanguage = translateTargetLanguage
+        self.translateRewrite = translateRewrite
+        self.parentConversationID = parentConversationID
+        self.forkedFromTurnID = forkedFromTurnID
     }
 
     // 兼容旧 JSON(缺新字段)
@@ -688,6 +709,10 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
         self.selectedSkillID = try c.decodeIfPresent(UUID.self, forKey: .selectedSkillID)
         self.gitHubRepo = try c.decodeIfPresent(String.self, forKey: .gitHubRepo)
         self.gitHubBranch = try c.decodeIfPresent(String.self, forKey: .gitHubBranch)
+        self.translateTargetLanguage = try c.decodeIfPresent(String.self, forKey: .translateTargetLanguage)
+        self.translateRewrite = try c.decodeIfPresent(Bool.self, forKey: .translateRewrite) ?? false
+        self.parentConversationID = try c.decodeIfPresent(UUID.self, forKey: .parentConversationID)
+        self.forkedFromTurnID = try c.decodeIfPresent(UUID.self, forKey: .forkedFromTurnID)
     }
 
     var lastPromptPreview: String {

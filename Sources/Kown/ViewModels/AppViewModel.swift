@@ -80,6 +80,8 @@ final class AppViewModel {
     @ObservationIgnored var gitHubFlowTask: Task<Void, Never>?
     /// ⌘K 命令面板是否打开(macOS 菜单命令与 RootView sheet 共用此开关)。
     var showCommandPalette = false
+    /// Artifacts 实时预览面板开关(macOS 用 .inspector,iOS 用 sheet)。
+    var showArtifactPanel = false
     /// 会话内查找条是否显示(⌘F)。
     var showFind = false
     /// 全局热键 / 菜单栏唤起后请求聚焦输入框 —— 每次自增,InputBarView 监听变化即聚焦。
@@ -99,6 +101,40 @@ final class AppViewModel {
     /// 跨会话长期记忆:开启后发送时注入相关长期记忆,并在会话进行中自动抽取。默认关(隐私优先)。
     var memoryInjectionEnabled: Bool {
         didSet { UserDefaults.standard.set(memoryInjectionEnabled, forKey: Self.memoryInjectionKey) }
+    }
+    /// 跨对话语义召回:开启后发送时自动从历史会话里捞相关片段注入上下文。默认关(隐私优先)。
+    var recallEnabled: Bool {
+        didSet { UserDefaults.standard.set(recallEnabled, forKey: Self.recallKey) }
+    }
+
+    /// Translate 模式目标语言(会话级粘性):读 = 当前会话设定 ?? 全局上次用的默认;空 = 中英智能互译。
+    /// 写:同时落全局默认(供新会话沿用)+ 当前会话(粘性)。
+    var translateTargetLanguage: String {
+        get {
+            if let c = conversations.first(where: { $0.id == selectedConversationID }),
+               let l = c.translateTargetLanguage { return l }
+            return UserDefaults.standard.string(forKey: Self.translateLangKey) ?? ""
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: Self.translateLangKey)
+            if let idx = conversations.firstIndex(where: { $0.id == selectedConversationID }) {
+                conversations[idx].translateTargetLanguage = newValue.isEmpty ? nil : newValue
+                conversations[idx].updatedAt = Date()
+                ConversationStore.save(conversations[idx])
+            }
+        }
+    }
+
+    /// Translate 模式是否润色/改语气(会话级)。无会话时返回 false。
+    var translateRewrite: Bool {
+        get { conversations.first(where: { $0.id == selectedConversationID })?.translateRewrite ?? false }
+        set {
+            if let idx = conversations.firstIndex(where: { $0.id == selectedConversationID }) {
+                conversations[idx].translateRewrite = newValue
+                conversations[idx].updatedAt = Date()
+                ConversationStore.save(conversations[idx])
+            }
+        }
     }
     var systemPrompt: String {
         didSet { UserDefaults.standard.set(systemPrompt, forKey: Self.systemPromptKey) }
@@ -213,6 +249,9 @@ final class AppViewModel {
     private static let councilVotingKey = "kown.councilVoting.v1"
     private static let autoRouteKey = "kown.autoRoute.v1"
     private static let memoryInjectionKey = "kown.memory.injection.v1"
+    private static let recallKey = "kown.recall.enabled"
+    /// Translate 全局默认语言 key(非 private:AppViewModel+Send 跨文件读取做发送时回退)。
+    static let translateLangKey = "kown.translate.lang"
     private static let deviceToolsToggleKey = "kown.deviceTools.toggle.v1"
     private static let mcpToggleKey = "kown.mcp.toggle.v1"
     private static let deepAgentToggleKey = "kown.deepAgent.toggle.v1"
@@ -250,6 +289,7 @@ final class AppViewModel {
         self.councilVotingEnabled = UserDefaults.standard.bool(forKey: Self.councilVotingKey)
         self.autoRouteEnabled = UserDefaults.standard.bool(forKey: Self.autoRouteKey)
         self.memoryInjectionEnabled = UserDefaults.standard.bool(forKey: Self.memoryInjectionKey)
+        self.recallEnabled = UserDefaults.standard.bool(forKey: Self.recallKey)
         self.deviceToolsEnabledForNextSend = UserDefaults.standard.bool(forKey: Self.deviceToolsToggleKey)
         self.mcpEnabledForNextSend = UserDefaults.standard.bool(forKey: Self.mcpToggleKey)
         self.deepAgentEnabledForNextSend = UserDefaults.standard.bool(forKey: Self.deepAgentToggleKey)
@@ -362,7 +402,9 @@ final class AppViewModel {
             activeModelChoices: source.activeModelChoices,
             workspaceBookmark: source.workspaceBookmark,
             workspaceDisplayPath: source.workspaceDisplayPath,
-            systemPrompt: source.systemPrompt
+            systemPrompt: source.systemPrompt,
+            parentConversationID: source.id,
+            forkedFromTurnID: turnID
         )
         stashDraft()
         conversations.insert(fork, at: 0)
@@ -413,7 +455,7 @@ final class AppViewModel {
 
     // MARK: - 成本预算闸
     /// 本月花费接近/超过预算上限时,send() 置位此项让 UI 弹确认;确认后走 confirmBudgetAndSend()。
-    struct BudgetGate: Identifiable { let id = UUID(); let message: String }
+    struct BudgetGate: Identifiable { let id = UUID(); let message: String; var isHardLimit: Bool = false }
     var budgetGate: BudgetGate?
     /// 确认「仍要发送」后置 true,让紧接着的 send() 跳过预算闸(发完即复位)。
     var bypassBudgetOnce = false
@@ -1073,7 +1115,24 @@ final class AppViewModel {
 
     func saveProviders() {
         ProviderConfigStore.save(providers)
+        #if os(iOS)
+        // 保持 Apple Watch 独立表盘的 provider 配置最新(选最合适的 OpenAI 兼容模型)。
+        syncWatchProvider()
+        #endif
     }
+
+    #if os(iOS)
+    /// 选一个 OpenAI 兼容、已配 key 的 provider 推送给 Apple Watch(优先当前 Direct 选中的模型)。
+    @discardableResult
+    func syncWatchProvider() -> Bool {
+        let candidates = providers.filter {
+            $0.enabled && $0.kind == .openAICompatible && KeychainStore.hasKey(id: $0.id)
+        }
+        let activeID = providersForCurrentSend().panel.first?.id
+        let chosen = candidates.first(where: { $0.id == activeID }) ?? candidates.first
+        return WatchProvisioning.sync(provider: chosen)
+    }
+    #endif
 
     func addProvider(kind: ProviderKind) {
         let cfg = ProviderConfig(displayName: kind.displayName, kind: kind)
@@ -1557,7 +1616,8 @@ final class AppViewModel {
             let players = enabled.filter { !$0.kind.isCLI }
             let judge = chairProvider ?? players.first
             return (players, judge)
-        case .direct:
+        case .direct, .translate:
+            // Translate 与 Direct 同样是单模型路径:选一个 provider,无 chair。
             if let chosen = resolvedFromModelChoices(maxCount: 1), !chosen.isEmpty {
                 return (chosen, nil)
             }

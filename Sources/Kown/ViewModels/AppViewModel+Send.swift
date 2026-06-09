@@ -5,7 +5,7 @@ import Foundation
 extension AppViewModel {
     /// 预算闸文案:本月累计成本达到「上限 × 阈值%」时返回提示;未设上限或未达阈值返回 nil。
     /// 读 @AppStorage 同 key(kown.budget.*),直接走 UserDefaults(ViewModel 非 View)。
-    func budgetGateMessage() -> String? {
+    func budgetGateMessage() -> (message: String, hard: Bool)? {
         let cap = UserDefaults.standard.double(forKey: "kown.budget.monthlyCapUSD")
         guard cap > 0 else { return nil }
         let warnPct = (UserDefaults.standard.object(forKey: "kown.budget.warnPercent") as? Int) ?? 80
@@ -13,9 +13,9 @@ extension AppViewModel {
         guard spent >= cap * Double(warnPct) / 100.0 else { return nil }
         let pct = Int((spent / cap * 100).rounded())
         if spent >= cap {
-            return String(format: "本月已用 $%.2f,已达预算上限 $%.2f(%d%%)。仍要继续发送吗?", spent, cap, pct)
+            return (String(format: "本月已用 $%.2f,已超出预算上限 $%.2f(%d%%)。仍要继续发送吗?", spent, cap, pct), true)
         }
-        return String(format: "本月已用 $%.2f / 上限 $%.2f(%d%%),已接近预算。仍要继续发送吗?", spent, cap, pct)
+        return (String(format: "本月已用 $%.2f / 上限 $%.2f(%d%%),已接近预算。仍要继续发送吗?", spent, cap, pct), false)
     }
 
     /// 用户在预算提醒里点「仍要发送」:跳过本次预算闸并重发。
@@ -66,8 +66,8 @@ extension AppViewModel {
         // 成本预算闸:本月花费接近/超过上限时先弹确认。bypassBudgetOnce 让确认后的重发跳过本检查。
         if bypassBudgetOnce {
             bypassBudgetOnce = false
-        } else if let msg = budgetGateMessage() {
-            budgetGate = BudgetGate(message: msg)
+        } else if let gate = budgetGateMessage() {
+            budgetGate = BudgetGate(message: gate.message, isHardLimit: gate.hard)
             return
         }
 
@@ -141,6 +141,10 @@ extension AppViewModel {
         // memory items 取一份快照(O(1) COW),供后台 BM25 打分,避免触碰 @MainActor 的 MemoryStore。
         let memoryItemsForSend: [MemoryItem] = memoryInjectionEnabled ? MemoryStore.shared.items : []
         let memoryQueryForSend: String? = memoryInjectionEnabled ? trimmed : nil
+        // 跨对话召回:取 conversations 值快照(COW,O(1)),后台用纯函数打分。排除当前会话避免自召回。
+        let recallCorpusForSend: [Conversation] = recallEnabled ? conversations : []
+        let recallQueryForSend: String? = recallEnabled ? trimmed : nil
+        let recallExcludeID = conversations[convIdx].id
         // 生效技能:手动绑定优先,否则(开了自动触发时)按输入启发式路由。
         let manualSkill = skillsStore.skill(id: conversations[convIdx].selectedSkillID)
         let activeSkill: Skill? = manualSkill
@@ -150,11 +154,18 @@ extension AppViewModel {
         // 命中自动技能时记一笔,供 UI 显示当前生效技能徽标(手动绑定不覆盖)。
         autoTriggeredSkillID = (manualSkill == nil) ? activeSkill?.id : nil
         let skillInstructions = activeSkill.map { skillsStore.render($0, values: [:]) } ?? ""
-        // 基础系统提示(技能 → 会话级 / 全局);上下文片段在后台前置到它前面。
+        // Translate 模式:把翻译/改写指令前置进 system prompt(目标语言 + 是否润色取会话级设置)。
+        let translateInstruction: String = (currentMode == .translate)
+            ? PromptBuilders.buildTranslateInstruction(
+                targetLanguage: conversations[convIdx].translateTargetLanguage
+                    ?? UserDefaults.standard.string(forKey: Self.translateLangKey),
+                rewrite: conversations[convIdx].translateRewrite)
+            : ""
+        // 基础系统提示(翻译指令 → 技能 → 会话级 / 全局);上下文片段在后台前置到它前面。
         let baseSystemPrompt: String = {
             let convPrompt = conversations[convIdx].systemPrompt?.trimmingCharacters(in: .whitespacesAndNewlines)
             let base = (convPrompt?.isEmpty == false) ? convPrompt! : systemPrompt
-            return [skillInstructions, base]
+            return [translateInstruction, skillInstructions, base]
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
                 .joined(separator: "\n\n")
@@ -220,6 +231,9 @@ extension AppViewModel {
             knowledgeQuery: trimmed,
             memoryItems: memoryItemsForSend,
             memoryQuery: memoryQueryForSend,
+            recallCorpus: recallCorpusForSend,
+            recallQuery: recallQueryForSend,
+            recallExcludeID: recallExcludeID,
             mcpServers: mcpServersForSend,
             deepAgent: deepAgentForSend
         )
@@ -237,7 +251,10 @@ extension AppViewModel {
         knowledgeFolder: KnowledgeFolder?,
         knowledgeQuery: String,
         memoryItems: [MemoryItem],
-        memoryQuery: String?
+        memoryQuery: String?,
+        recallCorpus: [Conversation] = [],
+        recallQuery: String? = nil,
+        recallExcludeID: UUID? = nil
     ) async -> (prompt: String, knowledgeSources: [KnowledgeSourceRef]) {
         var parts: [String] = []
         var knowledgeSources: [KnowledgeSourceRef] = []
@@ -274,6 +291,11 @@ extension AppViewModel {
         if let q = memoryQuery, let mem = MemoryStore.relevanceBlock(items: memoryItems, query: q) {
             parts.append(mem)
         }
+        if let rq = recallQuery, !recallCorpus.isEmpty,
+           let recall = ConversationRecall.recallBlock(
+               corpus: recallCorpus, query: rq, excluding: recallExcludeID) {
+            parts.append(recall)
+        }
         if !base.isEmpty { parts.append(base) }
         return (parts.joined(separator: "\n\n"), knowledgeSources)
     }
@@ -308,6 +330,10 @@ extension AppViewModel {
         knowledgeQuery: String = "",
         memoryItems: [MemoryItem] = [],
         memoryQuery: String? = nil,
+        // 跨对话召回(主发送路径才传;edit/retry 用默认空值 → 不召回)。
+        recallCorpus: [Conversation] = [],
+        recallQuery: String? = nil,
+        recallExcludeID: UUID? = nil,
         // 本次发送启用的 MCP server(已启用 + 开关开时才非空);连接在后台任务里做。
         mcpServers: [MCPServerConfig] = [],
         // 深入模式(仅 Direct):多步 Agent 长链。
@@ -394,7 +420,10 @@ extension AppViewModel {
                 knowledgeFolder: knowledgeFolder,
                 knowledgeQuery: knowledgeQuery,
                 memoryItems: memoryItems,
-                memoryQuery: memoryQuery
+                memoryQuery: memoryQuery,
+                recallCorpus: recallCorpus,
+                recallQuery: recallQuery,
+                recallExcludeID: recallExcludeID
             )
             let sysSnapshot = assembled.prompt
             let knowledgeSourcesSnapshot = assembled.knowledgeSources
@@ -1210,8 +1239,9 @@ extension AppViewModel {
         // 组 prompt
         let prompt: String
         switch mode {
-        case .direct, .council, .compare, .tournament:
+        case .direct, .council, .compare, .tournament, .translate:
             // Tournament 的 panel 回答就是直接回答原问题(裁判对决另走 retryChair 不在此);重答即重发原问题。
+            // Translate:翻译指令在 system prompt 里,重答只需重发原文。
             prompt = turn.prompt
         case .structured:
             // 重试也要带上 schema 指令,否则模型可能不再返回严格 JSON。

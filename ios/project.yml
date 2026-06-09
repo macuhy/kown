@@ -98,6 +98,49 @@ targets:
         product: MarkdownUI
       - target: KownShare
         embed: true
+      - target: KownWatch
+        embed: true
+
+  KownWatch:
+    type: application
+    platform: watchOS
+    deploymentTarget: "10.0"
+    sources:
+      - path: ../Sources/KownWatch
+        type: group
+        name: KownWatch
+    info:
+      path: KownWatch-Info.plist
+      properties:
+        CFBundleDisplayName: Kown
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        # watchOS 单 target SwiftUI app(watchOS 10+):WKApplication=true,关联手机 app。
+        WKApplication: true
+        WKCompanionAppBundleIdentifier: com.xiaobo.kown
+        # 语音输入(听写)授权
+        NSMicrophoneUsageDescription: "Kown 用麦克风把你的语音转成文字。"
+        NSSpeechRecognitionUsageDescription: "Kown 用语音识别把你说的话转写成文字。"
+    entitlements:
+      path: KownWatch.entitlements
+      properties:
+        # 与手机 app 共享 provider 配置(手机写、表盘读)。
+        com.apple.security.application-groups:
+          - group.com.xiaobo.kown
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.xiaobo.kown.watchkitapp
+        MARKETING_VERSION: "0.23.5"
+        CURRENT_PROJECT_VERSION: "1"
+        CODE_SIGN_STYLE: Automatic
+        PROVISIONING_PROFILE_SPECIFIER: "Kown Watch AppStore"
+        DEVELOPMENT_TEAM: 4257SFGRFK
+        SWIFT_VERSION: "6.0"
+        WATCHOS_DEPLOYMENT_TARGET: "10.0"
+        TARGETED_DEVICE_FAMILY: "4"
+        GENERATE_INFOPLIST_FILE: NO
+        SWIFT_UPCOMING_FEATURE_STRICT_CONCURRENCY: YES
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
 
   KownShare:
     type: app-extension
@@ -140,6 +183,14 @@ targets:
         ENABLE_USER_SCRIPT_SANDBOXING: NO
 
 schemes:
+  KownWatch:
+    build:
+      targets:
+        KownWatch: all
+    run:
+      config: Debug
+    archive:
+      config: Release
   Kown:
     build:
       targets:

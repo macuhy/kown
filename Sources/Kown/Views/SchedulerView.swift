@@ -606,6 +606,7 @@ func modeLabel(_ mode: ConversationMode) -> String {
     case .debate:  return "辩论"
     case .structured: return "结构化"
     case .tournament: return "擂台"
+    case .translate: return "翻译"
     }
 }
 

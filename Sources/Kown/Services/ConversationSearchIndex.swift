@@ -268,6 +268,96 @@ final class ConversationSearchIndex {
     }
 }
 
+// MARK: - 跨对话语义召回(发送时注入)
+
+/// 发送时在后台路径用:从历史会话里捞与当前问题相关的片段,拼成一段可注入 system prompt 的上下文。
+///
+/// 全 `nonisolated` 纯函数,**不碰** `@MainActor` 的 `ConversationSearchIndex`——后台 `assembleSystemPrompt`
+/// 只拿一份 `[Conversation]` 值快照(COW)进来打分,与记忆注入(`MemoryStore.relevanceBlock`)同构。
+enum ConversationRecall {
+    /// 返回「相关历史对话」上下文块;无命中返回 nil。
+    /// - excluding: 当前会话 id(避免把正在聊的会话召回给自己)。
+    nonisolated static func recallBlock(
+        corpus: [Conversation],
+        query: String,
+        excluding: UUID?,
+        topK: Int = 3
+    ) -> String? {
+        let terms = queryTerms(query)
+        guard !terms.isEmpty else { return nil }
+        // 至少覆盖一半查询词(向上取整),降低单字误召回噪声。
+        let need = max(1, (terms.count + 1) / 2)
+
+        struct Scored { let title: String; let snippet: String; let score: Int }
+        var scored: [Scored] = []
+        for conv in corpus where conv.deletedAt == nil && conv.id != excluding {
+            let doc = searchableText(conv)
+            guard !doc.isEmpty else { continue }
+            var matched = 0
+            var firstTerm: String?
+            for t in terms where doc.range(of: t, options: .caseInsensitive) != nil {
+                matched += 1
+                if firstTerm == nil { firstTerm = t }
+            }
+            guard matched >= need, let ft = firstTerm else { continue }
+            let title = conv.title.trimmingCharacters(in: .whitespaces)
+            scored.append(Scored(
+                title: title.isEmpty ? "未命名会话" : title,
+                snippet: snippet(doc, around: ft),
+                score: matched))
+        }
+        guard !scored.isEmpty else { return nil }
+        let top = scored.sorted { $0.score > $1.score }.prefix(topK)
+        let lines = top.map { "• 《\($0.title)》:\($0.snippet)" }
+        return "[相关历史对话 — 来自你过去的会话,可参考但不必引用]\n" + lines.joined(separator: "\n")
+    }
+
+    /// 可搜索全文:标题 + 每轮 prompt / 各家 response / chair 综合。够覆盖召回用。
+    nonisolated private static func searchableText(_ conv: Conversation) -> String {
+        var parts: [String] = [conv.title]
+        for turn in conv.turns {
+            parts.append(turn.prompt)
+            parts.append(contentsOf: turn.responses.values)
+            if let chair = turn.chairSummary { parts.append(chair) }
+        }
+        return parts.joined(separator: "\n")
+    }
+
+    /// 把查询拆成词:中文连续段整段、英文/数字按词。
+    nonisolated private static func queryTerms(_ query: String) -> [String] {
+        var terms: [String] = []
+        var ascii = ""
+        var cjk = ""
+        func flushA() { if !ascii.isEmpty { terms.append(ascii); ascii.removeAll(keepingCapacity: true) } }
+        func flushC() { if !cjk.isEmpty { terms.append(cjk); cjk.removeAll(keepingCapacity: true) } }
+        for ch in query {
+            if ch.isCJK { flushA(); cjk.append(ch) }
+            else if ch.isLetter || ch.isNumber { flushC(); ascii.append(ch) }
+            else { flushA(); flushC() }
+        }
+        flushA(); flushC()
+        // 过滤掉过短的英文噪声词(单字母);中文段保留。
+        return terms.filter { $0.count >= 2 || $0.allSatisfy { $0.isCJK } }
+    }
+
+    /// 取 term 在 doc 首次出现位置前后的一小段上下文(换行压成空格)。
+    nonisolated private static func snippet(_ doc: String, around term: String, radius: Int = 28) -> String {
+        guard let r = doc.range(of: term, options: .caseInsensitive) else {
+            return String(doc.prefix(60)).replacingOccurrences(of: "\n", with: " ")
+        }
+        var lo = r.lowerBound, hi = r.upperBound
+        var l = 0
+        while lo > doc.startIndex, l < radius { lo = doc.index(before: lo); l += 1 }
+        var rr = 0
+        while hi < doc.endIndex, rr < radius { hi = doc.index(after: hi); rr += 1 }
+        var s = String(doc[lo..<hi]).replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespaces)
+        if lo > doc.startIndex { s = "…" + s }
+        if hi < doc.endIndex { s += "…" }
+        return s
+    }
+}
+
 // MARK: - 字符判定
 
 private extension Character {

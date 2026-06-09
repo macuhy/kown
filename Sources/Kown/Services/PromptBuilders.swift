@@ -3,6 +3,32 @@ import Foundation
 /// Council / Debate / Compare 各阶段的 prompt 构造 + 通知预览,从 AppViewModel 抽出的纯静态逻辑。
 /// 无状态、不依赖 viewModel,便于单测。函数间互相调用沿用裸名(同 enum 内静态成员)。
 enum PromptBuilders {
+    // MARK: - Translate / Rewrite mode
+
+    /// Translate 模式注入到 system prompt 最前面的指令:把用户输入翻译成目标语言;
+    /// rewrite 开启时在翻译同时改善措辞与语气。targetLanguage 为空时让模型在中英之间智能互译。
+    static func buildTranslateInstruction(targetLanguage: String?, rewrite: Bool) -> String {
+        let lang = (targetLanguage?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 }
+        let target: String
+        if let lang {
+            target = "把用户每次输入的文本翻译成「\(lang)」。"
+        } else {
+            target = "在中文与英文之间智能互译:输入是中文就译成地道英文,输入是英文(或其它外语)就译成地道简体中文。"
+        }
+        let toneLine = rewrite
+            ? "在忠实原意的前提下,同时润色措辞、理顺语序、让语气自然流畅(不是逐字直译)。"
+            : "尽量忠实、准确地翻译,保留原文语气与术语,不要自行增删内容。"
+        return """
+        你现在是一个专业翻译/改写助手。\(target)
+        \(toneLine)
+        要求:
+        - 只输出翻译/改写后的结果本身,不要加解释、不要加引号、不要复述原文。
+        - 保留原文的 Markdown 结构(标题、列表、代码块、链接)与占位符不动。
+        - 遇到代码块/命令/专有名词等不该翻译的内容,原样保留。
+        - 如果输入本身已经是目标语言,则在不改变语言的前提下按上面的要求做润色(rewrite 开启时)或原样返回(关闭时)。
+        """
+    }
+
     static func notificationPreview(
         summaryText: String?,
         chairSummary: String?,

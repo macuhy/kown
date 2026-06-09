@@ -231,6 +231,7 @@ struct CommandPaletteView: View {
         case .debate:  return "模型辩论"
         case .structured: return "结构化输出"
         case .tournament: return "模型擂台"
+        case .translate: return "翻译 / 改写"
         }
     }
 
