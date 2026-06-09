@@ -194,6 +194,28 @@ struct AnthropicClient: LLMClient {
         return mentionsParam && mentionsReject
     }
 
+    /// 从 SSE error 事件的 JSON 里抽出尽量具体的错误文案。兼容三种形态:
+    /// ① 标准 Anthropic:`{error:{type,message}}`;② error 为字符串;
+    /// ③ 中转把真错误字符串化塞进 details:`{error:"Claude API error", details:"{...真错误...}"}`。
+    /// details 一并带出,既显示真因、也让上层「弃用采样参数自动去参重试」能命中。
+    private static func errorBody(from json: [String: Any], fallback: String) -> String {
+        var parts: [String] = []
+        if let errObj = json["error"] as? [String: Any] {
+            let type = errObj["type"] as? String ?? "error"
+            let msg = errObj["message"] as? String ?? ""
+            parts.append(msg.isEmpty ? type : "\(type): \(msg)")
+        } else if let errStr = json["error"] as? String, !errStr.isEmpty {
+            parts.append(errStr)
+        }
+        if let details = json["details"] as? String, !details.isEmpty {
+            parts.append(details)
+        } else if let detailsObj = json["details"], !(detailsObj is NSNull) {
+            parts.append("\(detailsObj)")
+        }
+        let combined = parts.joined(separator: " | ")
+        return combined.isEmpty ? fallback : combined
+    }
+
     private static func makeURL(config: ProviderConfig) throws -> URL {
         let urlString = joinURL(config.baseURL, "/messages")
         guard let url = URL(string: urlString) else {
@@ -244,14 +266,13 @@ struct AnthropicClient: LLMClient {
             body["system"] = [["type": "text", "text": sys, "cache_control": ["type": "ephemeral"]]]
         }
         if thinkingEnabled {
-            // 扩展思考:max_tokens 必须 > budget;temperature 必须为 1(故不传 temperature)。
-            // 官方约束下也不传 top_p,避免与 thinking 冲突。
+            // 扩展思考:max_tokens 必须 > budget。
             body["thinking"] = ["type": "enabled", "budget_tokens": thinkingBudget]
             body["max_tokens"] = max(maxTokens, thinkingBudget + 1024)
-        } else {
-            if let temperature { body["temperature"] = temperature }
-            if let topP { body["top_p"] = topP }
         }
+        // 不发送 temperature / top_p:新版 Claude(opus 4.6/4.7/4.8 等)已弃用采样参数,带上会被
+        // 模型/中转以「`temperature` is deprecated」400 掉(有的中转还把真错误包进 details 里)。
+        // Claude 用提示词控制风格即可,不依赖 temperature。
         if !tools.isEmpty {
             body["tools"] = tools.map(serializeTool)
         }
@@ -302,15 +323,7 @@ struct AnthropicClient: LLMClient {
             // 且 error 可能是纯字符串。两种都要认,否则错误被静默吞掉 → 整条流空手收尾、不抛异常,
             // 上层只看到「(空响应)」(且「弃用 temperature 自动去参重试」因为没拿到错误也无从触发)。
             if event.event == "error" || (json["type"] as? String) == "error" {
-                let body: String
-                if let errObj = json["error"] as? [String: Any] {
-                    let type = errObj["type"] as? String ?? "error"
-                    body = "\(type): \(errObj["message"] as? String ?? event.data)"
-                } else if let errStr = json["error"] as? String {
-                    body = errStr
-                } else {
-                    body = event.data
-                }
+                let body = Self.errorBody(from: json, fallback: event.data)
                 // 出错也要留痕:否则一 throw 就跳过了函数末尾的 dbgRecord,出错的请求反而不记日志。
                 dbgRecord(status: 200, raw: dbgRaw, error: body)
                 throw LLMError.httpError(status: 200, body: body)
