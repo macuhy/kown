@@ -80,7 +80,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.xiaobo.kown
         # 本地默认版本;CI 用命令行覆盖(发版走 ios-v* tag → MARKETING_VERSION)。
-        MARKETING_VERSION: "0.24.1"
+        MARKETING_VERSION: "0.24.2"
         CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_STYLE: Automatic
         # 仅当 CI 把 CODE_SIGN_STYLE 覆盖成 Manual 时才生效;本地 Automatic 会忽略它。
@@ -109,12 +109,15 @@ targets:
       - path: ../Sources/KownWatch
         type: group
         name: KownWatch
+      - path: WatchAssets.xcassets
     info:
       path: KownWatch-Info.plist
       properties:
         CFBundleDisplayName: Kown
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        # App Store 校验要求表盘也带图标(asset catalog 提供 + Info.plist 声明名字)。
+        CFBundleIconName: AppIcon
         # watchOS 单 target SwiftUI app(watchOS 10+):WKApplication=true,关联手机 app。
         WKApplication: true
         WKCompanionAppBundleIdentifier: com.xiaobo.kown
@@ -130,7 +133,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.xiaobo.kown.watchkitapp
-        MARKETING_VERSION: "0.24.1"
+        MARKETING_VERSION: "0.24.2"
         CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_STYLE: Automatic
         PROVISIONING_PROFILE_SPECIFIER: "Kown Watch AppStore"
@@ -139,6 +142,7 @@ targets:
         WATCHOS_DEPLOYMENT_TARGET: "10.0"
         TARGETED_DEVICE_FAMILY: "4"
         GENERATE_INFOPLIST_FILE: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_UPCOMING_FEATURE_STRICT_CONCURRENCY: YES
         ENABLE_USER_SCRIPT_SANDBOXING: NO
 
@@ -171,7 +175,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.xiaobo.kown.Share
-        MARKETING_VERSION: "0.24.1"
+        MARKETING_VERSION: "0.24.2"
         CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_STYLE: Automatic
         PROVISIONING_PROFILE_SPECIFIER: "Kown Share AppStore"
