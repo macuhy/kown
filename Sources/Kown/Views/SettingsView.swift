@@ -29,6 +29,7 @@ struct SettingsView: View {
         case performance
         case updates
         case changelog
+        case debugLog
 
         var id: String { rawValue }
         var label: String {
@@ -54,6 +55,7 @@ struct SettingsView: View {
             case .performance: return "性能"
             case .updates:     return "软件更新"
             case .changelog:   return "更新日志"
+            case .debugLog:    return "调试日志"
             }
         }
         var symbol: String {
@@ -79,6 +81,7 @@ struct SettingsView: View {
             case .performance: return "speedometer"
             case .updates:     return "arrow.down.circle"
             case .changelog:   return "sparkles"
+            case .debugLog:    return "ladybug"
             }
         }
         var tint: Color {
@@ -104,6 +107,7 @@ struct SettingsView: View {
             case .performance: return Color(red: 0.88, green: 0.35, blue: 0.22)
             case .updates:     return Color(red: 0.57, green: 0.42, blue: 0.82)
             case .changelog:   return Color(red: 0.95, green: 0.57, blue: 0.16)
+            case .debugLog:    return Color(red: 0.46, green: 0.49, blue: 0.55)
             }
         }
     }
@@ -212,6 +216,8 @@ struct SettingsView: View {
                         EmptyView()   // iOS 不展示;.updates 已从 availableTabs 过滤
                     case .changelog:
                         ChangelogView(embeddedInSettings: true)
+                    case .debugLog:
+                        DebugLogSettingsView()
                     }
                 }
             }
@@ -545,7 +551,7 @@ struct SettingsView: View {
             ("工作流", [.chains, .mcp, .webSearch, .tts, .scheduler, .performance]),
             ("数据", [.sync, .backup, .memory, .favorites]),
             ("洞察", [.usage, .dashboard, .leaderboard, .eval]),
-            ("版本", [.updates, .changelog])
+            ("版本", [.updates, .changelog, .debugLog])
         ]
         .map { section in
             (title: section.0, tabs: section.1.filter { availableTabs.contains($0) })
@@ -781,6 +787,8 @@ struct SettingsView: View {
                 #endif
             case .changelog:
                 ChangelogView(embeddedInSettings: true)
+            case .debugLog:
+                DebugLogSettingsView()
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -1153,6 +1161,7 @@ struct SettingsView: View {
         case .performance: return "流式响应的渲染节奏。机器卡可以拉长刷新间隔降 CPU。"
         case .updates:     return "通过 Sparkle 检查、下载并自动安装最新版本。"
         case .changelog:   return "查看每个版本的新功能、修复和改进。"
+        case .debugLog:    return "记录每个网络请求的完整请求体与原始返回,排查空响应等问题。"
         }
     }
 

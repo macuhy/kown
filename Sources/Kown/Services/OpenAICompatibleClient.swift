@@ -200,10 +200,29 @@ struct OpenAICompatibleClient: LLMClient {
         }
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (bytes, response) = try await URLSession.shared.bytes(for: req)
+        // 调试日志(默认关):一个 HTTP 请求一条,含完整请求体 + 原始 SSE 返回。
+        let dbg = DebugLogStore.isEnabled
+        let dbgStart = Date()
+        var dbgRaw = ""
+        func dbgRecord(status: Int?, raw: String, error: String?) {
+            guard dbg else { return }
+            DebugLogStore.record(model: model, method: "POST", url: url.absoluteString,
+                                 body: body, status: status, responseRaw: raw,
+                                 error: error, startedAt: dbgStart)
+        }
+
+        let bytes: URLSession.AsyncBytes
+        let response: URLResponse
+        do {
+            (bytes, response) = try await URLSession.shared.bytes(for: req)
+        } catch {
+            dbgRecord(status: nil, raw: "", error: "\(error)")
+            throw error
+        }
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
             var errBody = ""
             for try await line in bytes.lines { errBody += line + "\n" }
+            dbgRecord(status: http.statusCode, raw: errBody, error: nil)
             throw LLMError.httpError(status: http.statusCode, body: errBody)
         }
 
@@ -213,6 +232,7 @@ struct OpenAICompatibleClient: LLMClient {
 
         let stream = SSELineStream(bytes: bytes)
         for try await event in stream {
+            if dbg { dbgRaw += "data: \(event.data)\n" }
             let payload = event.data
             if payload == "[DONE]" { break }
             guard let data = payload.data(using: .utf8) else { continue }
@@ -268,6 +288,7 @@ struct OpenAICompatibleClient: LLMClient {
             let args = p.arguments.isEmpty ? "{}" : p.arguments
             result.toolCalls.append(ToolCall(id: id, name: p.name, argumentsJSON: args))
         }
+        dbgRecord(status: 200, raw: dbgRaw, error: nil)
         return result
     }
 

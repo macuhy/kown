@@ -218,16 +218,36 @@ struct GeminiClient: LLMClient {
         }
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (bytes, response) = try await URLSession.shared.bytes(for: req)
+        // 调试日志(默认关):一个 HTTP 请求一条,含完整请求体 + 原始 SSE 返回。URL 里的 key 会脱敏。
+        let dbg = DebugLogStore.isEnabled
+        let dbgStart = Date()
+        var dbgRaw = ""
+        func dbgRecord(status: Int?, raw: String, error: String?) {
+            guard dbg else { return }
+            DebugLogStore.record(model: model, method: "POST", url: url.absoluteString,
+                                 body: body, status: status, responseRaw: raw,
+                                 error: error, startedAt: dbgStart)
+        }
+
+        let bytes: URLSession.AsyncBytes
+        let response: URLResponse
+        do {
+            (bytes, response) = try await URLSession.shared.bytes(for: req)
+        } catch {
+            dbgRecord(status: nil, raw: "", error: "\(error)")
+            throw error
+        }
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
             var errBody = ""
             for try await line in bytes.lines { errBody += line + "\n" }
+            dbgRecord(status: http.statusCode, raw: errBody, error: nil)
             throw LLMError.httpError(status: http.statusCode, body: errBody)
         }
 
         var result = RoundResult()
         let stream = SSELineStream(bytes: bytes)
         for try await event in stream {
+            if dbg { dbgRaw += "data: \(event.data)\n" }
             guard let data = event.data.data(using: .utf8) else { continue }
             guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
             // 每个 chunk 可能都带 usageMetadata,以最后一次为准(累计值)
@@ -272,6 +292,7 @@ struct GeminiClient: LLMClient {
                 }
             }
         }
+        dbgRecord(status: 200, raw: dbgRaw, error: nil)
         return result
     }
 
