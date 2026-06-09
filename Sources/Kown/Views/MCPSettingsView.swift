@@ -294,57 +294,230 @@ private struct MCPServerEditSheet: View {
         }
     }
 
+    private var tint: Color { Color(red: 0.26, green: 0.54, blue: 0.80) }
+
+    private var validationMessage: String? {
+        if name.trimmingCharacters(in: .whitespaces).isEmpty { return "先给这个 server 起个名字。" }
+        switch kind {
+        case .http:
+            return url.trimmingCharacters(in: .whitespaces).isEmpty ? "远程 server 需要填写 HTTP/SSE 端点 URL。" : nil
+        case .stdio:
+            return command.trimmingCharacters(in: .whitespaces).isEmpty ? "本地 stdio server 需要填写启动命令。" : nil
+        }
+    }
+
     var body: some View {
         NavigationStack {
-            Form {
-                Section("名称") {
-                    TextField("例如 Filesystem、My API", text: $name)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    sheetHero
+                    basicCard
+                    if kind == .http { httpCard } else { stdioCard }
+                    helpCard
                 }
-                if availableKinds.count > 1 {
-                    Section("传输方式") {
-                        Picker("传输", selection: $kind) {
-                            Text("远程 HTTP/SSE").tag(Kind.http)
-                            Text("本地 stdio 命令").tag(Kind.stdio)
-                        }
-                        .pickerStyle(.segmented)
-                    }
-                }
-                if kind == .http {
-                    Section("端点 URL") {
-                        TextField("https://example.com/mcp", text: $url)
-                            .textContentType(.URL)
-                            #if os(iOS)
-                            .autocapitalization(.none)
-                            #endif
-                    }
-                    Section("请求头(可选,每行 key: value)") {
-                        TextEditor(text: $headersText).frame(minHeight: 60).font(.caption.monospaced())
-                    }
-                } else {
-                    Section("命令") {
-                        TextField("例如 npx", text: $command).font(.body.monospaced())
-                    }
-                    Section("参数(每行一个)") {
-                        TextEditor(text: $argsText).frame(minHeight: 80).font(.caption.monospaced())
-                    }
-                    Section("环境变量(可选,每行 KEY=VALUE)") {
-                        TextEditor(text: $envText).frame(minHeight: 60).font(.caption.monospaced())
-                    }
-                }
+                .padding(20)
+                .frame(maxWidth: 680, alignment: .topLeading)
             }
+            .background(Color.platformWindowBackground.opacity(0.35))
             .navigationTitle(server == nil ? "新增 MCP server" : "编辑 server")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") { save() }.disabled(!canSave)
-                }
+            .safeAreaInset(edge: .bottom) {
+                actionBar
             }
         }
         #if os(macOS)
-        .frame(minWidth: 420, minHeight: 420)
+        .frame(width: 640, height: 680)
+        #else
+        .presentationDetents([.large])
         #endif
+    }
+
+    private var sheetHero: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: server == nil ? "plus.circle.fill" : "pencil.circle.fill")
+                .font(.title2)
+                .foregroundStyle(tint)
+                .frame(width: 38, height: 38)
+                .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            VStack(alignment: .leading, spacing: 4) {
+                Text(server == nil ? "新增 MCP server" : "编辑 MCP server")
+                    .font(.headline.weight(.bold))
+                Text("连接远程 HTTP/SSE 端点,或在 macOS 上启动本地 stdio 命令。保存后可先测试连接。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(tint.opacity(0.16), lineWidth: 1)
+        }
+    }
+
+    private var basicCard: some View {
+        sheetCard(title: "基本信息", icon: "tag.fill") {
+            VStack(alignment: .leading, spacing: 12) {
+                inputLabel("名称")
+                plainField("例如 Filesystem、Browser、My API", text: $name)
+
+                if availableKinds.count > 1 {
+                    inputLabel("传输方式")
+                    Picker("传输方式", selection: $kind) {
+                        Label("远程 HTTP/SSE", systemImage: "globe").tag(Kind.http)
+                        Label("本地 stdio", systemImage: "terminal").tag(Kind.stdio)
+                    }
+                    .pickerStyle(.segmented)
+                } else {
+                    Label("iOS 仅支持远程 HTTP/SSE server", systemImage: "info.circle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private var httpCard: some View {
+        sheetCard(title: "远程 HTTP/SSE", icon: "globe") {
+            VStack(alignment: .leading, spacing: 12) {
+                inputLabel("端点 URL")
+                plainField("https://example.com/mcp", text: $url, monospaced: true)
+                    .textContentType(.URL)
+
+                inputLabel("请求头(可选,每行 key: value)")
+                codeEditor($headersText, minHeight: 92, placeholder: "Authorization: Bearer ...\nX-API-Key: ...")
+
+                Text("如果 server 不需要鉴权,请求头可以留空。")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+    }
+
+    private var stdioCard: some View {
+        sheetCard(title: "本地 stdio 命令", icon: "terminal") {
+            VStack(alignment: .leading, spacing: 12) {
+                inputLabel("命令")
+                plainField("例如 npx", text: $command, monospaced: true)
+
+                inputLabel("参数(每行一个)")
+                codeEditor($argsText, minHeight: 104, placeholder: "-y\n@modelcontextprotocol/server-filesystem\n/Users/me/project")
+
+                inputLabel("环境变量(可选,每行 KEY=VALUE)")
+                codeEditor($envText, minHeight: 86, placeholder: "API_KEY=...\nNODE_ENV=production")
+
+                Text("命令会通过 /usr/bin/env 解析,已补上 Homebrew / npm 常见路径。")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+    }
+
+    private var helpCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("保存后会出现在 MCP 列表中。先点「测试连接」确认能发现工具,再打开总开关发送。", systemImage: "checkmark.seal")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if let validationMessage {
+                Label(validationMessage, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+        }
+        .padding(13)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.secondary.opacity(0.07), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private var actionBar: some View {
+        HStack(spacing: 10) {
+            Button("取消") { dismiss() }
+                .buttonStyle(.bordered)
+            Spacer()
+            Button {
+                save()
+            } label: {
+                Label("保存", systemImage: "checkmark")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(tint)
+            .disabled(!canSave)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(.regularMaterial)
+        .overlay(alignment: .top) {
+            Rectangle().fill(Color.primary.opacity(0.08)).frame(height: 1)
+        }
+    }
+
+    private func sheetCard<Content: View>(
+        title: String,
+        icon: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label(title, systemImage: icon)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(tint)
+            content()
+        }
+        .padding(15)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+        }
+    }
+
+    private func inputLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+    }
+
+    private func plainField(_ placeholder: String, text: Binding<String>, monospaced: Bool = false) -> some View {
+        TextField(placeholder, text: text)
+            .font(monospaced ? .body.monospaced() : .body)
+            #if os(iOS)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            #endif
+            .textFieldStyle(.plain)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 9)
+            .background(Color.platformTextBackground.opacity(0.72), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.09), lineWidth: 1)
+            }
+    }
+
+    private func codeEditor(_ text: Binding<String>, minHeight: CGFloat, placeholder: String) -> some View {
+        ZStack(alignment: .topLeading) {
+            if text.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(placeholder)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 13)
+                    .padding(.vertical, 11)
+                    .allowsHitTesting(false)
+            }
+            TextEditor(text: text)
+                .font(.caption.monospaced())
+                .scrollContentBackground(.hidden)
+                .padding(6)
+                .frame(minHeight: minHeight)
+        }
+        .background(Color.platformTextBackground.opacity(0.72), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.09), lineWidth: 1)
+        }
     }
 
     private func save() {
