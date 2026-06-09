@@ -10,6 +10,8 @@ final class WatchChatModel {
     var isStreaming: Bool = false
     /// 联网预搜索进行中(回答尚未开始流式),用于 UI 显示「联网搜索中…」。
     var isSearching: Bool = false
+    /// 最近一次回答是否启用了联网,用于回答卡片展示来源状态。
+    var usedWebSearch: Bool = false
 
     private let speaker = WatchSpeaker()
     private var task: Task<Void, Never>?
@@ -29,6 +31,7 @@ final class WatchChatModel {
         speaker.stop()
 
         let wantSearch = webSearch && cfg.canWebSearch
+        usedWebSearch = wantSearch
         isSearching = wantSearch
         isStreaming = !wantSearch
 

@@ -9,6 +9,8 @@ struct WatchRootView: View {
     @State private var webSearch = false
     @State private var contentVisible = false
 
+    private let bottomAnchorID = "answer-bottom"
+
     private var trimmedInput: String {
         input.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -16,8 +18,16 @@ struct WatchRootView: View {
     /// 联网搜索或流式回答进行中 —— 按钮变停止、输入禁用。
     private var busy: Bool { model.isStreaming || model.isSearching }
 
+    private var answerScrollBucket: Int {
+        model.answer.count / 96
+    }
+
+    private var canUseWebSearch: Bool {
+        conn.config?.canWebSearch == true
+    }
+
     private var askButtonTitle: String {
-        if model.isSearching { return "联网搜索中" }
+        if model.isSearching { return "停止搜索" }
         if model.isStreaming { return "停止生成" }
         return "提问并朗读"
     }
@@ -26,39 +36,51 @@ struct WatchRootView: View {
         ZStack {
             ambientBackground
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    heroCard
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        heroCard
 
-                    if conn.config == nil {
-                        notConfigured
-                    } else {
-                        modeSelector
-                        if conn.config?.canWebSearch == true {
-                            webSearchChip
-                        }
-                        promptCard
+                        if conn.config == nil {
+                            notConfigured
+                        } else {
+                            modeSelector
+                            if canUseWebSearch {
+                                webSearchChip
+                            }
+                            promptCard
 
-                        if let err = model.error {
-                            errorCard(err)
+                            if let err = model.error {
+                                errorCard(err)
+                            }
+
+                            if busy {
+                                streamingCard
+                            }
+
+                            if !model.answer.isEmpty {
+                                answerCard
+                            }
                         }
 
-                        if busy {
-                            streamingCard
-                        }
-
-                        if !model.answer.isEmpty {
-                            answerCard
-                        }
+                        Color.clear
+                            .frame(height: 1)
+                            .id(bottomAnchorID)
                     }
+                    .padding(.horizontal, 7)
+                    .padding(.top, 6)
+                    .padding(.bottom, 12)
+                    .opacity(contentVisible ? 1 : 0)
+                    .offset(y: contentVisible ? 0 : 8)
                 }
-                .padding(.horizontal, 7)
-                .padding(.top, 6)
-                .padding(.bottom, 12)
-                .opacity(contentVisible ? 1 : 0)
-                .offset(y: contentVisible ? 0 : 8)
+                .scrollIndicators(.hidden)
+                .onChange(of: answerScrollBucket) { _, _ in
+                    scrollToBottom(proxy)
+                }
+                .onChange(of: busy) { _, _ in
+                    scrollToBottom(proxy)
+                }
             }
-            .scrollIndicators(.hidden)
         }
         .navigationTitle("Kown")
         .onAppear {
@@ -126,6 +148,9 @@ struct WatchRootView: View {
     private var statusText: String {
         guard let config = conn.config else {
             return "在 iPhone 上把 Provider 推送到手表"
+        }
+        if webSearch, canUseWebSearch {
+            return "\(config.name) · \(config.model) · 联网"
         }
         return "\(config.name) · \(config.model)"
     }
@@ -209,6 +234,8 @@ struct WatchRootView: View {
             )
         }
         .buttonStyle(.plain)
+        .disabled(busy)
+        .opacity(busy && !isSelected ? 0.62 : 1)
     }
 
     private var promptCard: some View {
@@ -220,6 +247,7 @@ struct WatchRootView: View {
                 TextField("点按听写问题…", text: $input)
                     .textFieldStyle(.plain)
                     .font(.body.weight(.medium))
+                    .disabled(busy)
 
                 if !input.isEmpty && !busy {
                     Button {
@@ -237,9 +265,8 @@ struct WatchRootView: View {
             } label: {
                 HStack(spacing: 7) {
                     if busy {
-                        ProgressView()
-                            .controlSize(.small)
-                            .tint(.black)
+                        Image(systemName: "stop.fill")
+                            .font(.system(size: 12, weight: .bold))
                     } else {
                         Image(systemName: "waveform")
                             .font(.system(size: 13, weight: .bold))
@@ -304,6 +331,15 @@ struct WatchRootView: View {
                 .font(.footnote)
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            Button {
+                model.error = nil
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -313,14 +349,23 @@ struct WatchRootView: View {
     private var answerCard: some View {
         VStack(alignment: .leading, spacing: 9) {
             HStack(spacing: 6) {
-                Image(systemName: "quote.bubble.fill")
+                Image(systemName: model.usedWebSearch ? "globe.asia.australia.fill" : "quote.bubble.fill")
                     .foregroundStyle(.mint)
-                Text(model.isStreaming ? "实时回答" : "回答")
+                Text(answerTitle)
                     .font(.caption.weight(.bold))
                 Spacer(minLength: 0)
-                Text("朗读")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                if model.usedWebSearch {
+                    Text("资料")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(.mint, in: Capsule(style: .continuous))
+                } else {
+                    Text("朗读")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Text(model.answer)
@@ -399,6 +444,21 @@ struct WatchRootView: View {
             )
         }
         .buttonStyle(.plain)
+        .disabled(busy)
+        .opacity(busy ? 0.62 : 1)
+    }
+
+    private var answerTitle: String {
+        if model.isStreaming { return "实时回答" }
+        if model.usedWebSearch { return "联网回答" }
+        return "回答"
+    }
+
+    private func scrollToBottom(_ proxy: ScrollViewProxy) {
+        guard busy || !model.answer.isEmpty else { return }
+        withAnimation(.easeOut(duration: 0.22)) {
+            proxy.scrollTo(bottomAnchorID, anchor: .bottom)
+        }
     }
 
     private func modeIcon(_ item: WatchMode) -> String {
