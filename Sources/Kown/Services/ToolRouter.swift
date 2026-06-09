@@ -3,10 +3,7 @@ import Foundation
 /// 中央工具定义 + 执行入口。所有 provider 客户端共用同一份 tool schema。
 enum ToolCatalog {
     static let webSearch = LLMTool(
-        // ⚠️ 不能叫 "web_search":那是 Anthropic 内置服务端工具的保留名。新版 Claude
-        // (如 claude-opus-4-7)看到一个「叫 web_search 却不是内置 type」的自定义工具会
-        // 卡住并回空消息(无 text、无 tool_use)→ 表现为「(空响应)」。改成带前缀的私有名规避。
-        name: "firecrawl_web_search",
+        name: "web_search",
         description: """
         Search the public web with Firecrawl and return up-to-date results \
         (title, URL, snippet). Use this whenever the user asks about recent events, \

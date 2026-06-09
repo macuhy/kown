@@ -275,7 +275,7 @@ private struct SkillEditor: View {
 
     /// 可供技能勾选的工具(名 → 展示名)。与 ToolCatalog 对齐。
     static let selectableTools: [(name: String, label: String)] = [
-        ("firecrawl_web_search", "联网搜索"),
+        ("web_search", "联网搜索"),
         ("create_reminder", "创建提醒"),
         ("list_reminders", "查看提醒"),
         ("create_note", "写入备忘录"),

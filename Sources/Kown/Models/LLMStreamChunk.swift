@@ -58,7 +58,7 @@ struct ToolStep: Identifiable, Sendable, Hashable, Codable {
     /// 工具名 → 中文展示名 + 图标。
     var displayName: String {
         switch toolName {
-        case "firecrawl_web_search", "web_search": return "联网搜索"  // 旧名兼容:历史 toolSteps 仍叫 web_search
+        case "web_search":       return "联网搜索"
         case "create_reminder":  return "创建提醒"
         case "list_reminders":   return "查看提醒"
         case "create_event":     return "添加日程"
@@ -102,7 +102,7 @@ struct ToolStep: Identifiable, Sendable, Hashable, Codable {
 
     var iconName: String {
         switch toolName {
-        case "firecrawl_web_search", "web_search": return "magnifyingglass"
+        case "web_search":       return "magnifyingglass"
         case "create_reminder", "list_reminders": return "checklist"
         case "create_event", "list_events":       return "calendar"
         case "create_note":      return "note.text"
