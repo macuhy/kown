@@ -68,11 +68,13 @@ struct OpenAICompatibleClient: LLMClient {
                             break
                         }
 
-                        // 把 assistant 消息(可能含文本+tool_calls+reasoning_content)塞回去
-                        // DeepSeek thinking 模式必须 echo reasoning_content,否则下一轮 400
+                        // 把 assistant 消息(文本 + tool_calls)塞回去。
                         var assistantMsg: [String: Any] = ["role": "assistant"]
                         assistantMsg["content"] = result.text.isEmpty ? NSNull() : result.text
-                        if !result.reasoningContent.isEmpty {
+                        // reasoning_content 是输出专用字段,各厂要求相反:DeepSeek thinking 模式缺它会 400、
+                        // 必须原样带回;火山 minimax 等反过来「带了它就 400」(InvalidParameter)。按模型区分,
+                        // 只对确实需要的 DeepSeek 系回传。
+                        if Self.echoesReasoning(model: config.model), !result.reasoningContent.isEmpty {
                             assistantMsg["reasoning_content"] = result.reasoningContent
                         }
                         assistantMsg["tool_calls"] = result.toolCalls.map { call -> [String: Any] in
@@ -132,6 +134,12 @@ struct OpenAICompatibleClient: LLMClient {
             throw LLMError.badURL(urlString)
         }
         return url
+    }
+
+    /// 多轮工具循环回放 assistant 历史时,是否把上一轮的 reasoning_content 原样带回。
+    /// 仅 DeepSeek 系(thinking 模式)要求带回,否则 400;火山 minimax 等反而带了就 400。按模型区分。
+    private static func echoesReasoning(model: String) -> Bool {
+        model.lowercased().contains("deepseek")
     }
 
     private static func makeUserMessage(prompt: String, images: [Attachment.ImagePayload]) -> [String: Any] {
