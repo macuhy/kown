@@ -64,12 +64,19 @@ enum WatchProvisioning {
             WatchConnectivityManager.shared.send([:])
             return false
         }
-        WatchConnectivityManager.shared.send([
+        var payload: [String: String] = [
             "name": p.displayName,
             "baseURL": p.baseURL,
             "apiKey": key,
             "model": p.model
-        ])
+        ]
+        // 联网搜索:Firecrawl 已启用且配好 key 时一并推给表盘,让表盘能直连搜索。
+        let webCfg = WebSearchConfigStore.load()
+        if webCfg.enabled, let fcKey = try? WebSearchKey.load(), !fcKey.isEmpty {
+            payload["firecrawlBaseURL"] = webCfg.baseURL
+            payload["firecrawlKey"] = fcKey
+        }
+        WatchConnectivityManager.shared.send(payload)
         return true
     }
 }

@@ -1306,16 +1306,25 @@ final class AppViewModel {
 
     func saveWebSearchConfig() {
         WebSearchConfigStore.save(webSearchConfig)
+        #if os(iOS)
+        syncWatchProvider()   // 联网开关变更后,表盘需拿到最新 Firecrawl 配置
+        #endif
     }
 
     func setWebSearchKey(_ key: String) throws {
         try WebSearchKey.save(key)
         hasWebSearchKey = true
+        #if os(iOS)
+        syncWatchProvider()
+        #endif
     }
 
     func clearWebSearchKey() {
         WebSearchKey.delete()
         hasWebSearchKey = false
+        #if os(iOS)
+        syncWatchProvider()
+        #endif
     }
 
     /// 重算 `hasWebSearchKey`,从最新 syncedDataDir 读取实际状态。

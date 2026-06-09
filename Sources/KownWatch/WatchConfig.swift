@@ -6,6 +6,15 @@ struct WatchProviderConfig: Codable, Equatable, Sendable {
     var baseURL: String
     var apiKey: String
     var model: String
+    /// 联网搜索(Firecrawl)配置 —— 手机端启用联网且配好 key 时才推送过来。可选,旧缓存无此字段。
+    var firecrawlBaseURL: String? = nil
+    var firecrawlKey: String? = nil
+
+    /// 两项都齐 → 表盘可直连联网搜索,UI 才显示「联网」开关。
+    var canWebSearch: Bool {
+        guard let b = firecrawlBaseURL, let k = firecrawlKey else { return false }
+        return !b.isEmpty && !k.isEmpty
+    }
 }
 
 /// 表盘本地缓存(UserDefaults.standard):存最近一次从手机收到的配置,重启后仍在。

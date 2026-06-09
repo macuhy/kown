@@ -115,6 +115,7 @@
 		94BE5CD33F9985FB6644F40B /* FavoritesSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6663CD10F8744DA80CB7B71A /* FavoritesSettingsView.swift */; };
 		957A2EFD34EAF740DD20A6F6 /* SourcesStrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48E9B8329F5CC2F2805D1192 /* SourcesStrip.swift */; };
 		9660B6092B9E1F719FA98A61 /* WebSearchSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DEFC40E9873DEDC8D163DAF /* WebSearchSettingsView.swift */; };
+		97921DA95457E0CC2ED407FB /* WatchWebSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADA92F9F4265F9028E79506A /* WatchWebSearch.swift */; };
 		98C1E70CC1ADAD46B069EE38 /* SkillsLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54B67667B508E117497DA079 /* SkillsLibraryView.swift */; };
 		990049A3015F761929EF1BBA /* QualityCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA71FBE13D593A72767CC58F /* QualityCards.swift */; };
 		99D907FB5189365DED894F0A /* ResponseLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72040293D5A0D231EEE07149 /* ResponseLogger.swift */; };
@@ -338,6 +339,7 @@
 		A9291B3B56DB780E4D639C95 /* KownTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KownTheme.swift; sourceTree = "<group>"; };
 		A982064C52DD9EEC1F8DA9BE /* SchedulerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SchedulerView.swift; sourceTree = "<group>"; };
 		AA6FD3F87CC14D2137033982 /* ToolRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolRouter.swift; sourceTree = "<group>"; };
+		ADA92F9F4265F9028E79506A /* WatchWebSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchWebSearch.swift; sourceTree = "<group>"; };
 		ADF164D41A452DE898CC5160 /* MCPStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPStore.swift; sourceTree = "<group>"; };
 		B71C6F5AB4A30C9729DA6449 /* ArtifactPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtifactPreviewView.swift; sourceTree = "<group>"; };
 		B85A21C1BBF19EC1C0455BA0 /* UpdaterService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdaterService.swift; sourceTree = "<group>"; };
@@ -515,6 +517,7 @@
 				554D05567971174A6D8ACF1E /* WatchConnectivity.swift */,
 				DBEF197F032B42027611144C /* WatchRootView.swift */,
 				74C4AEDAD18F703E02C776DB /* WatchSpeaker.swift */,
+				ADA92F9F4265F9028E79506A /* WatchWebSearch.swift */,
 			);
 			name = KownWatch;
 			path = KownWatch;
@@ -1026,6 +1029,7 @@
 				0FDA96CC8892FB3072BFB615 /* WatchConnectivity.swift in Sources */,
 				5C9951A314C2DC4D6AE8E221 /* WatchRootView.swift in Sources */,
 				28F62A43CFE3D426EC7C0FB3 /* WatchSpeaker.swift in Sources */,
+				97921DA95457E0CC2ED407FB /* WatchWebSearch.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

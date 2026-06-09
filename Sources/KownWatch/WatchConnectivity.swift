@@ -35,7 +35,11 @@ final class WatchConnectivityReceiver: NSObject, ObservableObject {
               !apiKey.isEmpty, !baseURL.isEmpty else {
             return nil
         }
-        return WatchProviderConfig(name: name, baseURL: baseURL, apiKey: apiKey, model: model)
+        // 联网搜索配置可选:缺省为 nil,不影响主配置有效性。
+        let fcBase = (ctx["firecrawlBaseURL"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        let fcKey = (ctx["firecrawlKey"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        return WatchProviderConfig(name: name, baseURL: baseURL, apiKey: apiKey, model: model,
+                                   firecrawlBaseURL: fcBase, firecrawlKey: fcKey)
     }
 }
 
