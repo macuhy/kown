@@ -1,7 +1,7 @@
 import Foundation
 
 /// 手机经 WatchConnectivity 推送、表盘接收并本地缓存的精简 provider 配置(仅 OpenAI 兼容)。
-struct WatchProviderConfig: Codable, Equatable {
+struct WatchProviderConfig: Codable, Equatable, Sendable {
     var name: String
     var baseURL: String
     var apiKey: String

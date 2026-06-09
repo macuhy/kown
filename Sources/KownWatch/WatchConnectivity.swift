@@ -19,20 +19,23 @@ final class WatchConnectivityReceiver: NSObject, ObservableObject {
         }
     }
 
-    fileprivate func apply(_ ctx: [String: Any]) {
+    /// 存入收到的配置(nil = 清空)。在 MainActor 上跑。
+    fileprivate func store(_ cfg: WatchProviderConfig?) {
+        config = cfg
+        WatchConfigStore.saveLocal(cfg)
+    }
+
+    /// 把 WCSession 的 `[String: Any]` 解析成 Sendable 的 config —— **必须在 nonisolated 上下文同步解析**,
+    /// 不能把非 Sendable 的字典送进 @MainActor 闭包(Swift 6 严格并发会判数据竞争)。
+    nonisolated static func parse(_ ctx: [String: Any]) -> WatchProviderConfig? {
         guard let name = ctx["name"] as? String,
               let baseURL = ctx["baseURL"] as? String,
               let apiKey = ctx["apiKey"] as? String,
               let model = ctx["model"] as? String,
               !apiKey.isEmpty, !baseURL.isEmpty else {
-            // 手机推了空配置(清空)→ 清掉本地。
-            config = nil
-            WatchConfigStore.saveLocal(nil)
-            return
+            return nil
         }
-        let cfg = WatchProviderConfig(name: name, baseURL: baseURL, apiKey: apiKey, model: model)
-        config = cfg
-        WatchConfigStore.saveLocal(cfg)
+        return WatchProviderConfig(name: name, baseURL: baseURL, apiKey: apiKey, model: model)
     }
 }
 
@@ -40,11 +43,12 @@ extension WatchConnectivityReceiver: WCSessionDelegate {
     nonisolated func session(_ session: WCSession,
                              activationDidCompleteWith activationState: WCSessionActivationState,
                              error: Error?) {
-        let ctx = session.receivedApplicationContext
-        Task { @MainActor in self.apply(ctx) }
+        let cfg = Self.parse(session.receivedApplicationContext)
+        Task { @MainActor in self.store(cfg) }
     }
 
     nonisolated func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
-        Task { @MainActor in self.apply(applicationContext) }
+        let cfg = Self.parse(applicationContext)
+        Task { @MainActor in self.store(cfg) }
     }
 }
