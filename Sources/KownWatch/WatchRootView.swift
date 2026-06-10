@@ -83,6 +83,13 @@ struct WatchRootView: View {
             }
         }
         .navigationTitle("Kown")
+        .onOpenURL { url in
+            // 表盘复杂功能点按(widgetURL kown://ask):主界面即提问界面,
+            // 这里停掉朗读、清掉残留错误,让用户落地就能直接听写提问。
+            guard url.scheme == "kown" else { return }
+            model.stopSpeaking()
+            model.error = nil
+        }
         .onAppear {
             withAnimation(.spring(response: 0.5, dampingFraction: 0.82)) {
                 contentVisible = true

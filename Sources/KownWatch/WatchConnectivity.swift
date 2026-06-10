@@ -23,6 +23,8 @@ final class WatchConnectivityReceiver: NSObject, ObservableObject {
     fileprivate func store(_ cfg: WatchProviderConfig?) {
         config = cfg
         WatchConfigStore.saveLocal(cfg)
+        // 把模型名同步给表盘复杂功能(没有回答摘要时矩形复杂功能第二行显示模型名)。
+        WatchWidgetShared.updateModel(cfg?.model)
     }
 
     /// 把 WCSession 的 `[String: Any]` 解析成 Sendable 的 config —— **必须在 nonisolated 上下文同步解析**,

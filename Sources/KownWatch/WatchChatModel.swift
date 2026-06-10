@@ -78,6 +78,8 @@ final class WatchChatModel {
         isStreaming = false
         // 收尾自动朗读完整回答。
         speaker.speak(answer)
+        // 把回答摘要同步给表盘复杂功能(accessoryRectangular 第二行)。
+        WatchWidgetShared.updateAnswer(answer)
     }
 
     private func failStreaming(_ error: Error) {
