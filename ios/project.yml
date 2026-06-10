@@ -16,6 +16,12 @@ targets:
       - path: ../Sources/Kown
         type: group
         name: Sources
+      # Live Activity 共享层:ActivityAttributes(主 app + KownWidgets 都编)
+      # 和 LiveActivityController(只编主 app;KownWidgets 用 excludes 排掉)。
+      # 不放 Sources/Kown — 那里同时被 SwiftPM / mac 编译,不能带 ActivityKit。
+      - path: Widgets/Shared
+        type: group
+        name: WidgetsShared
       - path: Assets.xcassets
     info:
       path: Info.plist
@@ -30,6 +36,8 @@ targets:
           - CFBundleURLName: com.xiaobo.kown
             CFBundleURLSchemes: [kown]
         LSRequiresIPhoneOS: true
+        # 深入模式进度上灵动岛 / 锁屏(Live Activity)。
+        NSSupportsLiveActivities: true
         # 加密导出合规 — false 表示仅使用 HTTPS / 系统标准加密(免提交合规文档)。
         # TestFlight / App Store 上架不再每次询问 "is your app using non-exempt encryption"。
         ITSAppUsesNonExemptEncryption: false
@@ -98,7 +106,11 @@ targets:
         product: MarkdownUI
       - target: KownShare
         embed: true
+      - target: KownKeyboard
+        embed: true
       - target: KownWatch
+        embed: true
+      - target: KownWidgets
         embed: true
 
   KownWatch:
@@ -145,6 +157,96 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_UPCOMING_FEATURE_STRICT_CONCURRENCY: YES
         ENABLE_USER_SCRIPT_SANDBOXING: NO
+    dependencies:
+      # 表盘复杂功能扩展(WidgetKit),embed 进 watch app 的 PlugIns。
+      - target: KownWatchWidgets
+        embed: true
+
+  # 表盘复杂功能(WidgetKit accessory 家族):表盘一点即问,点按经 widgetURL 打开 watch app。
+  KownWatchWidgets:
+    type: app-extension
+    platform: watchOS
+    deploymentTarget: "10.0"
+    sources:
+      - path: WatchWidgets
+        type: group
+        name: WatchWidgets
+      # 与 watch app 共享的快照读写(App Group UserDefaults 键约定),单文件双 target 编译。
+      - path: ../Sources/KownWatch/WatchWidgetShared.swift
+    info:
+      path: WatchWidgetsInfo.plist
+      properties:
+        CFBundleDisplayName: Kown
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: KownWatchWidgets.entitlements
+      properties:
+        # 读取 watch app 写入的「最近回答摘要 / 模型名」快照。
+        com.apple.security.application-groups:
+          - group.com.xiaobo.kown
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.xiaobo.kown.watchkitapp.widgets
+        MARKETING_VERSION: "0.24.6"
+        CURRENT_PROJECT_VERSION: "1"
+        CODE_SIGN_STYLE: Automatic
+        PROVISIONING_PROFILE_SPECIFIER: "Kown Watch Widgets AppStore"
+        DEVELOPMENT_TEAM: 4257SFGRFK
+        SWIFT_VERSION: "6.0"
+        WATCHOS_DEPLOYMENT_TARGET: "10.0"
+        TARGETED_DEVICE_FAMILY: "4"
+        GENERATE_INFOPLIST_FILE: NO
+        SWIFT_UPCOMING_FEATURE_STRICT_CONCURRENCY: YES
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: YES
+
+  KownKeyboard:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Keyboard
+        type: group
+        name: Keyboard
+    info:
+      path: KeyboardInfo.plist
+      properties:
+        # 显示在系统键盘列表里的名字
+        CFBundleDisplayName: Kown
+        # 版本必须与主 app 一致(CI 用命令行 MARKETING_VERSION/CURRENT_PROJECT_VERSION 覆盖全 target)。
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.keyboard-service
+          NSExtensionPrincipalClass: KownKeyboard.KeyboardViewController
+          NSExtensionAttributes:
+            IsASCIICapable: false
+            PrefersRightToLeft: false
+            PrimaryLanguage: zh-Hans
+            # 联网 + 读 App Group 共享配置必需;用户需在系统设置里允许「完全访问」。
+            RequestsOpenAccess: true
+    entitlements:
+      path: KownKeyboard.entitlements
+      properties:
+        # 主 app 经 App Group UserDefaults 共享 provider 配置(键盘进程读不到主 app 沙盒)。
+        com.apple.security.application-groups:
+          - group.com.xiaobo.kown
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.xiaobo.kown.Keyboard
+        MARKETING_VERSION: "0.24.6"
+        CURRENT_PROJECT_VERSION: "1"
+        CODE_SIGN_STYLE: Automatic
+        PROVISIONING_PROFILE_SPECIFIER: "Kown Keyboard AppStore"
+        DEVELOPMENT_TEAM: 4257SFGRFK
+        SWIFT_VERSION: "6.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+        GENERATE_INFOPLIST_FILE: NO
+        SWIFT_UPCOMING_FEATURE_STRICT_CONCURRENCY: YES
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
 
   KownShare:
     type: app-extension
@@ -179,6 +281,50 @@ targets:
         CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_STYLE: Automatic
         PROVISIONING_PROFILE_SPECIFIER: "Kown Share AppStore"
+        DEVELOPMENT_TEAM: 4257SFGRFK
+        SWIFT_VERSION: "6.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+        GENERATE_INFOPLIST_FILE: NO
+        SWIFT_UPCOMING_FEATURE_STRICT_CONCURRENCY: YES
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+
+  KownWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      # 三个桌面小组件 + Live Activity UI;LiveActivityController 只编主 app(这里排掉)。
+      - path: Widgets
+        type: group
+        name: Widgets
+        excludes:
+          - Shared/LiveActivityController.swift
+      # 快照结构 + 读函数与主 app 共享同一文件(WidgetBridge 只 import Foundation,
+      # WidgetKit 部分有 canImport 守护,扩展里编译安全)。
+      - path: ../Sources/Kown/Services/WidgetBridge.swift
+        name: SharedBridge
+    info:
+      path: WidgetsInfo.plist
+      properties:
+        CFBundleDisplayName: Kown
+        # 版本必须与主 app 一致(CI 用命令行 MARKETING_VERSION/CURRENT_PROJECT_VERSION 覆盖全 target)。
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: KownWidgets.entitlements
+      properties:
+        # 读主 app 写入的晨报/用量快照 JSON。
+        com.apple.security.application-groups:
+          - group.com.xiaobo.kown
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.xiaobo.kown.widgets
+        MARKETING_VERSION: "0.24.6"
+        CURRENT_PROJECT_VERSION: "1"
+        CODE_SIGN_STYLE: Automatic
+        # 仅当 CI 把 CODE_SIGN_STYLE 覆盖成 Manual 时才生效;本地 Automatic 会忽略它。
+        PROVISIONING_PROFILE_SPECIFIER: "Kown Widgets AppStore"
         DEVELOPMENT_TEAM: 4257SFGRFK
         SWIFT_VERSION: "6.0"
         IPHONEOS_DEPLOYMENT_TARGET: "17.0"

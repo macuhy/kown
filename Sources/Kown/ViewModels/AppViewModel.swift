@@ -187,6 +187,8 @@ final class AppViewModel {
     }
     /// 技能库(命名的「系统提示 + 工具白名单」能力包)。
     let skillsStore = SkillsStore()
+    /// Persona 库(可切换的 Agent 档案:系统提示 + 默认模型 + 工具/技能/知识库打包)。
+    let personaStore = PersonaStore()
     /// 已挂载的 MCP server 配置库。
     let mcpStore = MCPStore()
     /// 最近一次发送被自动触发命中的技能 id(手动绑定时为 nil)。供 UI 显示「本次生效技能」徽标,非持久化。
@@ -334,6 +336,16 @@ final class AppViewModel {
                 // 没触发 iCloud 同步全套 reload 时,至少把 hasWebSearchKey 重新从 syncedDataDir 读一次,
                 // 避免 init 时刻 Container 没就绪导致永久误报 "未设置"。
                 self.refreshHasWebSearchKey()
+            }
+        }
+
+        // 快捷指令(SaveToKnowledgeIntent)在本进程后台直接写 KnowledgeStore 后会广播此通知;
+        // 这里重读落盘状态,避免内存旧 knowledgeFolders 在下次 saveKnowledge() 时覆盖掉新文档。
+        NotificationCenter.default.addObserver(
+            forName: .kownKnowledgeDidChangeExternally, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.knowledgeFolders = KnowledgeStore.loadAll()
             }
         }
 
@@ -582,6 +594,29 @@ final class AppViewModel {
                 ConversationStore.save(self.conversations[idx])
             }
         }
+    }
+
+    // MARK: - Artifact Canvas(独立轻量调用,不进主对话)
+
+    /// 「让 AI 修改这个 artifact」:用当前会话将用的模型做一次**独立**调用,收集纯文本回复。
+    /// 不写入会话、不动 liveStates / isRunning — 修改请求与结果都不进主对话流。
+    /// CLI provider 跳过(输出不可控,没法保证单代码块)。
+    func runArtifactRevision(prompt: String, systemPrompt: String) async throws -> String {
+        let candidate = providersForCurrentSend().panel.first(where: { !$0.kind.isCLI })
+            ?? providers.first(where: { $0.enabled && !$0.kind.isCLI })
+        guard let provider = candidate else { throw ArtifactRevisionError.noProvider }
+        let key = try KeychainStore.load(id: provider.id)
+        let client = ProviderRegistry.client(for: provider.kind)
+        let options = ChatOptions(systemPrompt: systemPrompt, temperature: 0.2)
+        var collected = ""
+        for try await chunk in client.stream(
+            prompt: prompt, options: options, config: provider, apiKey: key
+        ) {
+            if case .text(let t) = chunk { collected += t }
+        }
+        let trimmed = collected.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw ArtifactRevisionError.emptyReply }
+        return trimmed
     }
 
     /// 接续生成:让模型接着上一轮回答继续(上下文已随发送回放,故直接发「继续」指令)。
@@ -1118,6 +1153,8 @@ final class AppViewModel {
         #if os(iOS)
         // 保持 Apple Watch 独立表盘的 provider 配置最新(选最合适的 OpenAI 兼容模型)。
         syncWatchProvider()
+        // 键盘扩展开关打开时,同步保持共享配置最新。
+        syncKeyboardProvider()
         #endif
     }
 
@@ -1131,6 +1168,29 @@ final class AppViewModel {
         let activeID = providersForCurrentSend().panel.first?.id
         let chosen = candidates.first(where: { $0.id == activeID }) ?? candidates.first
         return WatchProvisioning.sync(provider: chosen)
+    }
+
+    /// 设置页「AI 键盘」开关:开 → 写入共享配置;关 → 清除。返回是否成功写入。
+    @discardableResult
+    func setKeyboardBridgeEnabled(_ on: Bool) -> Bool {
+        KeyboardConfigBridge.isEnabled = on
+        guard on else {
+            KeyboardConfigBridge.clear()
+            return false
+        }
+        return syncKeyboardProvider()
+    }
+
+    /// 选一个 OpenAI 兼容 / Anthropic、已配 key 的 provider 写给键盘扩展(优先当前 Direct 选中的模型)。
+    @discardableResult
+    func syncKeyboardProvider() -> Bool {
+        guard KeyboardConfigBridge.isEnabled else { return false }
+        let candidates = providers.filter {
+            $0.enabled && ($0.kind == .openAICompatible || $0.kind == .anthropic) && KeychainStore.hasKey(id: $0.id)
+        }
+        let activeID = providersForCurrentSend().panel.first?.id
+        let chosen = candidates.first(where: { $0.id == activeID }) ?? candidates.first
+        return KeyboardConfigBridge.sync(provider: chosen)
     }
     #endif
 

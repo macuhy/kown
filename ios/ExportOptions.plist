@@ -20,8 +20,14 @@
         <string>Kown AppStore</string>
         <key>com.xiaobo.kown.Share</key>
         <string>Kown Share AppStore</string>
+        <key>com.xiaobo.kown.Keyboard</key>
+        <string>Kown Keyboard AppStore</string>
         <key>com.xiaobo.kown.watchkitapp</key>
         <string>Kown Watch AppStore</string>
+        <key>com.xiaobo.kown.watchkitapp.widgets</key>
+        <string>Kown Watch Widgets AppStore</string>
+        <key>com.xiaobo.kown.widgets</key>
+        <string>Kown Widgets AppStore</string>
     </dict>
 
     <key>destination</key>

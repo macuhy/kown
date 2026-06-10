@@ -71,6 +71,11 @@ extension AppViewModel {
             return
         }
 
+        // Persona:会话激活的 Agent 档案(系统提示 / 技能 / 工具开关 / 知识库 / 模型覆盖)。
+        // 解析成快照后在下方各注入点消费;模型覆盖仅单模型路径(Direct/Translate)生效,先于自动路由。
+        let personaFx = personaEffectsForSend()
+        panel = personaFx.applyingModelOverride(to: panel, mode: currentMode)
+
         // Direct 模式 + 自动路由:按问题难度在当前 provider 的 vendor 内换 model(便宜↔旗舰)。
         if autoRouteEnabled, currentMode == .direct, let first = panel.first {
             let routed = QuestionRouter.route(first, prompt: trimmed)
@@ -137,7 +142,8 @@ extension AppViewModel {
                 branch: conversations[convIdx].gitHubBranch,
                 token: GitHubAuth.token())
             : nil
-        let knowledgeFolderForSend = currentKnowledgeFolder
+        // 知识库:会话自己绑定的优先;否则用 Persona 绑定的资料夹。
+        let knowledgeFolderForSend = currentKnowledgeFolder ?? personaFx.knowledgeFolder
         // memory items 取一份快照(O(1) COW),供后台 BM25 打分,避免触碰 @MainActor 的 MemoryStore。
         let memoryItemsForSend: [MemoryItem] = memoryInjectionEnabled ? MemoryStore.shared.items : []
         let memoryQueryForSend: String? = memoryInjectionEnabled ? trimmed : nil
@@ -161,11 +167,12 @@ extension AppViewModel {
                     ?? UserDefaults.standard.string(forKey: Self.translateLangKey),
                 rewrite: conversations[convIdx].translateRewrite)
             : ""
-        // 基础系统提示(翻译指令 → 技能 → 会话级 / 全局);上下文片段在后台前置到它前面。
+        // 基础系统提示(翻译指令 → Persona(提示词+绑定技能) → 技能 → 会话级 / 全局);
+        // 上下文片段在后台前置到它前面。
         let baseSystemPrompt: String = {
             let convPrompt = conversations[convIdx].systemPrompt?.trimmingCharacters(in: .whitespacesAndNewlines)
             let base = (convPrompt?.isEmpty == false) ? convPrompt! : systemPrompt
-            return [translateInstruction, skillInstructions, base]
+            return [translateInstruction, personaFx.systemPromptPrefix, skillInstructions, base]
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
                 .joined(separator: "\n\n")
@@ -177,8 +184,10 @@ extension AppViewModel {
         let contextSummarySnapshot = ConversationSummarizer.summaryForNextSend(conversations[convIdx])
         let priorTurnsSnapshot = ConversationSummarizer.priorTurnsForReplay(conversations[convIdx])
         // 工具集:web_search(开 🌐 + Firecrawl 已配置)+ 设备工具(总开关或当前技能点名)。
-        let webSessionSnapshot = WebSearchSession.makeIfReady(userToggle: webSearchEnabledForNextSend)
-        let skillToolNames = Set(activeSkill?.allowedTools ?? [])
+        // Persona 激活时其默认工具开关与输入栏开关取「或」(自动点亮,只增不减)。
+        let webSessionSnapshot = WebSearchSession.makeIfReady(
+            userToggle: webSearchEnabledForNextSend || personaFx.webSearch)
+        let skillToolNames = Set(activeSkill?.allowedTools ?? []).union(personaFx.extraToolNames)
         // 本地文件工具(macOS):开关开 + 已授权目录时,带上 bookmark。
         #if os(macOS)
         let fileToolsBookmark: Data? = (fileToolsEnabledForNextSend && LocalFileToolState.shared.isAuthorized)
@@ -186,19 +195,24 @@ extension AppViewModel {
         #else
         let fileToolsBookmark: Data? = nil
         #endif
+        // 代码执行工具(设置 ▸ 设备工具 ▸ 代码执行;默认关闭)。
+        let codeExecForSend = CodeExecToolState.shared.isEnabled
         let toolsSnapshot: [LLMTool] = ToolCatalog.enabledTools(
             webSearch: webSessionSnapshot,
-            deviceTools: deviceToolsEnabledForNextSend,
+            deviceTools: deviceToolsEnabledForNextSend || personaFx.deviceTools,
             extraToolNames: skillToolNames,
             gitHub: gitHubTargetForSend != nil,
-            fileSystem: fileToolsBookmark != nil)
+            fileSystem: fileToolsBookmark != nil,
+            codeExec: codeExecForSend)
         // 有任一工具才建 context;否则 nil(客户端据此跳过工具循环、不注入当前时间)。
         // 注:MCP 工具在 runSend 的后台任务里异步连接后再并入,这里不计入「是否建 context」的判断。
         let toolContextSnapshot: ToolContext? = toolsSnapshot.isEmpty
             ? nil : ToolContext(webSearch: webSessionSnapshot, github: gitHubTargetForSend,
-                                localFileBookmark: fileToolsBookmark)
-        // MCP:开关开时,带上已启用的 server 配置快照,真正的连接 + tools/list 在后台任务里做。
-        let mcpServersForSend: [MCPServerConfig] = mcpEnabledForNextSend ? mcpStore.enabledServers : []
+                                localFileBookmark: fileToolsBookmark,
+                                codeExec: codeExecForSend)
+        // MCP:开关开(或 Persona 点亮)时,带上已启用的 server 配置快照,连接 + tools/list 在后台做。
+        let mcpServersForSend: [MCPServerConfig] =
+            (mcpEnabledForNextSend || personaFx.mcp) ? mcpStore.enabledServers : []
         // 深入模式(仅 Direct):抬高工具循环上限 + 注入 Agent 规划/自检指令。
         let deepAgentForSend = (currentMode == .direct && deepAgentEnabledForNextSend)
         let modeSnapshot = currentMode
@@ -373,6 +387,8 @@ extension AppViewModel {
             self.isRunning = false
             self.runningConvID = nil
             BackgroundAudioKeepalive.shared.stop()
+            // 深入模式的 Live Activity(若有)同步收掉;没有时是 no-op。
+            DeepTaskEvents.postEnded(success: false)
         }
 
         let roundDate = Date()
@@ -448,6 +464,8 @@ extension AppViewModel {
             // 深入模式:抬高工具循环上限,并注入 Agent 规划/执行/自检指令(仅 Direct,见 send())。
             let agentMaxRounds = deepAgent ? 12 : 6
             let agentInstructionForSend: String? = deepAgent ? Self.deepAgentInstruction : nil
+            // 深入模式 → Live Activity(灵动岛):iOS target 侧 LiveActivityController 订阅此事件。
+            if deepAgent { DeepTaskEvents.postStarted(title: String(promptSnapshot.prefix(40)), totalRounds: agentMaxRounds) }
 
             var responses: [String: String] = [:]
             var errors: [String: String] = [:]
@@ -848,6 +866,11 @@ extension AppViewModel {
                 self.conversations[idx].turns.append(turn)
                 self.conversations[idx].updatedAt = Date()
                 ConversationStore.save(self.conversations[idx])
+                // 晨报会话:本轮回答即晨报内容 → 提取要点发布到 iOS 桌面小组件(非晨报会话 no-op)。
+                WidgetBridge.publishBriefingIfPending(
+                    conversationID: convID,
+                    answerMarkdown: chairSummary ?? summaryText
+                        ?? panelOrder.compactMap { responses[$0] }.first { !$0.isEmpty } ?? "")
                 // 把会话顶到列表最前
                 let moved = self.conversations.remove(at: idx)
                 self.conversations.insert(moved, at: 0)
@@ -888,6 +911,8 @@ extension AppViewModel {
             self.liveTurnImages = []
             self.isRunning = false
             self.runningConvID = nil
+            // 深入模式:收掉 Live Activity(灵动岛显示「已完成」后自动消失)。
+            if deepAgent { DeepTaskEvents.postEnded(success: true) }
         }
     }
 
@@ -1183,6 +1208,8 @@ extension AppViewModel {
         runningConvID = nil
         BackgroundAudioKeepalive.shared.stop()
         BackgroundCompanion.shared.end()
+        // 深入模式的 Live Activity(若有)同步收掉;没有时是 no-op。
+        DeepTaskEvents.postEnded(success: false)
         for state in liveStates.values where isStreaming(state) {
             state.fail("已取消")
         }
@@ -1837,7 +1864,13 @@ extension AppViewModel {
                 case .text(let t):       state.append(t)
                 case .reasoning(let r):  state.appendReasoning(r)
                 case .toolEvent(let e):  state.logEvent(e)
-                case .toolStep(let s):   state.upsertToolStep(s)
+                case .toolStep(let s):
+                    state.upsertToolStep(s)
+                    // 深入模式(agentInstruction 非空)→ 同步推给 Live Activity(灵动岛)。
+                    if agentInstruction != nil {
+                        DeepTaskEvents.postToolStep(round: s.round + 1, displayName: s.displayName,
+                                                    status: s.status.rawValue)
+                    }
                 case .sources(let refs):
                     // web_search 命中的来源:累积到本轮 liveSources(全轮合并,落盘进 Turn.sources),
                     // 同时按本卡 state 单独留一份(各 panel 小卡显示自己引用的地址),都按 url 去重。

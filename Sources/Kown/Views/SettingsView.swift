@@ -11,6 +11,7 @@ struct SettingsView: View {
         case providers
         case prompts
         case skills
+        case personas
         case deviceTools
         case mcp
         case github
@@ -37,6 +38,7 @@ struct SettingsView: View {
             case .providers:   return "厂商"
             case .prompts:     return "Prompt 库"
             case .skills:      return "技能"
+            case .personas:    return "Persona"
             case .deviceTools: return "设备工具"
             case .mcp:         return "MCP"
             case .github:      return "GitHub"
@@ -63,6 +65,7 @@ struct SettingsView: View {
             case .providers:   return "square.stack.3d.up"
             case .prompts:     return "text.badge.plus"
             case .skills:      return "wand.and.stars"
+            case .personas:    return "theatermasks"
             case .deviceTools: return "wrench.and.screwdriver.fill"
             case .mcp:         return "powerplug"
             case .github:      return "chevron.left.forwardslash.chevron.right"
@@ -89,6 +92,7 @@ struct SettingsView: View {
             case .providers:   return Color(red: 0.10, green: 0.66, blue: 0.56)
             case .prompts:     return Color(red: 0.56, green: 0.40, blue: 0.86)
             case .skills:      return Color(red: 0.48, green: 0.36, blue: 0.90)
+            case .personas:    return Color(red: 0.72, green: 0.34, blue: 0.62)
             case .deviceTools: return Color(red: 0.20, green: 0.60, blue: 0.62)
             case .mcp:         return Color(red: 0.26, green: 0.54, blue: 0.80)
             case .github:      return Color(red: 0.18, green: 0.62, blue: 0.58)
@@ -180,6 +184,8 @@ struct SettingsView: View {
                         PromptLibraryView(viewModel: promptLibrary)
                     case .skills:
                         SkillsLibraryView(store: viewModel.skillsStore, viewModel: viewModel)
+                    case .personas:
+                        PersonaSettingsView(viewModel: viewModel)
                     case .deviceTools:
                         DeviceToolsSettingsView(viewModel: viewModel)
                     case .mcp:
@@ -383,6 +389,8 @@ struct SettingsView: View {
                 }
 
                 watchSyncCard
+                // AI 键盘:配置共享开关(卡片实现在 KeyboardConfigBridge.swift,此处只挂一行)。
+                KeyboardBridgeSettingsCard { viewModel.setKeyboardBridgeEnabled($0) }
             }
             .padding(.horizontal, 14)
             .padding(.top, 10)
@@ -574,7 +582,7 @@ struct SettingsView: View {
     private var desktopTabSections: [(title: String, tabs: [Tab])] {
         [
             ("基础", [.providers, .prompts, .skills, .deviceTools, .github]),
-            ("工作流", [.chains, .mcp, .webSearch, .tts, .scheduler, .performance]),
+            ("工作流", [.personas, .chains, .mcp, .webSearch, .tts, .scheduler, .performance]),
             ("数据", [.sync, .backup, .memory, .favorites]),
             ("洞察", [.usage, .dashboard, .leaderboard, .eval]),
             ("版本", [.updates, .changelog, .debugLog])
@@ -769,6 +777,8 @@ struct SettingsView: View {
                 PromptLibraryView(viewModel: promptLibrary)
             case .skills:
                 SkillsLibraryView(store: viewModel.skillsStore, viewModel: viewModel)
+            case .personas:
+                PersonaSettingsView(viewModel: viewModel)
             case .deviceTools:
                 DeviceToolsSettingsView(viewModel: viewModel)
             case .mcp:
@@ -1169,6 +1179,7 @@ struct SettingsView: View {
         case .providers:   return "管理连接、密钥和每个模型的默认生成参数。"
         case .prompts:     return "保存可复用的 Prompt 模板,用 {{变量}} 占位,填充后一键复制。"
         case .skills:      return "技能 = 系统提示 + 可用工具。可按输入自动触发,也可绑定到当前会话。"
+        case .personas:    return "Persona = 系统提示词 + 默认模型 + 工具/技能/知识库 打包成档案,输入栏按会话一键切换。"
         case .deviceTools: return "让模型在你的系统「提醒事项 / 备忘录」里创建条目。需授权;iOS 备忘录走剪贴板+跳转。"
         case .mcp:         return "挂载外部 MCP server,把任意第三方工具暴露给模型。支持远程 HTTP/SSE,macOS 还支持本地 stdio 命令。"
         case .github:      return "连接 GitHub 后,对话里可选仓库,把定稿内容直接提交;聊天显示改动行数与 commit 链接。"
