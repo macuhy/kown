@@ -43,6 +43,8 @@
 	<string>Kown 可以把你的待办写进系统「提醒事项」。</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Kown 用语音识别把你说的话转写成文字。</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>NSUbiquitousContainers</key>
 	<dict>
 		<key>iCloud.com.xiaobo.kown</key>

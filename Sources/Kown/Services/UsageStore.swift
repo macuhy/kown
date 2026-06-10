@@ -82,6 +82,8 @@ final class UsageStore {
         mineSnapshot.days[day] = dayBucket
         mergedCache = nil
         persistMine()
+        // iOS 桌面小组件:把本月花费/预算快照写进 App Group(60s 节流,见 WidgetBridge)。
+        WidgetBridge.publishUsage(monthSpendUSD: monthToDateCostUSD())
     }
 
     /// 抹掉本机的全部历史(其他设备的不动 — 它们的文件不在本机的"管辖范围"内)
