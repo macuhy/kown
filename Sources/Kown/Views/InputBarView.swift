@@ -469,6 +469,7 @@ struct InputBarView: View {
             mcpToggle
             deepAgentToggle
             skillPicker
+            PersonaPickerControl(viewModel: viewModel, buttonSize: toolButtonSize)
             if viewModel.currentMode == .debate {
                 debateRoundsPicker
             }
@@ -674,6 +675,7 @@ struct InputBarView: View {
         }
         #endif
         iOSSkillBindingMenu
+        PersonaMenuSection(viewModel: viewModel)
         iOSGitHubMenu
         if !viewModel.canEnableWebSearch {
             Label("网页搜索未配置", systemImage: "globe.badge.exclamationmark")
@@ -1456,6 +1458,7 @@ struct InputBarView: View {
         viewModel.mcpEnabledForNextSend ||
         (viewModel.deepAgentEnabledForNextSend && viewModel.currentMode == .direct) ||
         viewModel.currentBoundSkill != nil ||
+        viewModel.currentPersona != nil ||
         viewModel.currentGitHubRepo != nil
     }
 
@@ -1496,6 +1499,15 @@ struct InputBarView: View {
                         tint: Color(red: 0.48, green: 0.36, blue: 0.90)
                     ) {
                         viewModel.setSelectedSkill(nil)
+                    }
+                }
+                if let persona = viewModel.currentPersona {
+                    contextChip(
+                        "Persona：\(persona.name)",
+                        icon: "theatermasks",
+                        tint: PersonaSettingsView.tint
+                    ) {
+                        viewModel.setSelectedPersona(nil)
                     }
                 }
                 if let repo = viewModel.currentGitHubRepo {

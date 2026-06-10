@@ -604,6 +604,8 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
     var structuredSchema: String?
     /// 手动绑定到本会话的技能 id。非 nil 时该技能恒定生效(覆盖自动触发)。nil = 不绑定。
     var selectedSkillID: UUID?
+    /// 本会话激活的 Persona(Agent 档案)id。非 nil 时发送注入其系统提示/技能/工具/模型覆盖。nil = 不启用。
+    var personaID: UUID?
     /// 本会话绑定的 GitHub 仓库 "owner/repo"。非 nil 时,model 输出的 ```kown:write 块会提交到该仓库
     /// (而非本地 workspace),提交结果以 AppliedWrite 形式归档进 Turn 并在聊天里显示 diff 行数。
     var gitHubRepo: String?
@@ -642,6 +644,7 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
          folderID: UUID? = nil,
          structuredSchema: String? = nil,
          selectedSkillID: UUID? = nil,
+         personaID: UUID? = nil,
          gitHubRepo: String? = nil,
          gitHubBranch: String? = nil,
          translateTargetLanguage: String? = nil,
@@ -672,6 +675,7 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
         self.folderID = folderID
         self.structuredSchema = structuredSchema
         self.selectedSkillID = selectedSkillID
+        self.personaID = personaID
         self.gitHubRepo = gitHubRepo
         self.gitHubBranch = gitHubBranch
         self.translateTargetLanguage = translateTargetLanguage
@@ -707,6 +711,7 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
         self.folderID = try c.decodeIfPresent(UUID.self, forKey: .folderID)
         self.structuredSchema = try c.decodeIfPresent(String.self, forKey: .structuredSchema)
         self.selectedSkillID = try c.decodeIfPresent(UUID.self, forKey: .selectedSkillID)
+        self.personaID = try c.decodeIfPresent(UUID.self, forKey: .personaID)
         self.gitHubRepo = try c.decodeIfPresent(String.self, forKey: .gitHubRepo)
         self.gitHubBranch = try c.decodeIfPresent(String.self, forKey: .gitHubBranch)
         self.translateTargetLanguage = try c.decodeIfPresent(String.self, forKey: .translateTargetLanguage)
