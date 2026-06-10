@@ -136,50 +136,81 @@ enum ArtifactHTMLBuilder {
     }
 }
 
-// MARK: - 预览面板
+// MARK: - 预览面板(Canvas)
 
-/// Artifacts 实时预览面板:从当前(流式 / 最近一轮)回答里抽 artifact,选一个用 WebView 渲染。
+/// Artifacts Canvas 面板:从当前(流式 / 最近一轮)回答里抽 artifact,
+/// 预览 / 源码两种模式 — 源码可编辑(0.5s 防抖实时重渲染),底部可「让 AI 修改」,
+/// 每次保存 / AI 修改生成一个版本(v1 原始),版本按会话持久化(`ArtifactVersionStore`)。
 /// 节流(0.30s)重抽,避免在每次流式 flush(~20Hz)上重 parse + 重建 HTML。
 struct ArtifactPreviewPanel: View {
     @Bindable var viewModel: AppViewModel
     @Environment(\.colorScheme) private var colorScheme
+
+    private enum ViewMode: String, CaseIterable {
+        case preview, code
+        var displayName: String { self == .preview ? "预览" : "源码" }
+    }
 
     @State private var blocks: [ArtifactBlock] = []
     @State private var selectedID: Int?
     @State private var renderedHTML: String = ""
     @State private var lastSourceHash: Int = 0
 
+    // Canvas 化:编辑 / 版本 / AI 修改状态
+    @State private var viewMode: ViewMode = .preview
+    @State private var draft: String = ""
+    @State private var draftDirty = false
+    @State private var versions: [ArtifactVersion] = []
+    @State private var selectedVersionID: UUID?     // nil = 跟随最新版本
+    @State private var activeKey: String?           // 当前 artifact 的持久化键
+    @State private var renderDebounce: Task<Void, Never>?
+    @State private var aiInstruction = ""
+    @State private var aiFocus = ""
+    @State private var showFocusField = false
+    @State private var isRevising = false
+    @State private var reviseError: String?
+
     private let tick = Timer.publish(every: 0.30, on: .main, in: .common).autoconnect()
 
     var body: some View {
         VStack(spacing: 0) {
             header
+            if !blocks.isEmpty {
+                canvasToolbar
+            }
             Divider()
             if blocks.isEmpty {
                 emptyState
+            } else if viewMode == .code {
+                sourceEditor
             } else {
                 ArtifactWebView(html: renderedHTML)
                     .id(webViewKey)
                     .background(Color.platformControlBackground)
+            }
+            if currentBlock != nil {
+                Divider()
+                aiReviseBar
             }
         }
         .frame(minWidth: 280)
         .onAppear { refresh(force: true) }
         .onReceive(tick) { _ in refresh(force: false) }
         .onChange(of: viewModel.selectedConversationID) { _, _ in refresh(force: true) }
+        .onDisappear { renderDebounce?.cancel() }
     }
 
     private var header: some View {
         HStack(spacing: 8) {
             Image(systemName: "rectangle.righthalf.inset.filled")
                 .foregroundStyle(ConversationMode.direct.kownTint)
-            Text("预览")
+            Text("Canvas")
                 .font(.headline)
             Spacer()
             if blocks.count > 1 {
                 Picker("", selection: Binding(
                     get: { selectedID ?? blocks.last?.id ?? 0 },
-                    set: { selectedID = $0; rebuildHTML() }
+                    set: { selectedID = $0; syncArtifactState(); rebuildHTML() }
                 )) {
                     ForEach(blocks) { b in
                         Text("\(b.kind.displayName) #\(b.id + 1)").tag(b.id)
@@ -204,6 +235,169 @@ struct ArtifactPreviewPanel: View {
         .padding(.vertical, 10)
     }
 
+    /// 第二行工具栏:预览/源码切换 + 版本历史 + 手动保存。
+    private var canvasToolbar: some View {
+        HStack(spacing: 10) {
+            Picker("", selection: $viewMode) {
+                ForEach(ViewMode.allCases, id: \.self) { m in
+                    Text(m.displayName).tag(m)
+                }
+            }
+            .pickerStyle(.segmented)
+            .frame(maxWidth: 150)
+
+            if versions.count > 1 {
+                versionMenu
+            }
+
+            Spacer()
+
+            if draftDirty {
+                Button {
+                    saveDraft()
+                } label: {
+                    Label("保存", systemImage: "checkmark.circle")
+                        .font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.borderless)
+                .disabled(!canEdit)
+                .help("把当前修改保存为新版本")
+
+                Button {
+                    discardDraft()
+                } label: {
+                    Label("还原", systemImage: "arrow.uturn.backward")
+                        .font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.borderless)
+                .help("放弃未保存的修改")
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.bottom, 8)
+    }
+
+    /// 版本历史菜单:v1 原始 → vN 最新,可切换回看任意版本。
+    private var versionMenu: some View {
+        Menu {
+            ForEach(Array(versions.enumerated()), id: \.element.id) { idx, v in
+                Button {
+                    selectedVersionID = (idx == versions.count - 1) ? nil : v.id
+                    draft = v.source
+                    draftDirty = false
+                    reviseError = nil
+                    rebuildHTML()
+                } label: {
+                    let mark = (effectiveVersion?.id == v.id) ? "✓ " : ""
+                    Text("\(mark)v\(idx + 1) · \(v.origin.displayName) · \(v.createdAt.formatted(date: .omitted, time: .shortened))")
+                }
+            }
+        } label: {
+            Label(currentVersionLabel, systemImage: "clock.arrow.circlepath")
+                .font(.caption.weight(.semibold))
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("版本历史")
+    }
+
+    private var currentVersionLabel: String {
+        guard let v = effectiveVersion,
+              let idx = versions.firstIndex(where: { $0.id == v.id }) else { return "v1" }
+        return "v\(idx + 1)/\(versions.count)"
+    }
+
+    // MARK: - 源码编辑
+
+    /// 等宽 TextEditor;改动 0.5s 防抖重渲染(切回预览即见),保存才生成版本。
+    /// 性能:纯文本编辑器、无语法高亮 / attributed 重排,大文本不会卡输入(0.21.1 的教训)。
+    private var sourceEditor: some View {
+        TextEditor(text: Binding(
+            get: { draft },
+            set: { newValue in
+                guard newValue != draft else { return }
+                draft = newValue
+                draftDirty = (newValue != (baseSource ?? ""))
+                scheduleRender()
+            }
+        ))
+        .font(.system(.footnote, design: .monospaced))
+        .autocorrectionDisabled()
+        #if os(iOS)
+        .textInputAutocapitalization(.never)
+        #endif
+        .scrollContentBackground(.hidden)
+        .padding(.horizontal, 8)
+        .background(Color.platformTextBackground)
+        .disabled(!canEdit && !draftDirty)
+        .overlay(alignment: .bottomTrailing) {
+            if !canEdit {
+                Text(viewModel.isRunning ? "回答生成中,完成后可编辑" : "此内容暂不可编辑")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .padding(6)
+                    .background(.thinMaterial, in: Capsule())
+                    .padding(10)
+            }
+        }
+    }
+
+    // MARK: - 让 AI 修改
+
+    private var aiReviseBar: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let err = reviseError {
+                Text(err)
+                    .font(.caption2)
+                    .foregroundStyle(.red)
+                    .lineLimit(2)
+            }
+            if showFocusField {
+                TextField("重点片段(可选)— 粘贴要重点修改的源码片段", text: $aiFocus, axis: .vertical)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(.caption, design: .monospaced))
+                    .lineLimit(1...3)
+            }
+            HStack(spacing: 8) {
+                Button {
+                    showFocusField.toggle()
+                    if !showFocusField { aiFocus = "" }
+                } label: {
+                    Image(systemName: showFocusField ? "text.badge.minus" : "text.badge.plus")
+                        .foregroundStyle(showFocusField ? ConversationMode.direct.kownTint : Color.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("附上要重点修改的源码片段")
+
+                TextField("让 AI 修改这个 artifact…", text: $aiInstruction, axis: .vertical)
+                    .textFieldStyle(.roundedBorder)
+                    .lineLimit(1...3)
+                    .onSubmit { sendAIRevision() }
+
+                if isRevising {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Button {
+                        sendAIRevision()
+                    } label: {
+                        Image(systemName: "paperplane.circle.fill")
+                            .font(.title3)
+                            .foregroundStyle(
+                                aiInstruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !canEdit
+                                    ? Color.secondary : ConversationMode.direct.kownTint
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(aiInstruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !canEdit)
+                    .help("发送修改要求(结果作为新版本,不进对话)")
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+    }
+
     private var emptyState: some View {
         VStack(spacing: 10) {
             Image(systemName: "rectangle.dashed")
@@ -222,16 +416,47 @@ struct ArtifactPreviewPanel: View {
         .background(Color.platformControlBackground.opacity(0.4))
     }
 
-    /// WebView 身份键:换会话 / 换 artifact / 流式结束(isClosed 翻转)/ 新一轮回答时,
+    // MARK: - 当前 artifact / 版本解析
+
+    private var currentBlock: ArtifactBlock? {
+        guard let id = selectedID ?? blocks.last?.id else { return nil }
+        return blocks.first(where: { $0.id == id })
+    }
+
+    /// 当前 artifact 的持久化键。要求:有会话、有最近一轮(回答已落盘)、围栏闭合。
+    /// 流式进行中(turn 可能尚未 append / 文本来自 liveStates)不给键 → 不可编辑,避免错挂版本。
+    private var persistenceKey: String? {
+        guard !viewModel.isRunning,
+              let conv = viewModel.selectedConversation,
+              let turn = conv.turns.last,
+              let block = currentBlock, block.isClosed else { return nil }
+        return ArtifactVersionStore.key(turnID: turn.id, blockID: block.id)
+    }
+
+    private var canEdit: Bool { persistenceKey != nil }
+
+    /// 当前查看的版本(nil = 无历史 → 直接用消息里的原始 source)。
+    private var effectiveVersion: ArtifactVersion? {
+        if let id = selectedVersionID, let v = versions.first(where: { $0.id == id }) { return v }
+        return versions.last
+    }
+
+    /// 展示 / 编辑的基准源码:有版本历史用版本,否则用消息原文。
+    private var baseSource: String? {
+        effectiveVersion?.source ?? currentBlock?.source
+    }
+
+    /// WebView 身份键:换会话 / 换 artifact / 换版本 / 流式结束(isClosed 翻转)/ 新一轮回答时,
     /// 强制重建底层 WKWebView,避免**复用同一个 web view 在 reload 后渲染空白**
     /// (用户反馈的「渲染一次之后就不渲染了」——抽取正常、面板非空,但 WebView 是白的)。
-    /// 流式增长期间(同会话、同 block、未闭合)键保持不变,内容靠 `updateNSView` 增量 reload,不闪。
+    /// 流式增长 / 草稿防抖重渲染期间键保持不变,内容靠 `updateNSView` 增量 reload,不闪。
     private var webViewKey: String {
         let convID = viewModel.selectedConversationID?.uuidString ?? "-"
         let turnCount = viewModel.selectedConversation?.turns.count ?? 0
         let sel = selectedID ?? blocks.last?.id ?? -1
         let closed = blocks.first(where: { $0.id == sel })?.isClosed ?? false
-        return "\(convID)|\(turnCount)|\(sel)|\(closed)"
+        let ver = selectedVersionID?.uuidString ?? "latest\(versions.count)"
+        return "\(convID)|\(turnCount)|\(sel)|\(closed)|\(ver)"
     }
 
     /// 取要预览的源文本:优先正在流式的首个 panel 回答,否则最近一轮的首份回答。
@@ -250,7 +475,15 @@ struct ArtifactPreviewPanel: View {
     private func refresh(force: Bool) {
         let text = sourceText
         let hash = text.hashValue
-        guard force || hash != lastSourceHash else { return }
+        guard force || hash != lastSourceHash else {
+            // 文本没变,但可编辑性可能翻转(流式刚结束:liveStates → turn.responses 文本相同,
+            // 而 isRunning 已变 false)→ 轻量同步持久化键,否则面板会一直停在「不可编辑」。
+            if persistenceKey != activeKey {
+                syncArtifactState()
+                rebuildHTML()
+            }
+            return
+        }
         lastSourceHash = hash
         let newBlocks = ArtifactExtractor.extract(text)
         if newBlocks != blocks {
@@ -260,15 +493,120 @@ struct ArtifactPreviewPanel: View {
                 selectedID = newBlocks.last?.id
             }
         }
+        syncArtifactState()
         rebuildHTML()
     }
 
+    /// 让编辑 / 版本状态跟上「当前指向的 artifact」:
+    /// - 换 artifact(键变了)→ 重新加载版本历史、重置草稿;
+    /// - 同一 artifact 且无未保存改动 → 草稿跟随基准源(流式增长时同步)。
+    /// 有未保存改动时**绝不**覆盖草稿(tick 不会冲掉正在输入的内容)。
+    private func syncArtifactState() {
+        let newKey = persistenceKey
+        if newKey != activeKey {
+            activeKey = newKey
+            selectedVersionID = nil
+            reviseError = nil
+            if let key = newKey, let convID = viewModel.selectedConversationID {
+                versions = ArtifactVersionStore.versions(conversationID: convID, key: key)
+            } else {
+                versions = []
+            }
+            draft = baseSource ?? ""
+            draftDirty = false
+        } else if !draftDirty {
+            let base = baseSource ?? ""
+            if draft != base { draft = base }
+        }
+    }
+
+    /// 源码编辑的防抖重渲染(~0.5s):连续输入只触发最后一次 HTML 重建,
+    /// 避免每个按键都重建整页文档(CPU 不变量,参考 0.21.1 输入框卡死修复)。
+    private func scheduleRender() {
+        renderDebounce?.cancel()
+        renderDebounce = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            guard !Task.isCancelled else { return }
+            rebuildHTML()
+        }
+    }
+
     private func rebuildHTML() {
-        guard let id = selectedID ?? blocks.last?.id,
-              let block = blocks.first(where: { $0.id == id }) else {
+        guard let block = currentBlock else {
             renderedHTML = ""
             return
         }
-        renderedHTML = ArtifactHTMLBuilder.document(for: block, dark: colorScheme == .dark)
+        let src = draftDirty ? draft : (baseSource ?? block.source)
+        let effective = ArtifactBlock(id: block.id, kind: block.kind, source: src, isClosed: block.isClosed)
+        renderedHTML = ArtifactHTMLBuilder.document(for: effective, dark: colorScheme == .dark)
+    }
+
+    // MARK: - 保存 / 还原 / AI 修改
+
+    /// 把当前草稿保存为新版本(手动编辑)。首次保存自动补 v1(原始)。
+    private func saveDraft() {
+        guard draftDirty,
+              let key = persistenceKey,
+              let convID = viewModel.selectedConversationID,
+              let block = currentBlock else { return }
+        ArtifactVersionStore.append(
+            ArtifactVersion(origin: .manual, source: draft),
+            conversationID: convID, key: key, originalSource: block.source
+        )
+        versions = ArtifactVersionStore.versions(conversationID: convID, key: key)
+        selectedVersionID = nil
+        draftDirty = false
+        rebuildHTML()
+    }
+
+    /// 放弃未保存的草稿,回到当前版本。
+    private func discardDraft() {
+        renderDebounce?.cancel()
+        draft = baseSource ?? ""
+        draftDirty = false
+        rebuildHTML()
+    }
+
+    /// 「让 AI 修改」:当前 artifact 全文 + 修改要求(+ 可选重点片段)发给当前会话的模型,
+    /// 要求返回完整修改后代码(单代码块),解析后作为新版本替换渲染。**不进**主对话流。
+    private func sendAIRevision() {
+        let instruction = aiInstruction.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !instruction.isEmpty, !isRevising,
+              let key = persistenceKey,
+              let convID = viewModel.selectedConversationID,
+              let block = currentBlock else { return }
+        let kind = block.kind
+        let source = draftDirty ? draft : (baseSource ?? block.source)
+        let focus = showFocusField ? aiFocus : nil
+        isRevising = true
+        reviseError = nil
+        Task { @MainActor in
+            defer { isRevising = false }
+            do {
+                let reply = try await viewModel.runArtifactRevision(
+                    prompt: ArtifactExtractor.revisionPrompt(
+                        source: source, kind: kind, instruction: instruction, focus: focus),
+                    systemPrompt: ArtifactExtractor.revisionSystemPrompt(for: kind)
+                )
+                guard let revised = ArtifactExtractor.revisedSource(fromReply: reply, kind: kind),
+                      !revised.isEmpty else {
+                    throw ArtifactRevisionError.emptyReply
+                }
+                ArtifactVersionStore.append(
+                    ArtifactVersion(origin: .ai, source: revised),
+                    conversationID: convID, key: key, originalSource: block.source
+                )
+                versions = ArtifactVersionStore.versions(conversationID: convID, key: key)
+                selectedVersionID = nil
+                draft = revised
+                draftDirty = false
+                aiInstruction = ""
+                aiFocus = ""
+                showFocusField = false
+                rebuildHTML()
+            } catch {
+                reviseError = error.localizedDescription
+            }
+        }
     }
 }

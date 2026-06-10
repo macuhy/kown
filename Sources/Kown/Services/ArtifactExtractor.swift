@@ -50,6 +50,85 @@ enum ArtifactExtractor {
         return blocks
     }
 
+    // MARK: - 「让 AI 修改」支持
+
+    /// 从「让 AI 修改」的回复里抽出修改后的完整代码。
+    /// 优先取与原 artifact **同类**的围栏块;退而取第一个围栏块;
+    /// 回复完全没有围栏时,整段去空白后作为代码(模型偶尔会裸输出)。
+    static func revisedSource(fromReply reply: String, kind: ArtifactKind) -> String? {
+        let matching = extract(reply)
+        if let block = matching.first(where: { $0.kind == kind }) ?? matching.first {
+            return block.source
+        }
+        // 任意语言围栏(```css、```js 或裸 ```)— extract 只认 html/svg/mermaid,这里兜底。
+        if let generic = firstFencedBlock(in: reply) { return generic }
+        let trimmed = reply.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !trimmed.contains("```") else { return nil }
+        return trimmed
+    }
+
+    /// 「让 AI 修改」的 system 指令:要求返回完整代码 + 单代码块,便于机器解析。
+    static func revisionSystemPrompt(for kind: ArtifactKind) -> String {
+        let lang: String
+        switch kind {
+        case .html: lang = "html"
+        case .svg: lang = "svg"
+        case .mermaid: lang = "mermaid"
+        }
+        return """
+        你是一个代码画布(Canvas)助手。用户会给你一段 \(kind.displayName) 代码和修改要求。
+        规则:
+        1) 在保留原有功能与结构的前提下,按要求修改。
+        2) 返回**修改后的完整代码**(不是 diff、不是片段),放在**唯一一个** ```\(lang) 围栏代码块里。
+        3) 代码块之外不要输出任何解释、前言或总结。
+        """
+    }
+
+    /// 「让 AI 修改」的 user prompt:当前 artifact 全文 + 修改要求(+ 可选重点片段)。
+    static func revisionPrompt(source: String, kind: ArtifactKind,
+                               instruction: String, focus: String?) -> String {
+        let lang: String
+        switch kind {
+        case .html: lang = "html"
+        case .svg: lang = "svg"
+        case .mermaid: lang = "mermaid"
+        }
+        var lines: [String] = []
+        lines.append("【当前 \(kind.displayName) 代码】")
+        lines.append("```\(lang)")
+        lines.append(source)
+        lines.append("```")
+        lines.append("")
+        if let f = focus?.trimmingCharacters(in: .whitespacesAndNewlines), !f.isEmpty {
+            lines.append("【重点片段 — 修改主要围绕这段】")
+            lines.append(f)
+            lines.append("")
+        }
+        lines.append("【修改要求】")
+        lines.append(instruction)
+        return lines.joined(separator: "\n")
+    }
+
+    /// 第一个闭合的围栏块内容(不限语言)。
+    private static func firstFencedBlock(in text: String) -> String? {
+        guard text.contains("```") else { return nil }
+        var inFence = false
+        var buffer: [String] = []
+        for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init) {
+            let trimmed = rawLine.trimmingCharacters(in: .whitespaces)
+            if !inFence {
+                if trimmed.hasPrefix("```") { inFence = true; buffer = [] }
+            } else {
+                if trimmed.hasPrefix("```") {
+                    let src = buffer.joined(separator: "\n").trimmingCharacters(in: .newlines)
+                    return src.isEmpty ? nil : src
+                }
+                buffer.append(rawLine)
+            }
+        }
+        return nil
+    }
+
     /// 围栏 info-string(如 "html"、"mermaid"、"svg xml")→ 可预览类型;不可预览返回 nil。
     private static func kind(forInfo info: String) -> ArtifactKind? {
         let lang = info
