@@ -72,6 +72,33 @@ struct KownShortcuts: AppShortcutsProvider {
             shortTitle: "用指定模式问 Kown",
             systemImageName: "rectangle.split.2x1.fill"
         )
+        AppShortcut(
+            intent: TranslateTextIntent(),
+            phrases: [
+                "用 \(.applicationName) 翻译",
+                "让 \(.applicationName) 翻译"
+            ],
+            shortTitle: "翻译文本",
+            systemImageName: "globe"
+        )
+        AppShortcut(
+            intent: SummarizeLinkIntent(),
+            phrases: [
+                "让 \(.applicationName) 总结链接",
+                "用 \(.applicationName) 总结网页"
+            ],
+            shortTitle: "总结链接",
+            systemImageName: "doc.text.magnifyingglass"
+        )
+        AppShortcut(
+            intent: SaveToKnowledgeIntent(),
+            phrases: [
+                "存到 \(.applicationName) 知识库",
+                "用 \(.applicationName) 收藏笔记"
+            ],
+            shortTitle: "存入知识库",
+            systemImageName: "books.vertical.fill"
+        )
     }
 }
 #endif
