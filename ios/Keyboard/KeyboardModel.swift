@@ -103,6 +103,10 @@ final class KeyboardModel {
     var insertText: (String) -> Void = { _ in }
     /// 由 KeyboardViewController 注入:拼出光标附近的段落文字(before + selected + after)。
     var fetchContext: () -> String = { "" }
+    /// 由 KeyboardViewController 注入:向宿主输入框发送 Return(发送/换行)。
+    var sendAction: () -> Void = {}
+    /// 宿主输入框当前 Return 键的文案(发送 / 换行 / 完成 / …)。
+    var returnKeyLabel: String = "换行"
 
     private var task: Task<Void, Never>?
 
@@ -166,6 +170,12 @@ final class KeyboardModel {
         guard !result.isEmpty else { return }
         insertText(result)
         inserted = true
+    }
+
+    func sendResult() {
+        guard !result.isEmpty else { return }
+        insertText(result)
+        sendAction()
     }
 
     func copyResult() {

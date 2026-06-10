@@ -21,6 +21,9 @@ final class KeyboardViewController: UIInputViewController {
             let after = proxy.documentContextAfterInput ?? ""
             return before + selected + after
         }
+        model.sendAction = { [weak self] in
+            self?.textDocumentProxy.insertText("\n")
+        }
 
         let host = UIHostingController(rootView: KeyboardRootView(model: model, controller: self))
         addChild(host)
@@ -58,6 +61,23 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     private func refreshState() {
+        model.returnKeyLabel = returnKeyLabel(for: textDocumentProxy.returnKeyType ?? .default)
         model.reload(hasFullAccess: hasFullAccess, needsGlobe: needsInputModeSwitchKey)
+    }
+
+    private func returnKeyLabel(for type: UIReturnKeyType) -> String {
+        switch type {
+        case .send:          return "发送"
+        case .done:          return "完成"
+        case .go:            return "前往"
+        case .search:        return "搜索"
+        case .join:          return "加入"
+        case .next:          return "下一个"
+        case .route:         return "路线"
+        case .google:        return "Google"
+        case .yahoo:         return "Yahoo"
+        case .continue:      return "继续"
+        default:             return "换行"
+        }
     }
 }

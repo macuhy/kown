@@ -117,10 +117,10 @@ struct KeyboardRootView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .padding(10)
-            } else {
+            } else if model.isStreaming {
                 ScrollViewReader { scroll in
                     ScrollView {
-                        Text(model.result + (model.isStreaming ? " ▍" : ""))
+                        Text(model.result + " ▍")
                             .font(.footnote)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(10)
@@ -130,6 +130,11 @@ struct KeyboardRootView: View {
                         scroll.scrollTo("kown.keyboard.result", anchor: .bottom)
                     }
                 }
+            } else {
+                EditableResultTextView(
+                    text: Binding(get: { model.result }, set: { model.result = $0 })
+                )
+                .padding(6)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -178,7 +183,51 @@ struct KeyboardRootView: View {
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .disabled(model.result.isEmpty || model.isStreaming)
+
+                Button {
+                    model.sendResult()
+                } label: {
+                    Label(model.returnKeyLabel,
+                          systemImage: "paperplane.fill")
+                        .font(.footnote.weight(.semibold))
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .tint(.green)
+                .disabled(model.result.isEmpty || model.isStreaming)
             }
+        }
+    }
+}
+
+/// 键盘内可编辑文本区:inputView 设为空 View,防止焦点时弹出第二层键盘。
+/// 用户可通过长按/双击使用系统原生选择/复制/粘贴/删除。
+private struct EditableResultTextView: UIViewRepresentable {
+    @Binding var text: String
+
+    func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
+
+    func makeUIView(context: Context) -> UITextView {
+        let tv = UITextView()
+        tv.inputView = UIView()           // 空 inputView → 获得焦点不弹第二层键盘
+        tv.font = .preferredFont(forTextStyle: .footnote)
+        tv.backgroundColor = .clear
+        tv.isEditable = true
+        tv.isSelectable = true
+        tv.isScrollEnabled = true
+        tv.delegate = context.coordinator
+        return tv
+    }
+
+    func updateUIView(_ uiView: UITextView, context: Context) {
+        if uiView.text != text { uiView.text = text }
+    }
+
+    final class Coordinator: NSObject, UITextViewDelegate {
+        var text: Binding<String>
+        init(text: Binding<String>) { self.text = text }
+        func textViewDidChange(_ textView: UITextView) {
+            text.wrappedValue = textView.text
         }
     }
 }
