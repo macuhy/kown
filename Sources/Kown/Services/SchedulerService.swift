@@ -1,6 +1,9 @@
 import Foundation
 import Observation
 import UserNotifications
+#if os(macOS)
+import AppKit
+#endif
 
 /// 简易定时任务调度器。**仅在 app 运行(前台或被系统短暂保活)期间发火**:
 /// 后台常驻定时受 OS 限制(macOS 可后台跑,iOS 被 suspend 后定时器停摆),
@@ -34,6 +37,17 @@ final class SchedulerService {
     /// 启动调度:注入 viewModel,跑一次即时检查,并起每 60 秒的定时器。重复调用安全(先停旧定时器)。
     func start(viewModel: AppViewModel) {
         self.viewModel = viewModel
+        // 通知点按路由:点开「Agent 任务完成」通知时定位到结果会话。
+        UNUserNotificationCenter.current().delegate = SchedulerNotificationDelegate.shared
+        // 上次 app 退出时还在跑的 Agent 任务永远等不到结果了:把滞留的「运行中」改判为失败留痕,
+        // 否则列表会永远显示「运行中」误导用户。
+        var staleFixed = false
+        for idx in tasks.indices where tasks[idx].lastRunStatus == .running {
+            tasks[idx].lastRunStatus = .failure
+            tasks[idx].lastRunSummary = "上次运行中断(app 中途退出),未拿到结果"
+            staleFixed = true
+        }
+        if staleFixed { persist() }
         timer?.invalidate()
         // 启动即检查一次(补跑「app 没开着时错过、但今天还没跑」的到点任务)。
         checkAndFire()
@@ -119,11 +133,19 @@ final class SchedulerService {
 
     /// 真正发火:用任务的 prompt + mode 新建会话并发送;更新 lastRun;发本地通知。
     /// 简报任务(`morningBriefing`)需异步组装(读日历是 async),故整段发送放进 `Task`。
+    /// Agent 任务(`agentTask`)走独立的后台执行管线(不占用 / 打断用户当前的发送)。
     private func fire(_ task: ScheduledTask, now: Date) {
+        // 任务可能来自 iCloud 同步(本机从未走过 add()),发火前兜底申请一次通知权限(已授权时是无感 no-op)。
+        ensureNotificationPermission()
         // 先标记 lastRun,避免同一分钟内定时器再次触发重复发(即便发送失败也算「今天已尝试」)。
         if let idx = tasks.firstIndex(where: { $0.id == task.id }) {
             tasks[idx].lastRun = now
             persist()
+        }
+
+        if task.kind == .agentTask {
+            fireAgentTask(task, now: now)
+            return
         }
 
         let vm = viewModel
@@ -132,12 +154,16 @@ final class SchedulerService {
             switch task.kind {
             case .morningBriefing:
                 promptText = await Self.buildBriefingPrompt(task: task)
-            case .plainPrompt:
+            case .plainPrompt, .agentTask:
                 promptText = task.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
             }
             if let vm, !promptText.isEmpty {
                 // 新建该模式会话 → 填 prompt → 走既有发送流程。
                 vm.newConversation(mode: task.mode)
+                // 晨报会话登记:回答完成后由 WidgetBridge 提取要点发布到 iOS 桌面小组件。
+                if task.kind == .morningBriefing {
+                    WidgetBridge.pendingBriefingConversationID = vm.selectedConversationID
+                }
                 vm.prompt = promptText
                 vm.send()
             }
@@ -207,6 +233,244 @@ final class SchedulerService {
         """
     }
 
+    // MARK: - Agent 任务执行
+
+    /// 一次 Agent 运行收集到的全部产物(在后台流式循环里累积,完成后整体带回主线程归档)。
+    struct AgentRunResult: Sendable {
+        var text = ""
+        var reasoning = ""
+        var toolSteps: [ToolStep] = []
+        var sources: [SourceRef] = []
+        var inputTokens = 0
+        var outputTokens = 0
+        var cachedInputTokens = 0
+        var error: String? = nil
+    }
+
+    /// 到点执行一个 Agent 任务:按任务勾选的工具组装工具集,在后台跑「深入模式」工具循环,
+    /// 结果落成一个新会话(标题 = 任务名 + 日期,工具步骤树一并存档),并发带结果摘要的本地通知。
+    /// 失败同样留痕:会话里记错误 + 通知里说明原因,绝不静默。
+    private func fireAgentTask(_ task: ScheduledTask, now: Date) {
+        let taskID = task.id
+        let taskTitle = task.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let displayTitle = taskTitle.isEmpty ? "Agent 任务" : taskTitle
+        let promptText = task.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !promptText.isEmpty else {
+            setRunResult(taskID, status: .failure, summary: "任务没有填写指令,无法执行")
+            notifyAgentResult(taskTitle: displayTitle, success: false,
+                              summary: "任务没有填写指令,请编辑任务补上要做的事", conversationID: nil)
+            return
+        }
+        guard let vm = viewModel else { return }
+        // 选执行模型:优先第一个启用的非 CLI provider(CLI 沙箱差异大且不支持工具循环),兜底任意启用项。
+        guard let provider = vm.providers.first(where: { $0.enabled && !$0.kind.isCLI })
+                ?? vm.providers.first(where: \.enabled) else {
+            setRunResult(taskID, status: .failure, summary: "没有可用的模型(请先启用一个 Provider)")
+            notifyAgentResult(taskTitle: displayTitle, success: false,
+                              summary: "没有可用的模型,请先在设置里启用一个 Provider", conversationID: nil)
+            return
+        }
+
+        // 主线程只做轻量快照:API key / 联网会话 / MCP server 配置 / 工具集。
+        let apiKey = provider.kind.isCLI ? "" : ((try? KeychainStore.load(id: provider.id)) ?? "")
+        let webSession: WebSearchSession? = task.agentWebSearch
+            ? WebSearchSession.makeIfReady(userToggle: true) : nil
+        let mcpServers: [MCPServerConfig] = task.agentMCP ? vm.mcpStore.enabledServers : []
+        let baseTools = ToolCatalog.enabledTools(
+            webSearch: webSession,
+            deviceTools: task.agentDeviceTools,
+            extraToolNames: [])
+        let deep = task.agentDeepMode
+        let providerSnapshot = provider
+
+        setRunResult(taskID, status: .running, summary: nil)
+
+        Task { @MainActor [weak self] in
+            // MCP 连接(网络 / 子进程)与流式循环都是 async,await 期间不占主线程。
+            var tools = baseTools
+            var ctx = ToolContext(webSearch: webSession)
+            var mcpSession: MCPSession? = nil
+            if !mcpServers.isEmpty, let mcp = await MCPSession.connect(servers: mcpServers) {
+                mcpSession = mcp
+                tools.append(contentsOf: mcp.tools)
+                ctx.mcp = mcp
+            }
+            var options = ChatOptions(
+                systemPrompt: nil,
+                temperature: providerSnapshot.temperature,
+                maxTokens: providerSnapshot.maxTokens)
+            options.tools = tools
+            // 没有任何工具可用时不建 context(客户端据此跳过工具循环);Agent 退化为一次普通深入回答。
+            options.toolContext = tools.isEmpty ? nil : ctx
+            options.maxToolRounds = deep ? 12 : 6
+            options.agentInstruction = deep ? AppViewModel.deepAgentInstruction : nil
+
+            // 流式收集在后台 executor 跑(nonisolated static),不碰主线程。
+            let result = await Self.collectAgentRun(
+                prompt: promptText, provider: providerSnapshot, apiKey: apiKey, options: options)
+            if let mcp = mcpSession { await mcp.closeAll() }
+
+            self?.archiveAgentRun(
+                taskID: taskID, taskTitle: displayTitle, prompt: promptText,
+                provider: providerSnapshot, result: result, firedAt: now)
+        }
+    }
+
+    /// 在后台 executor 跑一次带工具循环的流式调用,把文本 / 思考 / 工具步骤 / 来源 / 用量全部收集回来。
+    /// 错误不抛出,统一写进 `result.error`(调用方据此留痕 + 通知)。
+    nonisolated private static func collectAgentRun(
+        prompt: String,
+        provider: ProviderConfig,
+        apiKey: String,
+        options: ChatOptions
+    ) async -> AgentRunResult {
+        var result = AgentRunResult()
+        let client = ProviderRegistry.client(for: provider.kind)
+        do {
+            for try await chunk in client.stream(prompt: prompt, options: options, config: provider, apiKey: apiKey) {
+                switch chunk {
+                case .text(let t):
+                    // 封顶(CPU / 内存不变量):异常超长输出直接截断,避免后续归档 / 渲染被拖死。
+                    if result.text.count < 400_000 { result.text += t }
+                case .reasoning(let r):
+                    if result.reasoning.count < 80_000 { result.reasoning += r }
+                case .toolEvent:
+                    break
+                case .toolStep(let step):
+                    // 按 id upsert:running → done/error 更新到同一步(与 ResponseState.upsertToolStep 同语义)。
+                    if let idx = result.toolSteps.firstIndex(where: { $0.id == step.id }) {
+                        result.toolSteps[idx] = step
+                    } else {
+                        result.toolSteps.append(step)
+                    }
+                case .sources(let refs):
+                    let known = Set(result.sources.map(\.url))
+                    result.sources.append(contentsOf: refs.filter { !known.contains($0.url) })
+                case .usage(let input, let output, let cached):
+                    result.inputTokens = max(result.inputTokens, input)
+                    result.outputTokens = max(result.outputTokens, output)
+                    result.cachedInputTokens = max(result.cachedInputTokens, cached)
+                }
+            }
+        } catch {
+            result.error = error.localizedDescription
+        }
+        return result
+    }
+
+    /// 把一次 Agent 运行归档:建会话(含工具步骤树 / 来源 / 思考 / 用量)插进侧栏 + 落盘,
+    /// 更新任务的运行状态,并发带摘要的本地通知(点开定位到该会话)。失败也走同一条路留痕。
+    private func archiveAgentRun(
+        taskID: UUID,
+        taskTitle: String,
+        prompt: String,
+        provider: ProviderConfig,
+        result: AgentRunResult,
+        firedAt: Date
+    ) {
+        let pid = provider.id.uuidString
+        let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        var responses: [String: String] = [:]
+        var errors: [String: String] = [:]
+        if !text.isEmpty { responses[pid] = result.text }
+        if let err = result.error {
+            errors[pid] = err
+        } else if text.isEmpty {
+            errors[pid] = "(空响应)"
+        }
+
+        let turn = Turn(
+            timestamp: firedAt,
+            prompt: prompt,
+            systemPrompt: "",
+            responses: responses,
+            errors: errors,
+            providerSnapshot: [pid: provider],
+            panelOrder: [pid],
+            sources: result.sources.isEmpty ? nil : result.sources,
+            reasoningByProvider: result.reasoning.isEmpty ? nil : [pid: result.reasoning],
+            tokenUsage: (result.inputTokens > 0 || result.outputTokens > 0)
+                ? [pid: TurnTokenUsage(input: result.inputTokens, output: result.outputTokens,
+                                       cachedInput: result.cachedInputTokens)]
+                : nil,
+            toolSteps: result.toolSteps.isEmpty ? nil : result.toolSteps
+        )
+
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "zh_CN")
+        df.dateFormat = "yyyy-MM-dd"
+        var conv = Conversation(
+            title: "\(taskTitle) \(df.string(from: firedAt))",
+            mode: .direct,
+            turns: [turn]
+        )
+        conv.updatedAt = Date()
+        // 插进侧栏但不抢焦点(用户可能正在别的会话里工作);通知点开时再跳转。
+        viewModel?.conversations.insert(conv, at: 0)
+        ConversationStore.save(conv)
+
+        // 记一笔用量(成本面板);UsageStore 是 @MainActor,在这里(主线程)记。
+        if result.inputTokens > 0 || result.outputTokens > 0 {
+            UsageStore.shared.record(
+                providerKind: provider.kind,
+                model: provider.model,
+                inputTokens: result.inputTokens,
+                outputTokens: result.outputTokens,
+                cachedTokens: result.cachedInputTokens)
+        }
+
+        let success = (result.error == nil) && !text.isEmpty
+        let summary = success
+            ? Self.oneLineSummary(text)
+            : (result.error ?? "模型返回了空响应")
+        setRunResult(taskID, status: success ? .success : .failure, summary: summary)
+        notifyAgentResult(taskTitle: taskTitle, success: success, summary: summary, conversationID: conv.id)
+    }
+
+    /// 更新任务的「上次运行状态 + 一句话摘要」(列表展示用)并落盘。
+    private func setRunResult(_ id: UUID, status: ScheduledTask.RunStatus, summary: String?) {
+        guard let idx = tasks.firstIndex(where: { $0.id == id }) else { return }
+        tasks[idx].lastRunStatus = status
+        tasks[idx].lastRunSummary = summary
+        persist()
+    }
+
+    /// 把多行回答压成一行摘要(通知正文 / 列表用):合并空白、去掉常见 Markdown 记号、截断到 100 字。
+    nonisolated static func oneLineSummary(_ text: String) -> String {
+        let collapsed = text
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+            .replacingOccurrences(of: "#", with: "")
+            .replacingOccurrences(of: "**", with: "")
+            .trimmingCharacters(in: .whitespaces)
+        return collapsed.count > 100 ? String(collapsed.prefix(100)) + "…" : collapsed
+    }
+
+    /// 发 Agent 任务的结果通知:正文带一句结果摘要;userInfo 带会话 ID,点开跳转到该会话。
+    private func notifyAgentResult(taskTitle: String, success: Bool, summary: String, conversationID: UUID?) {
+        let content = UNMutableNotificationContent()
+        content.title = success ? "Agent 任务完成" : "Agent 任务失败"
+        let line = summary.isEmpty ? (success ? "已生成结果" : "运行失败") : summary
+        content.body = "「\(taskTitle)」\(line)"
+        content.sound = .default
+        if let id = conversationID {
+            content.userInfo = [SchedulerNotificationDelegate.conversationIDKey: id.uuidString]
+        }
+        let req = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(req) { _ in }
+    }
+
+    /// 通知点开后跳转到结果会话(由 `SchedulerNotificationDelegate` 调用)。
+    func openConversationFromNotification(_ id: UUID) {
+        guard let vm = viewModel, vm.conversations.contains(where: { $0.id == id }) else { return }
+        vm.selectConversation(id)
+        #if os(macOS)
+        NSApp.activate(ignoringOtherApps: true)
+        #endif
+    }
+
     // MARK: - 本地通知
 
     /// 首次需要时申请通知权限(惰性,跨平台)。
@@ -233,5 +497,37 @@ final class SchedulerService {
         content.sound = .default
         let req = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(req) { _ in }
+    }
+}
+
+/// 本地通知的点按路由:Agent 任务结果通知 userInfo 里带会话 ID,点开后跳转到该会话。
+/// 同时让通知在 app 前台时也能以横幅形式展示(否则前台默认不显示)。
+final class SchedulerNotificationDelegate: NSObject, UNUserNotificationCenterDelegate, @unchecked Sendable {
+    // 无任何可变状态(@unchecked Sendable 安全):跳转逻辑全部 hop 回 MainActor 执行。
+    static let shared = SchedulerNotificationDelegate()
+    /// 通知 userInfo 里携带目标会话 ID 的 key。
+    static let conversationIDKey = "kownConversationID"
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let idString = response.notification.request.content
+            .userInfo[Self.conversationIDKey] as? String
+        if let idString, let id = UUID(uuidString: idString) {
+            Task { @MainActor in
+                SchedulerService.shared.openConversationFromNotification(id)
+            }
+        }
+        completionHandler()
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound])
     }
 }

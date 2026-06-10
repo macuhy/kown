@@ -363,6 +363,9 @@ struct SchedulerView: View {
             taskCardHeader(task, tint: tint)
             taskTitle(task)
             promptPreview(task, tint: tint)
+            if task.isAgent, let summary = task.lastRunSummary, !summary.isEmpty {
+                lastRunSummaryRow(task, summary: summary)
+            }
             taskCardFooter(task, tint: tint)
         }
         .padding(14)
@@ -423,7 +426,7 @@ struct SchedulerView: View {
                 .font(.caption2.weight(.black))
             Text(task.weekday.flatMap { ScheduledTask.weekdayName($0) }.map { "每\($0)" } ?? "每天")
                 .font(.caption2.weight(.black))
-            Text(modeLabel(task.mode))
+            Text(task.isAgent ? "Agent" : modeLabel(task.mode))
                 .font(.caption2.weight(.black))
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
@@ -467,6 +470,7 @@ struct SchedulerView: View {
             HStack(spacing: 9) {
                 statusPill(task, tint: tint)
                 lastRunPill(task)
+                runStatusPill(task)
                 Spacer(minLength: 8)
                 editIconButton(task, tint: tint)
                 deleteIconButton(task)
@@ -476,6 +480,7 @@ struct SchedulerView: View {
                 HStack(spacing: 8) {
                     statusPill(task, tint: tint)
                     lastRunPill(task)
+                    runStatusPill(task)
                     Spacer(minLength: 0)
                 }
                 HStack(spacing: 8) {
@@ -495,6 +500,51 @@ struct SchedulerView: View {
             .padding(.horizontal, 9)
             .padding(.vertical, 6)
             .background(tint.opacity(task.enabled ? 0.12 : 0.08), in: Capsule(style: .continuous))
+    }
+
+    /// Agent 任务的「上次运行状态」小标签(运行中 / 成功 / 失败)。其他任务类型不显示。
+    @ViewBuilder
+    private func runStatusPill(_ task: ScheduledTask) -> some View {
+        if task.isAgent, let status = task.lastRunStatus {
+            let (label, icon, color): (String, String, Color) = {
+                switch status {
+                case .running: return ("运行中", "hourglass", .orange)
+                case .success: return ("成功", "checkmark.seal.fill", .green)
+                case .failure: return ("失败", "xmark.octagon.fill", .red)
+                }
+            }()
+            Label(label, systemImage: icon)
+                .font(.caption2.weight(.black))
+                .foregroundStyle(color)
+                .lineLimit(1)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 6)
+                .background(color.opacity(0.11), in: Capsule(style: .continuous))
+        }
+    }
+
+    /// Agent 任务卡片上的「上次运行结果摘要」一行(成功 = 答案摘要;失败 = 错误信息)。
+    private func lastRunSummaryRow(_ task: ScheduledTask, summary: String) -> some View {
+        let failed = task.lastRunStatus == .failure
+        return HStack(alignment: .top, spacing: 6) {
+            Image(systemName: failed ? "exclamationmark.triangle.fill" : "text.badge.checkmark")
+                .font(.caption2.weight(.black))
+                .foregroundStyle(failed ? Color.red : Color.green)
+                .padding(.top, 1)
+            Text(summary)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 7)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            (failed ? Color.red : Color.green).opacity(0.07),
+            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+        )
     }
 
     private func lastRunPill(_ task: ScheduledTask) -> some View {
@@ -555,16 +605,22 @@ struct SchedulerView: View {
     private func taskDisplayTitle(_ task: ScheduledTask) -> String {
         let trimmed = task.title.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty { return trimmed }
-        return task.isBriefing ? "晨间简报" : "未命名定时提问"
+        if task.isBriefing { return "晨间简报" }
+        if task.isAgent { return "Agent 任务" }
+        return "未命名定时提问"
     }
 
-    /// 卡片正文预览:简报任务展示订阅话题(没有则给固定说明),普通任务展示 prompt。
+    /// 卡片正文预览:简报任务展示订阅话题(没有则给固定说明),Agent 任务展示工具配置 + 指令,普通任务展示 prompt。
     private func promptPreviewText(_ task: ScheduledTask) -> String {
         if task.isBriefing {
             if !task.briefingTopics.isEmpty {
                 return "晨报 · 话题:" + task.briefingTopics.joined(separator: "、")
             }
             return "自动汇总今日日程与长期关注点"
+        }
+        if task.isAgent {
+            let head = (task.agentDeepMode ? "深入模式 · " : "") + "工具:\(task.agentToolsText)"
+            return task.prompt.isEmpty ? "\(head)\n尚未填写任务指令" : "\(head)\n\(task.prompt)"
         }
         return task.prompt.isEmpty ? "尚未填写提问内容" : task.prompt
     }
@@ -718,7 +774,7 @@ private struct SchedulerTaskEditor: View {
                 editorHero
                 editorSection(
                     "任务类型",
-                    subtitle: "普通提问按固定 Prompt 发出;晨间简报会即时组装日程、关注点和订阅话题。",
+                    subtitle: "普通提问按固定 Prompt 发出;晨间简报即时组装日程与话题;Agent 任务到点带工具自主执行,结果存档并通知。",
                     icon: "sparkles",
                     tint: schedulerTint
                 ) {
@@ -727,12 +783,27 @@ private struct SchedulerTaskEditor: View {
 
                 editorSection(
                     "任务身份",
-                    subtitle: "名字可选,模式决定自动发送后进入哪种对话编排。",
+                    subtitle: kind == .agentTask
+                        ? "名字可选;Agent 任务固定走单模型直接模式执行。"
+                        : "名字可选,模式决定自动发送后进入哪种对话编排。",
                     icon: "tag.fill",
                     tint: task.mode.kownTint
                 ) {
                     titleField
-                    modeGrid
+                    if kind != .agentTask {
+                        modeGrid
+                    }
+                }
+
+                if kind == .agentTask {
+                    editorSection(
+                        "Agent 工具",
+                        subtitle: "勾选到点后允许 Agent 使用的工具;不勾任何工具则退化为一次普通回答。",
+                        icon: "wrench.and.screwdriver.fill",
+                        tint: schedulerTint
+                    ) {
+                        agentToolControls
+                    }
                 }
 
                 if kind == .morningBriefing {
@@ -756,10 +827,8 @@ private struct SchedulerTaskEditor: View {
                 }
 
                 editorSection(
-                    kind == .morningBriefing ? "额外指示(可选)" : "提问内容",
-                    subtitle: kind == .morningBriefing
-                        ? "想让简报额外包含什么、用什么语气,可写在这里;留空也行。"
-                        : "保存前会自动去掉首尾空白;为空时不能保存。",
+                    promptSectionTitle,
+                    subtitle: promptSectionSubtitle,
                     icon: "text.quote",
                     tint: schedulerTint
                 ) {
@@ -829,8 +898,35 @@ private struct SchedulerTaskEditor: View {
         Picker("类型", selection: $kind) {
             Text("普通提问").tag(ScheduledTask.Kind.plainPrompt)
             Text("晨间简报").tag(ScheduledTask.Kind.morningBriefing)
+            Text("Agent 任务").tag(ScheduledTask.Kind.agentTask)
         }
         .pickerStyle(.segmented)
+    }
+
+    /// Agent 任务的工具开关 + 深入模式开关。
+    private var agentToolControls: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            controlCard(title: "联网搜索", subtitle: "查资讯 / 盯更新必备,需先在设置里配置搜索服务", icon: "magnifyingglass", tint: schedulerTint) {
+                Toggle("", isOn: $task.agentWebSearch)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+            }
+            controlCard(title: "MCP 工具", subtitle: "使用「MCP 服务器」里已启用的外部工具", icon: "powerplug.fill", tint: schedulerTint) {
+                Toggle("", isOn: $task.agentMCP)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+            }
+            controlCard(title: "设备工具", subtitle: "提醒事项、日历与备忘录的读写", icon: "checklist", tint: schedulerTint) {
+                Toggle("", isOn: $task.agentDeviceTools)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+            }
+            controlCard(title: "深入模式", subtitle: "多轮规划→执行→自检,适合需要反复查证的任务", icon: "brain.head.profile", tint: schedulerWarmTint) {
+                Toggle("", isOn: $task.agentDeepMode)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+            }
+        }
     }
 
     private var topicsField: some View {
@@ -973,9 +1069,29 @@ private struct SchedulerTaskEditor: View {
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
+    private var promptSectionTitle: String {
+        switch kind {
+        case .morningBriefing: return "额外指示(可选)"
+        case .agentTask:       return "Agent 任务指令"
+        case .plainPrompt:     return "提问内容"
+        }
+    }
+
+    private var promptSectionSubtitle: String {
+        switch kind {
+        case .morningBriefing:
+            return "想让简报额外包含什么、用什么语气,可写在这里;留空也行。"
+        case .agentTask:
+            return "描述要 Agent 完成的目标,例如「盯某 GitHub 仓库的新 issue 给我摘要」「查竞品本周更新」;为空时不能保存。"
+        case .plainPrompt:
+            return "保存前会自动去掉首尾空白;为空时不能保存。"
+        }
+    }
+
     private var promptField: some View {
         VStack(alignment: .leading, spacing: 8) {
-            TextField("要自动发送的提问…", text: $task.prompt, axis: .vertical)
+            TextField(kind == .agentTask ? "要 Agent 自动完成的任务…" : "要自动发送的提问…",
+                      text: $task.prompt, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(.callout)
                 .lineLimit(6...12)
@@ -985,7 +1101,7 @@ private struct SchedulerTaskEditor: View {
             HStack(spacing: 6) {
                 Image(systemName: canSave ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
                     .foregroundStyle(canSave ? .green : .orange)
-                Text(canSave ? "内容已准备好" : "请输入要自动发送的提问")
+                Text(canSave ? "内容已准备好" : (kind == .agentTask ? "请描述要 Agent 完成的任务" : "请输入要自动发送的提问"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 0)
@@ -1127,6 +1243,8 @@ private struct SchedulerTaskEditor: View {
         updated.title = updated.title.trimmingCharacters(in: .whitespacesAndNewlines)
         updated.prompt = updated.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         updated.kind = kind
+        // Agent 任务固定走单模型直接模式执行(编辑器里也不展示模式选择)。
+        if kind == .agentTask { updated.mode = .direct }
         updated.briefingTopics = topicsText
             .split(separator: "\n")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
