@@ -218,6 +218,51 @@ enum ToolCatalog {
         )
     )
 
+    static let runCode = LLMTool(
+        name: "run_code",
+        description: {
+            #if os(iOS)
+            return """
+            Execute a JavaScript snippet on the user's device (JavaScriptCore) and return its \
+            output. Use this for calculations, data analysis, date math, or anything better \
+            computed than estimated. Print results with console.log — the value of the last \
+            expression is also returned. No network, no file system, no Node.js APIs (no \
+            require / fetch / fs). Execution is killed after 30 seconds; stdout/stderr are \
+            truncated to 20KB each.
+            """
+            #else
+            return """
+            Execute a Python or JavaScript snippet on the user's Mac and return exit code, \
+            stdout and stderr. Use this for calculations, data analysis, text processing, or \
+            anything better computed than estimated. Print results to stdout (print / \
+            console.log). Runs python3 / node installed on the machine, in a fresh temporary \
+            working directory with a minimal environment; stdin is closed; execution is killed \
+            after 30 seconds; stdout/stderr are truncated to 20KB each. Only the standard \
+            library is guaranteed — third-party packages may not be installed.
+            """
+            #endif
+        }(),
+        parameters: ToolParameters(
+            properties: [
+                "language": ToolParameterSchema(
+                    type: "string",
+                    description: {
+                        #if os(iOS)
+                        return "Must be \"javascript\" (the only supported language on this device)."
+                        #else
+                        return "\"python\" or \"javascript\"."
+                        #endif
+                    }()
+                ),
+                "code": ToolParameterSchema(
+                    type: "string",
+                    description: "The complete, self-contained source code to execute. Print whatever you need to see."
+                )
+            ],
+            required: ["language", "code"]
+        )
+    )
+
     /// 按 context + 技能白名单拼出本次暴露给模型的工具集合。
     /// - webSearch:配置就绪才暴露 `web_search`。
     /// - deviceTools:用户开了「设备工具」总开关时暴露提醒/备忘。
@@ -227,6 +272,7 @@ enum ToolCatalog {
                              extraToolNames: Set<String>,
                              gitHub: Bool = false,
                              fileSystem: Bool = false,
+                             codeExec: Bool = false,
                              mcpTools: [LLMTool] = []) -> [LLMTool] {
         var tools: [LLMTool] = []
         if webSearch != nil { tools.append(ToolCatalog.webSearch) }
@@ -243,6 +289,8 @@ enum ToolCatalog {
             tools.append(ToolCatalog.localListDir)
             tools.append(ToolCatalog.localWriteFile)
         }
+        // 代码执行(设置 ▸ 设备工具 ▸ 代码执行;默认关闭,需用户显式开启)。
+        if codeExec { tools.append(ToolCatalog.runCode) }
         // 外部 MCP server 暴露的工具(已命名空间化),直接追加。
         tools.append(contentsOf: mcpTools)
         return tools
@@ -276,6 +324,8 @@ struct ToolContext: Sendable {
     var localFileBookmark: Data? = nil
     /// 已连接的 MCP server 会话;非 nil 时其暴露的 `mcp__…` 工具可被调用。
     var mcp: MCPSession? = nil
+    /// 「代码执行」开关快照(设置 ▸ 设备工具 ▸ 代码执行);false 时 `run_code` 直接拒绝执行。
+    var codeExec: Bool = false
 }
 
 /// 执行模型发出的 ToolCall。线程安全,无可变状态。
@@ -330,6 +380,8 @@ struct ToolRouter: Sendable {
             return await runLocalListDir(call)
         case ToolCatalog.localWriteFile.name:
             return await runLocalWriteFile(call)
+        case ToolCatalog.runCode.name:
+            return await runRunCode(call)
         default:
             return ToolResult(
                 callID: call.id,
@@ -640,6 +692,45 @@ struct ToolRouter: Sendable {
         #else
         return Self.errorResult(call, summary: "⚠ 本地文件工具仅 macOS 支持", message: "local file tools are macOS only")
         #endif
+    }
+
+    // MARK: - run_code(代码执行)
+
+    private func runRunCode(_ call: ToolCall) async -> ToolResult {
+        // 双保险:即使模型在未暴露工具时硬发调用,开关没开也直接拒绝。
+        guard context.codeExec else {
+            return Self.errorResult(call, summary: "⚠ 代码执行未开启",
+                                    message: "code execution is disabled — enable it in Settings ▸ 设备工具 ▸ 代码执行")
+        }
+        let args = (try? JSONSerialization.jsonObject(with: Data(call.argumentsJSON.utf8)) as? [String: Any]) ?? [:]
+        let language = (args["language"] as? String) ?? ""
+        let code = (args["code"] as? String) ?? ""
+        // 执行全程在后台线程(Process 等待 / JSC 求值都在 GCD 队列上),不阻塞主线程。
+        let r = await CodeSandboxService.run(language: language, code: code)
+        if let failure = r.failureReason {
+            return Self.errorResult(call, summary: "⚠ 代码未执行: \(failure)", message: failure)
+        }
+        let payload: [String: Any] = [
+            "exit_code": Int(r.exitCode),
+            "stdout": r.stdout,
+            "stderr": r.stderr,
+            "duration_ms": r.durationMS,
+            "timed_out": r.timedOut
+        ]
+        let seconds = String(format: "%.1f", Double(r.durationMS) / 1000)
+        let summary: String
+        if r.timedOut {
+            summary = "⚠ 代码执行超时(30s 强制终止)"
+        } else if r.exitCode == 0 {
+            summary = "✓ 代码执行成功 · \(seconds)s"
+        } else {
+            summary = "⚠ 代码退出码 \(r.exitCode) · \(seconds)s"
+        }
+        // 非 0 退出码也回灌完整 stdout/stderr,让模型自己改代码重试;只有「没跑起来」才算工具错误。
+        return ToolResult(callID: call.id, name: call.name,
+                          content: Self.jsonString(payload),
+                          summary: summary,
+                          isError: r.timedOut)
     }
 
     // MARK: - helpers

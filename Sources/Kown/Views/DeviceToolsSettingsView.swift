@@ -26,6 +26,7 @@ struct DeviceToolsSettingsView: View {
                     #if os(macOS)
                     localFilesCard
                     #endif
+                    codeExecCard
                 }
                 usageCard
             }
@@ -254,6 +255,61 @@ struct DeviceToolsSettingsView: View {
         }
     }
     #endif
+
+    // MARK: - 代码执行
+
+    @Bindable private var codeExecState = CodeExecToolState.shared
+
+    private var codeExecCard: some View {
+        card(icon: "terminal", title: "代码执行") {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    codeExecStatusPill
+                    Spacer(minLength: 12)
+                    codeExecToggle
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    codeExecStatusPill
+                    codeExecToggle
+                }
+            }
+            #if os(macOS)
+            Text("开启后模型可调用 run_code 真正运行 Python(python3)/ JavaScript(node)做数据分析、算账等;需本机已安装对应运行时。每次在独立临时目录执行,30 秒超时强制终止,输出各截断 20KB。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            #else
+            Text("开启后模型可调用 run_code 用系统内置 JavaScriptCore 运行 JavaScript 做计算、数据处理(仅 JS,无网络与文件访问)。30 秒超时自动中断,输出截断 20KB。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            #endif
+            Label("这不是隔离沙盒:代码以你的用户权限在本机运行,仅在信任的对话里开启。", systemImage: "exclamationmark.triangle.fill")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var codeExecStatusPill: some View {
+        statusChip(
+            title: codeExecState.isEnabled ? "已开启" : "默认关闭",
+            icon: codeExecState.isEnabled ? "exclamationmark.shield.fill" : "checkmark.shield",
+            color: codeExecState.isEnabled ? .orange : .secondary
+        )
+    }
+
+    private var codeExecToggle: some View {
+        Toggle(isOn: $codeExecState.isEnabled) {
+            Text(codeExecState.isEnabled ? "已启用" : "未启用")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(codeExecState.isEnabled ? .orange : .secondary)
+        }
+        .toggleStyle(.switch)
+        .tint(.orange)
+        .fixedSize()
+        .accessibilityLabel(codeExecState.isEnabled ? "关闭代码执行" : "启用代码执行")
+    }
 
     private var usageCard: some View {
         VStack(alignment: .leading, spacing: 10) {
