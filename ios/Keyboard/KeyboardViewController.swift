@@ -42,6 +42,9 @@ final class KeyboardViewController: UIInputViewController {
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         refreshState()
+        // 全自动:键盘一出现就尝试读最近截图 → OCR → 生成回复。
+        // 真正是否跑由模型层守卫(已授权 + 截图够新 + 没处理过)决定,没命中就静默。
+        model.autoReplyFromLatestScreenshot()
     }
 
     override func updateViewConstraints() {

@@ -112,6 +112,14 @@ struct KeyboardRootView: View {
                     .font(.caption)
                     .foregroundStyle(.red)
                     .padding(10)
+            } else if model.isPreparingShot {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.mini)
+                    Text("读取最近截图…")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(10)
             } else if model.result.isEmpty && !model.isStreaming {
                 Text("选中或输入文字后点上面的操作;输入框没有文字时会改用剪贴板内容。")
                     .font(.caption)

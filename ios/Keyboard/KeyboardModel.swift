@@ -93,6 +93,8 @@ final class KeyboardModel {
     var result = ""
     var errorText: String?
     var isStreaming = false
+    /// 正在读最近截图 + OCR(还没开始流式请求)的过渡态,UI 显示「读取最近截图…」。
+    var isPreparingShot = false
     var runningAction: KeyboardAction?
     /// 「取材:输入框文字」/「取材:剪贴板」,告诉用户这次 AI 处理的是哪段内容。
     var sourceNote = ""
@@ -123,24 +125,63 @@ final class KeyboardModel {
             cancel()
             return
         }
-        guard let cfg = config else { return }
+        guard config != nil else { return }
 
         var source = fetchContext().trimmingCharacters(in: .whitespacesAndNewlines)
+        var note = "取材:输入框文字"
         if source.isEmpty {
             source = (UIPasteboard.general.string ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            sourceNote = source.isEmpty ? "" : "取材:剪贴板"
-        } else {
-            sourceNote = "取材:输入框文字"
+            note = source.isEmpty ? "" : "取材:剪贴板"
         }
         guard !source.isEmpty else {
             errorText = "输入框和剪贴板里都没有文字。先在输入框打几个字,或复制一段内容再试。"
             return
         }
+        startStream(action: action, source: source, note: note)
+    }
 
+    /// 全自动:键盘打开 → 读最近一张截图 → Vision OCR → 直接生成回复建议。
+    /// 命中守卫(已授权 + 新鲜 + 未处理过)才真正跑;否则静默,不打扰、不花 token。
+    func autoReplyFromLatestScreenshot() {
+        guard !isStreaming, !isPreparingShot, config != nil else { return }
+        isPreparingShot = true
+        errorText = nil
+        sourceNote = "读取最近截图…"
+
+        Task { [weak self] in
+            guard let shot = await KeyboardScreenshot.latestFresh() else {
+                self?.cancelShotPrep()
+                return
+            }
+            do {
+                let text = try await OCRService.recognizeText(in: shot.image)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                // 标记这张已处理:同一张重复开键盘不再自动跑。
+                KeyboardScreenshot.lastHandledID = shot.localIdentifier
+                guard let self, !text.isEmpty else { self?.cancelShotPrep(); return }
+                self.isPreparingShot = false
+                self.startStream(action: .reply, source: text, note: "取材:最近截图")
+            } catch {
+                // OCR 没识别到文字等:标记已处理避免反复试,静默回退。
+                KeyboardScreenshot.lastHandledID = shot.localIdentifier
+                self?.cancelShotPrep()
+            }
+        }
+    }
+
+    private func cancelShotPrep() {
+        isPreparingShot = false
+        if sourceNote == "读取最近截图…" { sourceNote = "" }
+    }
+
+    /// 真正发起一次流式请求:把已确定的取材文字喂给模型。
+    private func startStream(action: KeyboardAction, source: String, note: String) {
+        guard let cfg = config else { return }
         result = ""
         errorText = nil
         inserted = false
         copied = false
+        sourceNote = note
         isStreaming = true
         runningAction = action
 

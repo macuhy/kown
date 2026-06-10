@@ -118,6 +118,7 @@
 		7A2E1775C20817A909AAE3EB /* ChangelogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B2FF343C76EE2CFEBA65443 /* ChangelogView.swift */; };
 		7B914434F849088F827B0CC1 /* DeepTaskLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB5D2208E20F176A8B8B8186 /* DeepTaskLiveActivity.swift */; };
 		7C5BB8BFF375E8C3C22E5D67 /* VoiceConversationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92FA792E1FD684E441AFF1C3 /* VoiceConversationView.swift */; };
+		8011AB7B5BF36614B3CD8F7D /* OCRService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 330B0594740131BC9AD86870 /* OCRService.swift */; };
 		8283A133D79D73A6A1670354 /* KeyboardViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0793E9DE5B268C0C872EC089 /* KeyboardViewController.swift */; };
 		8341991AF39A8425B699B75E /* BackgroundCompanion.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE6EDBB6EE19B3E06EB8BA46 /* BackgroundCompanion.swift */; };
 		83914919DC4C2E50507671B0 /* AppViewModel+Persona.swift in Sources */ = {isa = PBXBuildFile; fileRef = 930B9ACFF11DE0FB4D41A1E2 /* AppViewModel+Persona.swift */; };
@@ -160,6 +161,7 @@
 		AF791BFAB16028DB5B5C5679 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6BBFEBEFE06B752D3EBC48F5 /* Assets.xcassets */; };
 		B065092D931DC5DBF4453BA9 /* WrappingHStack.swift in Sources */ = {isa = PBXBuildFile; fileRef = D025C7805F828C5A7D33766C /* WrappingHStack.swift */; };
 		B1C3734602EA607CCB60A9EF /* AskKownIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFDDC6E57D56E5FE87D2E871 /* AskKownIntent.swift */; };
+		B3A4F34C2EDB5D9F7080FF54 /* KeyboardScreenshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01C6440E1BA18B0B39D27F54 /* KeyboardScreenshot.swift */; };
 		B3B1918D26215E103C896E58 /* AppViewModel+Quality.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCEFC36A7BA780C0DF612468 /* AppViewModel+Quality.swift */; };
 		B5D3C3C902A7FADF0A76A1DD /* ArtifactPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B71C6F5AB4A30C9729DA6449 /* ArtifactPreviewView.swift */; };
 		B611B8637FFBFF0F04D748B8 /* HTMLExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89AE2BC7830F259147BB4759 /* HTMLExporter.swift */; };
@@ -291,6 +293,7 @@
 
 /* Begin PBXFileReference section */
 		018F8104DC4500AA2A85C7D0 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		01C6440E1BA18B0B39D27F54 /* KeyboardScreenshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardScreenshot.swift; sourceTree = "<group>"; };
 		024CBFE5F4874DACF9F38D7E /* MCPSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPSettingsView.swift; sourceTree = "<group>"; };
 		04A1D89FDE418310F86252CD /* TTSConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSConfig.swift; sourceTree = "<group>"; };
 		04CEE855B57F844FAE5C0B10 /* AppViewModel+Consensus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppViewModel+Consensus.swift"; sourceTree = "<group>"; };
@@ -521,6 +524,7 @@
 				A81BAB98A6C43BA76C8433DA /* KeyboardChatClient.swift */,
 				8BE1BFEFB25AC9AA2F9B1624 /* KeyboardModel.swift */,
 				E4E7712B233ED77A48F35988 /* KeyboardRootView.swift */,
+				01C6440E1BA18B0B39D27F54 /* KeyboardScreenshot.swift */,
 				0793E9DE5B268C0C872EC089 /* KeyboardViewController.swift */,
 			);
 			name = Keyboard;
@@ -1304,7 +1308,9 @@
 				69E0BE55B7BD2D4946BAF11E /* KeyboardChatClient.swift in Sources */,
 				2881B5C6EA23EC6441AF02E9 /* KeyboardModel.swift in Sources */,
 				EC169BA055FE50FCCD7C2DA3 /* KeyboardRootView.swift in Sources */,
+				B3A4F34C2EDB5D9F7080FF54 /* KeyboardScreenshot.swift in Sources */,
 				8283A133D79D73A6A1670354 /* KeyboardViewController.swift in Sources */,
+				8011AB7B5BF36614B3CD8F7D /* OCRService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

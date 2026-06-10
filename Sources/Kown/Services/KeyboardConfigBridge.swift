@@ -1,6 +1,8 @@
 #if os(iOS)
 import Foundation
 import SwiftUI
+import UIKit
+import Photos
 
 /// 主 app → 键盘扩展(KownKeyboard)的配置桥。
 ///
@@ -68,6 +70,7 @@ struct KeyboardBridgeSettingsCard: View {
 
     @State private var enabled = KeyboardConfigBridge.isEnabled
     @State private var synced = false
+    @State private var photoStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -84,11 +87,21 @@ struct KeyboardBridgeSettingsCard: View {
                 }
             if enabled {
                 Text(synced
-                     ? "已把当前模型的地址、名称和 API Key 写入 App 共享容器,供键盘扩展使用;关闭开关即清除。"
+                     ? "已把当前模型的地址、名称和 API Key 写入 App 共享容器,供键盘扩展使用;关闭开关即清除。在「Provider 配置」里点进某个模型可勾「设为键盘模型」指定用哪个。"
                      : "暂无可共享的模型:需要一个已启用、填好 API Key 的 OpenAI 兼容或 Anthropic 模型。")
                     .font(.caption2)
                     .foregroundStyle(synced ? Color.secondary : Color.orange)
                     .fixedSize(horizontal: false, vertical: true)
+
+                Divider().padding(.vertical, 2)
+
+                // 截图回复:键盘打开自动读最近一张截图 → OCR → 生成回复。授权弹窗只能在主 app 里弹,
+                // 所以这里先取得相册权限,键盘扩展才有机会读到截图。
+                Text("截图回复:开启后,键盘打开会自动识别你最近一张截图里的对话,直接生成回复。需要相册权限。")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                photoAccessControl
             }
         }
         .padding(13)
@@ -97,6 +110,40 @@ struct KeyboardBridgeSettingsCard: View {
         .onAppear {
             enabled = KeyboardConfigBridge.isEnabled
             if enabled { synced = onToggle(true) }   // 进页面时顺手刷新一次共享配置
+            photoStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        }
+    }
+
+    /// 相册授权:未决 → 请求按钮;已授权 → 绿勾;被拒 → 引导去系统设置。
+    @ViewBuilder
+    private var photoAccessControl: some View {
+        switch photoStatus {
+        case .authorized, .limited:
+            Label("已允许读取截图", systemImage: "checkmark.circle.fill")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.green)
+        case .denied, .restricted:
+            HStack(spacing: 8) {
+                Label("相册权限被关闭", systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                Spacer(minLength: 4)
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    Link("去系统设置", destination: url)
+                        .font(.caption.weight(.semibold))
+                }
+            }
+        default:   // .notDetermined
+            Button {
+                PHPhotoLibrary.requestAuthorization(for: .readWrite) { status in
+                    Task { @MainActor in photoStatus = status }
+                }
+            } label: {
+                Label("允许读取截图(生成回复用)", systemImage: "photo.on.rectangle.angled")
+                    .font(.caption.weight(.semibold))
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
         }
     }
 }

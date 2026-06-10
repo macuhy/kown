@@ -47,6 +47,8 @@ targets:
         # 设备工具:在系统「提醒事项」创建提醒、在「日历」创建/读取日程(备忘录在 iOS 走剪贴板+跳转,无需权限)
         NSRemindersFullAccessUsageDescription: "Kown 可以把你的待办写进系统「提醒事项」。"
         NSCalendarsFullAccessUsageDescription: "Kown 可以把你的日程写进系统「日历」,并读取你最近的安排。"
+        # AI 键盘截图回复:读最近一张截图、识别其中文字生成回复。授权在主 app 完成,键盘扩展才读得到。
+        NSPhotoLibraryUsageDescription: "Kown 读取你最近的截图,识别其中文字,在 AI 键盘里帮你生成回复。"
         UIBackgroundModes:
           - audio   # 流式期间播放无声音频,保持后台网络连接
         UILaunchScreen:
@@ -211,6 +213,8 @@ targets:
       - path: Keyboard
         type: group
         name: Keyboard
+      # 共享 OCR(自包含,只依赖 Vision/UIKit)——键盘截图回复识别文字用,不复制源文件。
+      - path: ../Sources/Kown/Services/OCRService.swift
     info:
       path: KeyboardInfo.plist
       properties:
@@ -219,6 +223,8 @@ targets:
         # 版本必须与主 app 一致(CI 用命令行 MARKETING_VERSION/CURRENT_PROJECT_VERSION 覆盖全 target)。
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        # 截图回复:键盘扩展读最近截图。授权先在主 app 完成,扩展才有机会读到。
+        NSPhotoLibraryUsageDescription: "Kown 键盘读取你最近的截图,识别其中文字帮你生成回复。"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.keyboard-service
           NSExtensionPrincipalClass: KownKeyboard.KeyboardViewController

@@ -38,5 +38,7 @@
 		<key>NSExtensionPrincipalClass</key>
 		<string>KownKeyboard.KeyboardViewController</string>
 	</dict>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Kown 键盘读取你最近的截图,识别其中文字帮你生成回复。</string>
 </dict>
 </plist>
