@@ -159,6 +159,7 @@ struct ArtifactPreviewPanel: View {
                 emptyState
             } else {
                 ArtifactWebView(html: renderedHTML)
+                    .id(webViewKey)
                     .background(Color.platformControlBackground)
             }
         }
@@ -219,6 +220,18 @@ struct ArtifactPreviewPanel: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.platformControlBackground.opacity(0.4))
+    }
+
+    /// WebView 身份键:换会话 / 换 artifact / 流式结束(isClosed 翻转)/ 新一轮回答时,
+    /// 强制重建底层 WKWebView,避免**复用同一个 web view 在 reload 后渲染空白**
+    /// (用户反馈的「渲染一次之后就不渲染了」——抽取正常、面板非空,但 WebView 是白的)。
+    /// 流式增长期间(同会话、同 block、未闭合)键保持不变,内容靠 `updateNSView` 增量 reload,不闪。
+    private var webViewKey: String {
+        let convID = viewModel.selectedConversationID?.uuidString ?? "-"
+        let turnCount = viewModel.selectedConversation?.turns.count ?? 0
+        let sel = selectedID ?? blocks.last?.id ?? -1
+        let closed = blocks.first(where: { $0.id == sel })?.isClosed ?? false
+        return "\(convID)|\(turnCount)|\(sel)|\(closed)"
     }
 
     /// 取要预览的源文本:优先正在流式的首个 panel 回答,否则最近一轮的首份回答。
