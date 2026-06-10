@@ -378,6 +378,9 @@ struct SettingsView: View {
                                     },
                                     onToggleSummary: { newValue in
                                         viewModel.setSummary(cfg.id, isSummary: newValue)
+                                    },
+                                    onToggleKeyboard: { newValue in
+                                        viewModel.setKeyboardModel(cfg.id, newValue)
                                     }
                                 )
                             } label: {
@@ -1414,6 +1417,7 @@ private struct MobileProviderEditorView: View {
     let onSave: () -> Void
     let onToggleChair: (Bool) -> Void
     let onToggleSummary: (Bool) -> Void
+    let onToggleKeyboard: (Bool) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var apiKey: String = ""
@@ -1433,6 +1437,9 @@ private struct MobileProviderEditorView: View {
                 connectionSection
             }
             roleSection
+            if config.kind == .openAICompatible || config.kind == .anthropic {
+                keyboardSection
+            }
             advancedSection
             statusSection
             dangerSection
@@ -1667,6 +1674,19 @@ private struct MobileProviderEditorView: View {
                 get: { config.isSummary },
                 set: { onToggleSummary($0) }
             ))
+        }
+    }
+
+    private var keyboardSection: some View {
+        Section {
+            Toggle("设为键盘模型", isOn: Binding(
+                get: { config.isKeyboardModel },
+                set: { onToggleKeyboard($0) }
+            ))
+        } header: {
+            Text("AI 键盘")
+        } footer: {
+            Text("AI 键盘的润色、翻译、截图回复都用这个模型。需先在下方「AI 键盘」卡片打开共享开关。单选:只会有一个模型被键盘使用。")
         }
     }
 

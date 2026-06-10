@@ -77,6 +77,10 @@ struct ProviderConfig: Identifiable, Codable, Hashable, Sendable {
     /// nil = 未指定(可能是自建/未知服务) → model picker 只列硬填的那个 model。
     var vendor: String?
 
+    /// 被指定为「AI 键盘使用的模型」。单选语义(同主席/总结员):整份 providers 里至多一个为 true。
+    /// 仅 openAICompatible / anthropic 且填了 key 时键盘才用得上;为空时键盘回退自动挑选。
+    var isKeyboardModel: Bool
+
     init(id: UUID = UUID(),
          displayName: String,
          kind: ProviderKind,
@@ -89,7 +93,8 @@ struct ProviderConfig: Identifiable, Codable, Hashable, Sendable {
          cliArgs: String? = nil,
          isChair: Bool = false,
          isSummary: Bool = false,
-         vendor: String? = nil) {
+         vendor: String? = nil,
+         isKeyboardModel: Bool = false) {
         self.id          = id
         self.displayName = displayName
         self.kind        = kind
@@ -103,6 +108,7 @@ struct ProviderConfig: Identifiable, Codable, Hashable, Sendable {
         self.isChair     = isChair
         self.isSummary   = isSummary
         self.vendor      = vendor
+        self.isKeyboardModel = isKeyboardModel
     }
 
     // 兼容旧 ~/.kown/config.json (缺 isChair / vendor 字段)。
@@ -121,6 +127,7 @@ struct ProviderConfig: Identifiable, Codable, Hashable, Sendable {
         self.isChair     = try c.decodeIfPresent(Bool.self, forKey: .isChair) ?? false
         self.isSummary   = try c.decodeIfPresent(Bool.self, forKey: .isSummary) ?? false
         self.vendor      = try c.decodeIfPresent(String.self, forKey: .vendor)
+        self.isKeyboardModel = try c.decodeIfPresent(Bool.self, forKey: .isKeyboardModel) ?? false
     }
 
     static var defaultSeed: [ProviderConfig] {

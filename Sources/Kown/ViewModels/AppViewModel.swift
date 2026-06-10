@@ -1188,8 +1188,11 @@ final class AppViewModel {
         let candidates = providers.filter {
             $0.enabled && ($0.kind == .openAICompatible || $0.kind == .anthropic) && KeychainStore.hasKey(id: $0.id)
         }
+        // 优先用户在设置里显式「设为键盘模型」的那个;没有(或它已失效)再退回自动挑:当前 Direct 选中 → 第一个候选。
         let activeID = providersForCurrentSend().panel.first?.id
-        let chosen = candidates.first(where: { $0.id == activeID }) ?? candidates.first
+        let chosen = candidates.first(where: { $0.isKeyboardModel })
+            ?? candidates.first(where: { $0.id == activeID })
+            ?? candidates.first
         return KeyboardConfigBridge.sync(provider: chosen)
     }
     #endif
@@ -1356,6 +1359,21 @@ final class AppViewModel {
     var summaryProvider: ProviderConfig? {
         providers.first { $0.isSummary && $0.enabled }
     }
+
+    #if os(iOS)
+    /// 「AI 键盘使用的模型」单选,语义同 chair/summary。设完立即把选中的 provider 推给键盘扩展。
+    func setKeyboardModel(_ id: UUID, _ on: Bool) {
+        for i in providers.indices {
+            if providers[i].id == id {
+                providers[i].isKeyboardModel = on
+            } else if on {
+                providers[i].isKeyboardModel = false
+            }
+        }
+        saveProviders()
+        syncKeyboardProvider()
+    }
+    #endif
 
     // MARK: - Web Search 配置
 
