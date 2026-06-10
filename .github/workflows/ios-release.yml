@@ -8,6 +8,8 @@
 #   ASC_KEY_ID, ASC_ISSUER_ID, ASC_API_KEY_P8(base64 .p8)
 #   IOS_DIST_CERT_P12(base64 .p12), IOS_DIST_CERT_PASSWORD
 #   IOS_PROVISION_PROFILE(base64 .mobileprovision)
+#   IOS_SHARE_PROVISION_PROFILE / IOS_WATCH_PROVISION_PROFILE
+#   IOS_WIDGETS_PROVISION_PROFILE / IOS_KEYBOARD_PROVISION_PROFILE / IOS_WATCH_WIDGETS_PROVISION_PROFILE
 #   APPLE_TEAM_ID(已有)
 name: iOS Release
 
@@ -88,6 +90,9 @@ jobs:
           PROFILE_BASE64:       ${{ secrets.IOS_PROVISION_PROFILE }}
           SHARE_PROFILE_BASE64: ${{ secrets.IOS_SHARE_PROVISION_PROFILE }}
           WATCH_PROFILE_BASE64: ${{ secrets.IOS_WATCH_PROVISION_PROFILE }}
+          WIDGETS_PROFILE_BASE64:       ${{ secrets.IOS_WIDGETS_PROVISION_PROFILE }}
+          KEYBOARD_PROFILE_BASE64:      ${{ secrets.IOS_KEYBOARD_PROVISION_PROFILE }}
+          WATCH_WIDGETS_PROFILE_BASE64: ${{ secrets.IOS_WATCH_WIDGETS_PROVISION_PROFILE }}
         run: |
           set -euo pipefail
           DEST="$HOME/Library/MobileDevice/Provisioning Profiles"
@@ -105,6 +110,10 @@ jobs:
           install_profile "$PROFILE_BASE64" main
           install_profile "$SHARE_PROFILE_BASE64" share
           install_profile "$WATCH_PROFILE_BASE64" watch
+          # 0.25.0 新增三个扩展 target,各需独立 profile(门户先建 App ID + AppStore profile)。
+          install_profile "$WIDGETS_PROFILE_BASE64" widgets
+          install_profile "$KEYBOARD_PROFILE_BASE64" keyboard
+          install_profile "$WATCH_WIDGETS_PROFILE_BASE64" watch-widgets
 
       - name: Write App Store Connect API key
         env:
