@@ -67,6 +67,16 @@ extension AppViewModel {
         }
     }
 
+    /// 把一篇已经抽好的文档(可能带预切块 + 页码)整篇加入资料夹。
+    /// 大文档 / 文件夹分块入库走这里(`DocumentIngestor` 在后台抽好,主线程只做插入 + 落盘)。
+    func addKnowledgeDocs(folderID: UUID, docs: [KnowledgeDoc]) {
+        guard !docs.isEmpty,
+              let idx = knowledgeFolders.firstIndex(where: { $0.id == folderID }) else { return }
+        knowledgeFolders[idx].docs.append(contentsOf: docs)
+        knowledgeFolders[idx].updatedAt = Date()
+        saveKnowledge()
+    }
+
     func removeKnowledgeDoc(folderID: UUID, docID: UUID) {
         guard let idx = knowledgeFolders.firstIndex(where: { $0.id == folderID }) else { return }
         knowledgeFolders[idx].docs.removeAll { $0.id == docID }

@@ -537,12 +537,15 @@ struct KnowledgeSourceRef: Identifiable, Codable, Hashable, Sendable {
     var docName: String
     /// 被引用的片段原文。
     var excerpt: String
+    /// 命中片段所在页码(大文档分块入库才有)。optional + 默认 nil,旧存档解码不受影响。
+    var page: Int?
 
-    init(index: Int, docId: UUID, docName: String, excerpt: String) {
+    init(index: Int, docId: UUID, docName: String, excerpt: String, page: Int? = nil) {
         self.index = index
         self.docId = docId
         self.docName = docName
         self.excerpt = excerpt
+        self.page = page
     }
 }
 

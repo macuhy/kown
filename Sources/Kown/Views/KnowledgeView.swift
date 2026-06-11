@@ -419,10 +419,18 @@ private struct KnowledgeFolderDetail: View {
     @State private var name = ""
     @State private var showAddDoc = false
     @State private var showImporter = false
+    @State private var showPDFImporter = false
+    @State private var showFolderImporter = false
     @State private var showAddURL = false
     @State private var urlDraft = ""
     @State private var scrapingURL = false
     @State private var urlError: String?
+
+    // 大文档 / 文件夹分块入库进度。
+    @State private var ingesting = false
+    @State private var ingestStatus = ""
+    @State private var ingestProgress = 0.0
+    @State private var ingestSummary: String?
 
     private var folder: KnowledgeFolder? {
         viewModel.knowledgeFolders.first(where: { $0.id == folderID })
@@ -441,7 +449,7 @@ private struct KnowledgeFolderDetail: View {
                 ForEach(folder?.docs ?? []) { doc in
                     VStack(alignment: .leading, spacing: 2) {
                         Text(doc.name).font(.body.weight(.medium)).lineLimit(1)
-                        Text("\(doc.charCount) 字").font(.caption2).foregroundStyle(.secondary)
+                        Text(docSubtitle(doc)).font(.caption2).foregroundStyle(.secondary)
                     }
                 }
                 .onDelete { idx in
@@ -456,14 +464,38 @@ private struct KnowledgeFolderDetail: View {
                 Button {
                     showImporter = true
                 } label: {
-                    Label("从文件导入", systemImage: "folder")
+                    Label("从文件导入", systemImage: "doc")
                 }
+                .disabled(ingesting)
+                Button {
+                    showPDFImporter = true
+                } label: {
+                    Label("导入 PDF(按页分块)", systemImage: "doc.richtext")
+                }
+                .disabled(ingesting)
+                Button {
+                    showFolderImporter = true
+                } label: {
+                    Label("导入整个文件夹", systemImage: "folder.badge.plus")
+                }
+                .disabled(ingesting)
                 Button {
                     urlError = nil; urlDraft = ""; showAddURL = true
                 } label: {
                     Label(scrapingURL ? "正在抓取网页…" : "从网页链接导入", systemImage: scrapingURL ? "hourglass" : "link")
                 }
-                .disabled(scrapingURL)
+                .disabled(scrapingURL || ingesting)
+                if ingesting {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ProgressView(value: ingestProgress)
+                        Text(ingestStatus.isEmpty ? "正在分块入库…" : ingestStatus)
+                            .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                    .padding(.vertical, 2)
+                }
+                if let ingestSummary {
+                    Text(ingestSummary).font(.caption2).foregroundStyle(.secondary)
+                }
                 if let urlError {
                     Text(urlError).font(.caption2).foregroundStyle(.red)
                 }
@@ -485,6 +517,20 @@ private struct KnowledgeFolderDetail: View {
                       allowsMultipleSelection: true) { result in
             if case .success(let urls) = result {
                 for url in urls { importFile(url) }
+            }
+        }
+        .fileImporter(isPresented: $showPDFImporter,
+                      allowedContentTypes: [.pdf],
+                      allowsMultipleSelection: true) { result in
+            if case .success(let urls) = result {
+                ingestURLs(urls, kind: .files)
+            }
+        }
+        .fileImporter(isPresented: $showFolderImporter,
+                      allowedContentTypes: [.folder],
+                      allowsMultipleSelection: false) { result in
+            if case .success(let urls) = result, let folder = urls.first {
+                ingestURLs([folder], kind: .folder)
             }
         }
         .alert("从网页链接导入", isPresented: $showAddURL) {
@@ -522,6 +568,79 @@ private struct KnowledgeFolderDetail: View {
             ?? String(data: data, encoding: .utf16)
             ?? String(decoding: data, as: UTF8.self)
         viewModel.addKnowledgeDoc(folderID: folderID, name: url.lastPathComponent, text: text)
+    }
+
+    private func docSubtitle(_ doc: KnowledgeDoc) -> String {
+        var parts = ["\(doc.charCount) 字"]
+        if let p = doc.pageCount { parts.append("\(p) 页") }
+        if let c = doc.chunks, !c.isEmpty { parts.append("\(c.count) 块") }
+        return parts.joined(separator: " · ")
+    }
+
+    private enum IngestKind { case files, folder }
+
+    /// 大文档 / 文件夹分块入库:抽取 + 切块放后台(DocumentIngestor 是纯计算 nonisolated),
+    /// 完成后回主线程批量插入 + 落盘,过程中更新进度条。
+    private func ingestURLs(_ urls: [URL], kind: IngestKind) {
+        guard !urls.isEmpty, !ingesting else { return }
+        ingesting = true
+        ingestSummary = nil
+        ingestStatus = ""
+        ingestProgress = 0
+
+        Task.detached(priority: .userInitiated) {
+            // 安全作用域:沙盒下需在读取期间持有访问权。
+            let scoped = urls.map { ($0, $0.startAccessingSecurityScopedResource()) }
+            defer { for (u, ok) in scoped where ok { u.stopAccessingSecurityScopedResource() } }
+
+            var docs: [KnowledgeDoc] = []
+            var failures: [(name: String, reason: String)] = []
+
+            switch kind {
+            case .folder:
+                let folderURL = urls[0]
+                let result = DocumentIngestor.ingestFolder(at: folderURL) { done, total, current in
+                    let frac = total > 0 ? Double(done) / Double(total) : 0
+                    Task { @MainActor in
+                        ingestProgress = frac
+                        ingestStatus = current.isEmpty ? "整理中…" : "处理 \(current)(\(done)/\(total))"
+                    }
+                }
+                docs = result.docs
+                failures = result.failures
+            case .files:
+                let total = urls.count
+                for (i, url) in urls.enumerated() {
+                    let nm = url.lastPathComponent
+                    await MainActor.run {
+                        ingestProgress = total > 0 ? Double(i) / Double(total) : 0
+                        ingestStatus = "处理 \(nm)(\(i + 1)/\(total))"
+                    }
+                    do {
+                        docs.append(try DocumentIngestor.ingestFile(at: url))
+                    } catch {
+                        let reason = (error as? DocumentIngestor.IngestError)?.message
+                            ?? error.localizedDescription
+                        failures.append((name: nm, reason: reason))
+                    }
+                }
+            }
+
+            let insertedDocs = docs
+            let fails = failures
+            await MainActor.run {
+                viewModel.addKnowledgeDocs(folderID: folderID, docs: insertedDocs)
+                ingesting = false
+                ingestProgress = 1
+                ingestStatus = ""
+                var msg = "已入库 \(insertedDocs.count) 份文档"
+                if !fails.isEmpty {
+                    let head = fails.prefix(3).map { "\($0.name)(\($0.reason))" }.joined(separator: "、")
+                    msg += ";跳过 \(fails.count) 个:\(head)\(fails.count > 3 ? "…" : "")"
+                }
+                ingestSummary = msg
+            }
+        }
     }
 }
 

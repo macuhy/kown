@@ -39,9 +39,19 @@ struct CitationSourceSheet: View {
             .frame(width: 46, height: 46)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text("引用来源")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    Text("引用来源")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.secondary)
+                    if let page = source.page {
+                        Text("第 \(page) 页")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(Color.accentColor)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2)
+                            .background(Color.accentColor.opacity(0.12), in: Capsule())
+                    }
+                }
                 Text(source.docName)
                     .font(.headline.weight(.bold))
                     .lineLimit(2)

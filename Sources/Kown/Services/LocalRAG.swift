@@ -15,6 +15,15 @@ enum LocalRAG {
         let docId: UUID
         let docName: String
         let text: String
+        /// 1-based 页码(PDF 分块入库时携带);无分页或老文档为 nil。
+        let page: Int?
+
+        init(docId: UUID, docName: String, text: String, page: Int? = nil) {
+            self.docId = docId
+            self.docName = docName
+            self.text = text
+            self.page = page
+        }
     }
 
     /// 检索命中的片段(带可回溯的来源元数据)。供「句级溯源」用:答案里的 `[n]` 角标
@@ -23,6 +32,15 @@ enum LocalRAG {
         let docId: UUID
         let docName: String
         let text: String
+        /// 命中片段所在页码(大文档分块入库才有);展示成「第 N 页」引用。
+        let page: Int?
+
+        init(docId: UUID, docName: String, text: String, page: Int? = nil) {
+            self.docId = docId
+            self.docName = docName
+            self.text = text
+            self.page = page
+        }
     }
 
     /// 把文档切块:优先按换行的自然段聚合到 ~size,过长的段再带重叠硬切,最后去重。
@@ -56,6 +74,20 @@ enum LocalRAG {
         return out.filter { seen.insert($0).inserted }
     }
 
+    /// 把「逐页文本」切成带页码的预切块:每页内部用同一套切块规则,块的页码 = 该页页码。
+    /// 供大文档(PDF)分块入库用,结果存进 `KnowledgeDoc.chunks`,检索时直接复用并回溯页码。
+    /// `pages` 为 1-based 顺序的每页文本(下标 0 = 第 1 页)。
+    static func chunkPages(_ pages: [String], size: Int = chunkSize, overlap: Int = chunkOverlap) -> [DocChunk] {
+        var out: [DocChunk] = []
+        for (idx, pageText) in pages.enumerated() {
+            let pageNo = idx + 1
+            for c in chunk(pageText, size: size, overlap: overlap) {
+                out.append(DocChunk(text: c, page: pageNo))
+            }
+        }
+        return out
+    }
+
     private static func hardSplit(_ text: String, size: Int, overlap: Int) -> [String] {
         let chars = Array(text)
         guard chars.count > size else { return [text] }
@@ -82,7 +114,7 @@ enum LocalRAG {
     /// 同 `retrieve`,但保留可回溯的来源元数据(docId / docName),用于「句级溯源」。
     nonisolated static func retrieveDetailed(query: String, folder: KnowledgeFolder, topK: Int = 4) async -> [RetrievedChunk] {
         let chunks = await retrieveChunks(query: query, folder: folder, topK: topK)
-        return chunks.map { RetrievedChunk(docId: $0.docId, docName: $0.docName, text: $0.text) }
+        return chunks.map { RetrievedChunk(docId: $0.docId, docName: $0.docName, text: $0.text, page: $0.page) }
     }
 
     /// 检索核心:切块 → BM25 + 向量混合(RRF)→ 取 top-K(受 `maxInjectChars` 预算约束),返回选中块。
@@ -90,8 +122,17 @@ enum LocalRAG {
         var seen = Set<String>()
         var chunks: [Chunk] = []
         for doc in folder.docs {
-            for c in chunk(doc.text) where seen.insert(c).inserted {
-                chunks.append(Chunk(docId: doc.id, docName: doc.name, text: c))
+            // 大文档分块入库的文档直接用预切块(带页码);老文档现场切 text(无页码)。
+            if let pre = doc.chunks, !pre.isEmpty {
+                for dc in pre {
+                    let t = dc.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !t.isEmpty, seen.insert(t).inserted else { continue }
+                    chunks.append(Chunk(docId: doc.id, docName: doc.name, text: t, page: dc.page))
+                }
+            } else {
+                for c in chunk(doc.text) where seen.insert(c).inserted {
+                    chunks.append(Chunk(docId: doc.id, docName: doc.name, text: c))
+                }
             }
         }
         guard !chunks.isEmpty else { return [] }

@@ -289,9 +289,11 @@ extension AppViewModel {
                 var blocks: [String] = []
                 for (i, h) in hits.enumerated() {
                     let n = i + 1
-                    blocks.append("[\(n)] 【\(h.docName)】\n\(h.text)")
+                    // [DocRAG] 大文档分块入库的命中带页码,注入与溯源都标注「第 N 页」。
+                    let pageLabel = h.page.map { " · 第 \($0) 页" } ?? ""
+                    blocks.append("[\(n)] 【\(h.docName)\(pageLabel)】\n\(h.text)")
                     knowledgeSources.append(KnowledgeSourceRef(
-                        index: n, docId: h.docId, docName: h.docName, excerpt: h.text))
+                        index: n, docId: h.docId, docName: h.docName, excerpt: h.text, page: h.page))
                 }
                 parts.append("""
                 [相关资料 — 来自知识库「\(folder.name)」,回答时优先参考以下片段。\
