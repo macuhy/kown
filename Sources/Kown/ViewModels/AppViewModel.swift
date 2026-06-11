@@ -1292,6 +1292,9 @@ final class AppViewModel {
             UsageStore.shared.reload()
             // 胜率榜同理 — leaderboard.json 可能刚被 iCloud 拉下来
             ModelLeaderboardStore.shared.reload()
+            // 定时任务同理 — scheduled-tasks.json 存在 syncedDataDir,init 时容器没就绪只读到本地空表,
+            // 切换数据源后必须重读,否则切到 iCloud 后内存里的任务列表一直是空的。
+            SchedulerService.shared.reload()
             // 选中的会话可能在切换后不存在(空目录或不同设备状态),清掉
             if let id = self.selectedConversationID,
                !self.conversations.contains(where: { $0.id == id }) {
@@ -1321,6 +1324,10 @@ final class AppViewModel {
             // 启动 2s 后会自动走到这里,所以多端用量累加在 app 启动后短延迟就能看到。
             UsageStore.shared.reload()
             ModelLeaderboardStore.shared.reload()
+            // 定时任务列表(scheduled-tasks.json)随 iCloud 同步,但 SchedulerService 只在 init 读一次,
+            // 那时容器还没就绪只读到本地空表。iCloud 就绪后必须重读,否则「加了任务退出 app 就没了」
+            //(任务其实写进了 iCloud `.kown`,只是从没被重新载入)。
+            SchedulerService.shared.reload()
             if let id = self.selectedConversationID,
                !self.conversations.contains(where: { $0.id == id }) {
                 self.selectedConversationID = self.conversations.first?.id
