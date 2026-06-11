@@ -95,9 +95,9 @@ struct KeyboardBridgeSettingsCard: View {
 
                 Divider().padding(.vertical, 2)
 
-                // 截图回复:键盘打开自动读最近一张截图 → OCR → 生成回复。授权弹窗只能在主 app 里弹,
-                // 所以这里先取得相册权限,键盘扩展才有机会读到截图。
-                Text("截图回复:开启后,键盘打开会自动识别你最近一张截图里的对话,直接生成回复。需要相册权限。")
+                // 截图回复:键盘打开自动读最近一张截图 → OCR → 生成回复。
+                // 这里先取得完整照片权限,避免用户第一次进键盘时才被系统弹窗打断。
+                Text("截图回复:开启后,键盘打开会自动识别你最近一张截图里的对话,直接生成回复。需要完整照片权限,「部分照片」无法自动读取未来的新截图。")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -114,14 +114,25 @@ struct KeyboardBridgeSettingsCard: View {
         }
     }
 
-    /// 相册授权:未决 → 请求按钮;已授权 → 绿勾;被拒 → 引导去系统设置。
+    /// 相册授权:未决 → 请求按钮;完整授权 → 绿勾;部分授权/被拒 → 引导去系统设置。
     @ViewBuilder
     private var photoAccessControl: some View {
         switch photoStatus {
-        case .authorized, .limited:
-            Label("已允许读取截图", systemImage: "checkmark.circle.fill")
+        case .authorized:
+            Label("已允许完整照片权限", systemImage: "checkmark.circle.fill")
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.green)
+        case .limited:
+            HStack(spacing: 8) {
+                Label("当前是部分照片权限,截图回复不可用", systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                Spacer(minLength: 4)
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    Link("改为完整访问", destination: url)
+                        .font(.caption.weight(.semibold))
+                }
+            }
         case .denied, .restricted:
             HStack(spacing: 8) {
                 Label("相册权限被关闭", systemImage: "exclamationmark.triangle.fill")
@@ -139,7 +150,7 @@ struct KeyboardBridgeSettingsCard: View {
                     Task { @MainActor in photoStatus = status }
                 }
             } label: {
-                Label("允许读取截图(生成回复用)", systemImage: "photo.on.rectangle.angled")
+                Label("允许完整照片权限(生成回复用)", systemImage: "photo.on.rectangle.angled")
                     .font(.caption.weight(.semibold))
             }
             .buttonStyle(.bordered)

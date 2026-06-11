@@ -68,11 +68,37 @@ struct KeyboardRootView: View {
     private var actionsRow: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
+                screenshotReplyChip
                 ForEach(KeyboardAction.allCases) { action in
                     actionChip(action)
                 }
             }
         }
+    }
+
+    private var screenshotReplyChip: some View {
+        Button {
+            model.replyFromLatestScreenshot()
+        } label: {
+            HStack(spacing: 4) {
+                if model.isPreparingShot {
+                    ProgressView()
+                        .controlSize(.mini)
+                } else {
+                    Image(systemName: "photo.on.rectangle.angled")
+                        .font(.caption)
+                }
+                Text(model.isPreparingShot ? "读取截图" : "截屏回复")
+                    .font(.footnote.weight(.medium))
+            }
+            .padding(.horizontal, 11)
+            .padding(.vertical, 7)
+            .background(model.isPreparingShot ? Color.accentColor.opacity(0.18)
+                                              : Color(uiColor: .secondarySystemBackground),
+                        in: Capsule(style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(model.isStreaming || model.isPreparingShot)
     }
 
     private func actionChip(_ action: KeyboardAction) -> some View {

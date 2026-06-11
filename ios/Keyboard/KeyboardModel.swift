@@ -145,16 +145,38 @@ final class KeyboardModel {
     /// 全自动:键盘打开 → 读最近一张截图 → Vision OCR → 直接生成回复建议。
     /// 命中守卫(已授权 + 新鲜 + 未处理过)才真正跑;否则静默,不打扰、不花 token。
     func autoReplyFromLatestScreenshot() {
+        replyFromLatestScreenshot(showMissingErrors: false)
+    }
+
+    /// 手动/自动截图回复:读最近截图 → OCR → 生成回复建议。
+    /// 自动触发时不把「没有新截图」当错误;手动点击时给用户明确反馈。
+    func replyFromLatestScreenshot(showMissingErrors: Bool = true) {
         guard !isStreaming, !isPreparingShot, config != nil else { return }
         isPreparingShot = true
         errorText = nil
         sourceNote = "读取最近截图…"
 
         Task { [weak self] in
-            guard let shot = await KeyboardScreenshot.latestFresh() else {
+            let shot: KeyboardScreenshot.Shot
+            do {
+                guard let freshShot = try await KeyboardScreenshot.latestFresh() else {
+                    if showMissingErrors {
+                        self?.errorText = "未找到 3 分钟内的新截图。请先截一张对话图,再点「截屏回复」。"
+                    }
+                    self?.cancelShotPrep()
+                    return
+                }
+                shot = freshShot
+            } catch {
+                if let shotError = error as? KeyboardScreenshot.ScreenshotError {
+                    self?.errorText = shotError.localizedDescription
+                } else if showMissingErrors {
+                    self?.errorText = "读取截图失败:\(error.localizedDescription)"
+                }
                 self?.cancelShotPrep()
                 return
             }
+
             do {
                 let text = try await OCRService.recognizeText(in: shot.image)
                     .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -164,8 +186,11 @@ final class KeyboardModel {
                 self.isPreparingShot = false
                 self.startStream(action: .reply, source: text, note: "取材:最近截图")
             } catch {
-                // OCR 没识别到文字等:标记已处理避免反复试,静默回退。
+                // OCR 没识别到文字等:标记已处理避免同一张图反复自动尝试。
                 KeyboardScreenshot.lastHandledID = shot.localIdentifier
+                if showMissingErrors {
+                    self?.errorText = "截图识别失败:\(error.localizedDescription)"
+                }
                 self?.cancelShotPrep()
             }
         }
@@ -217,7 +242,11 @@ final class KeyboardModel {
 
     func sendResult() {
         guard !result.isEmpty else { return }
-        insertText(result)
+        // 发送按钮走两段式:先把 AI 结果填到宿主输入框,再次点击才触发宿主的发送/换行。
+        guard inserted else {
+            insertResult()
+            return
+        }
         sendAction()
     }
 
