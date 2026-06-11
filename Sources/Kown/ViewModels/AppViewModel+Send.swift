@@ -1860,10 +1860,15 @@ extension AppViewModel {
             options.toolContext = toolContext
             options.maxToolRounds = maxToolRounds
             options.agentInstruction = agentInstruction
-            for try await chunk in client.stream(prompt: prompt, options: options, config: config, apiKey: key) {
+            // MARK: - [PII] 出站脱敏:云端 provider + 脱敏开关开时,把 prompt / system / 历史里的 PII
+            // 替换成占位符发送;本地 provider(Ollama/localhost/CLI)跳过。返回的 restorer 在下方流式还原占位符。
+            var outboundPrompt = prompt
+            let restorer = self.applyPIIRedaction(config: config, prompt: &outboundPrompt, options: &options)
+            // MARK: - [PII] end
+            for try await chunk in client.stream(prompt: outboundPrompt, options: options, config: config, apiKey: key) {
                 if Task.isCancelled { break }
                 switch chunk {
-                case .text(let t):       state.append(t)
+                case .text(let t):       state.append(restorer?.push(t) ?? t)
                 case .reasoning(let r):  state.appendReasoning(r)
                 case .toolEvent(let e):  state.logEvent(e)
                 case .toolStep(let s):
@@ -1898,6 +1903,9 @@ extension AppViewModel {
                 state.fail("已取消")
                 failure = "已取消"
             } else {
+                // MARK: - [PII] 流末把还原器缓冲里残留的尾巴(可能是半截占位符)吐出,避免末尾占位符丢失。
+                if let restorer, case let rest = restorer.flush(), !rest.isEmpty { state.append(rest) }
+                // MARK: - [PII] end
                 state.finish()
             }
         } catch is CancellationError {
@@ -1919,9 +1927,13 @@ extension AppViewModel {
                 opts.priorTurns = priorTurns
                 state.reset()
                 state.append("(原「\(config.displayName)」失败,已自动切换到「\(alt.displayName)」)\n\n")
-                for try await chunk in altClient.stream(prompt: prompt, options: opts, config: alt, apiKey: altKey) {
+                // MARK: - [PII] 自动容错也走脱敏(按替补 provider 的本地/云端判断),并流式还原。
+                var altPrompt = prompt
+                let altRestorer = self.applyPIIRedaction(config: alt, prompt: &altPrompt, options: &opts)
+                // MARK: - [PII] end
+                for try await chunk in altClient.stream(prompt: altPrompt, options: opts, config: alt, apiKey: altKey) {
                     if Task.isCancelled { break }
-                    if case .text(let t) = chunk { state.append(t) }
+                    if case .text(let t) = chunk { state.append(altRestorer?.push(t) ?? t) }
                     else if case .reasoning(let r) = chunk { state.appendReasoning(r) }
                     else if case .usage(let i, let o, let cached) = chunk {
                         state.inputTokens = i
@@ -1930,6 +1942,9 @@ extension AppViewModel {
                         UsageStore.shared.record(providerKind: alt.kind, model: alt.model, inputTokens: i, outputTokens: o, cachedTokens: cached)
                     }
                 }
+                // MARK: - [PII] 流末还原残留尾巴。
+                if !Task.isCancelled, let altRestorer, case let rest = altRestorer.flush(), !rest.isEmpty { state.append(rest) }
+                // MARK: - [PII] end
                 if !Task.isCancelled { state.finish(); failure = nil }
             } catch {
                 state.fail(f)  // 容错也失败 → 恢复展示原错误
@@ -1955,6 +1970,44 @@ extension AppViewModel {
 
         return (config.id, state.text, failure)
     }
+
+    // MARK: - [PII] 出站脱敏接线
+    /// 隐私脱敏开关开 + provider 是云端时,把 `prompt` 与 `options`(system / contextSummary / priorTurns)里的
+    /// PII 假名化(共用一份映射),返回用于流式还原占位符的 `StreamingRestorer`;
+    /// 关闭 / 本地 provider / 无 PII 命中时原样返回 nil(调用点据此直通)。
+    private func applyPIIRedaction(config: ProviderConfig,
+                                   prompt: inout String,
+                                   options: inout ChatOptions) -> PIIRedactor.StreamingRestorer? {
+        let settings = PIIRedactor.currentSettings()
+        guard settings.active else { return nil }
+        guard !PIIRedactor.isLocalProvider(config) else { return nil }   // 本地不出本机,跳过
+
+        var map = PIIRedactor.RedactionMap()
+        // 顺序:prompt → systemPrompt → contextSummary → priorTurns,共用同一份 map(同一原文复用同一占位符)。
+        let p = PIIRedactor.redact(prompt, settings: settings, map: map)
+        prompt = p.text; map = p.map
+        if let sys = options.systemPrompt {
+            let r = PIIRedactor.redact(sys, settings: settings, map: map)
+            options.systemPrompt = r.text; map = r.map
+        }
+        if let sum = options.contextSummary {
+            let r = PIIRedactor.redact(sum, settings: settings, map: map)
+            options.contextSummary = r.text; map = r.map
+        }
+        if !options.priorTurns.isEmpty {
+            options.priorTurns = options.priorTurns.map { turn in
+                let u = PIIRedactor.redact(turn.userText, settings: settings, map: map)
+                map = u.map
+                let a = PIIRedactor.redact(turn.assistantText, settings: settings, map: map)
+                map = a.map
+                return PriorTurn(userText: u.text, assistantText: a.text)
+            }
+        }
+        // 一处 PII 都没命中 → 无需还原,直通(省掉流式还原开销)。
+        guard !map.isEmpty else { return nil }
+        return PIIRedactor.StreamingRestorer(map: map)
+    }
+    // MARK: - [PII] end
 
     private func optionsFor(config: ProviderConfig, systemPromptOverride: String) -> ChatOptions {
         let sys = systemPromptOverride.trimmingCharacters(in: .whitespacesAndNewlines)

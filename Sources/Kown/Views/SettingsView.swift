@@ -31,6 +31,9 @@ struct SettingsView: View {
         case updates
         case changelog
         case debugLog
+        // MARK: - [PII]
+        case privacy
+        // MARK: - [PII] end
 
         var id: String { rawValue }
         var label: String {
@@ -58,6 +61,9 @@ struct SettingsView: View {
             case .updates:     return "软件更新"
             case .changelog:   return "更新日志"
             case .debugLog:    return "调试日志"
+            // MARK: - [PII]
+            case .privacy:     return "隐私脱敏"
+            // MARK: - [PII] end
             }
         }
         var symbol: String {
@@ -85,6 +91,9 @@ struct SettingsView: View {
             case .updates:     return "arrow.down.circle"
             case .changelog:   return "sparkles"
             case .debugLog:    return "ladybug"
+            // MARK: - [PII]
+            case .privacy:     return "hand.raised.fill"
+            // MARK: - [PII] end
             }
         }
         var tint: Color {
@@ -112,6 +121,9 @@ struct SettingsView: View {
             case .updates:     return Color(red: 0.57, green: 0.42, blue: 0.82)
             case .changelog:   return Color(red: 0.95, green: 0.57, blue: 0.16)
             case .debugLog:    return Color(red: 0.46, green: 0.49, blue: 0.55)
+            // MARK: - [PII]
+            case .privacy:     return Color(red: 0.16, green: 0.52, blue: 0.50)
+            // MARK: - [PII] end
             }
         }
     }
@@ -224,6 +236,10 @@ struct SettingsView: View {
                         ChangelogView(embeddedInSettings: true)
                     case .debugLog:
                         DebugLogSettingsView()
+                    // MARK: - [PII]
+                    case .privacy:
+                        PrivacySettingsView()
+                    // MARK: - [PII] end
                     }
                 }
             }
@@ -586,7 +602,7 @@ struct SettingsView: View {
         [
             ("基础", [.providers, .prompts, .skills, .deviceTools, .github]),
             ("工作流", [.personas, .chains, .mcp, .webSearch, .tts, .scheduler, .performance]),
-            ("数据", [.sync, .backup, .memory, .favorites]),
+            ("数据", [.sync, .backup, .memory, .favorites, .privacy]),
             ("洞察", [.usage, .dashboard, .leaderboard, .eval]),
             ("版本", [.updates, .changelog, .debugLog])
         ]
@@ -828,6 +844,10 @@ struct SettingsView: View {
                 ChangelogView(embeddedInSettings: true)
             case .debugLog:
                 DebugLogSettingsView()
+            // MARK: - [PII]
+            case .privacy:
+                PrivacySettingsView()
+            // MARK: - [PII] end
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -1202,6 +1222,9 @@ struct SettingsView: View {
         case .updates:     return "通过 Sparkle 检查、下载并自动安装最新版本。"
         case .changelog:   return "查看每个版本的新功能、修复和改进。"
         case .debugLog:    return "记录每个网络请求的完整请求体与原始返回,排查空响应等问题。"
+        // MARK: - [PII]
+        case .privacy:     return "发往云端模型前,在本机把手机号 / 邮箱 / 身份证 / 银行卡(可选人名)替换成占位符,返回时还原。本地模型自动跳过。默认关闭。"
+        // MARK: - [PII] end
         }
     }
 
