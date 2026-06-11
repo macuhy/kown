@@ -24,6 +24,9 @@ final class KeyboardViewController: UIInputViewController {
         model.sendAction = { [weak self] in
             self?.textDocumentProxy.insertText("\n")
         }
+        model.deleteBackward = { [weak self] in
+            self?.textDocumentProxy.deleteBackward()
+        }
 
         let host = UIHostingController(rootView: KeyboardRootView(model: model, controller: self))
         addChild(host)

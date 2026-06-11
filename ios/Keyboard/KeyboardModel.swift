@@ -107,6 +107,8 @@ final class KeyboardModel {
     var fetchContext: () -> String = { "" }
     /// 由 KeyboardViewController 注入:向宿主输入框发送 Return(发送/换行)。
     var sendAction: () -> Void = {}
+    /// 由 KeyboardViewController 注入:删除宿主输入框光标前一个字符(textDocumentProxy.deleteBackward)。
+    var deleteBackward: () -> Void = {}
     /// 宿主输入框当前 Return 键的文案(发送 / 换行 / 完成 / …)。
     var returnKeyLabel: String = "换行"
 

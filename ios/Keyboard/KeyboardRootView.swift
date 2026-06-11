@@ -160,6 +160,21 @@ struct KeyboardRootView: View {
                                 in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
 
+            // 删除键:这是 AI 操作面板没有普通打字键,提供一个退格删除宿主输入框文字的入口。
+            if model.hasFullAccess && model.config != nil {
+                Button {
+                    model.deleteBackward()
+                } label: {
+                    Image(systemName: "delete.left")
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                        .frame(width: 40, height: 32)
+                        .background(Color(uiColor: .secondarySystemBackground),
+                                    in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+
             if !model.sourceNote.isEmpty {
                 Text(model.sourceNote)
                     .font(.caption2)
