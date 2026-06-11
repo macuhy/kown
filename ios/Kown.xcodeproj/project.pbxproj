@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		0069292EC92DE39B7BE5BCA4 /* KownWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FE22A615488C8575DAA184 /* KownWatchApp.swift */; };
 		0131581F99E2EF3713469E6A /* AgentStepsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82EB90C2CBC242E2F937C9A7 /* AgentStepsView.swift */; };
+		016D8068BC45BD3431CB03CF /* MeetingNotes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01F0748A455A4C341408D64E /* MeetingNotes.swift */; };
 		04AA2820B08DD9FACE8D1F50 /* FirecrawlClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09F9C0C72C5E6B8BE0912EC5 /* FirecrawlClient.swift */; };
 		0577733FA1BAFA1BAEA4D3F5 /* WidgetBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7D922F336CE8710523C5561 /* WidgetBridge.swift */; };
 		0806425266F35789AC6536B5 /* ChainRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBFEC89F18F75162E6DE8151 /* ChainRunner.swift */; };
@@ -119,6 +120,7 @@
 		7B914434F849088F827B0CC1 /* DeepTaskLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB5D2208E20F176A8B8B8186 /* DeepTaskLiveActivity.swift */; };
 		7C5BB8BFF375E8C3C22E5D67 /* VoiceConversationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92FA792E1FD684E441AFF1C3 /* VoiceConversationView.swift */; };
 		8011AB7B5BF36614B3CD8F7D /* OCRService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 330B0594740131BC9AD86870 /* OCRService.swift */; };
+		805ED76EA852C31701257DA1 /* PrivacySettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B582CFD690CA8A8575884483 /* PrivacySettingsView.swift */; };
 		8283A133D79D73A6A1670354 /* KeyboardViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0793E9DE5B268C0C872EC089 /* KeyboardViewController.swift */; };
 		8341991AF39A8425B699B75E /* BackgroundCompanion.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE6EDBB6EE19B3E06EB8BA46 /* BackgroundCompanion.swift */; };
 		83914919DC4C2E50507671B0 /* AppViewModel+Persona.swift in Sources */ = {isa = PBXBuildFile; fileRef = 930B9ACFF11DE0FB4D41A1E2 /* AppViewModel+Persona.swift */; };
@@ -152,6 +154,7 @@
 		A3F8E6F819337B710DD7A652 /* Conversation.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9C7AC3CC81D28CC3EC26758 /* Conversation.swift */; };
 		A4286AD296532B8694866E4B /* CitationSourceSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1FBF5DD5C29AF37AE57C20C /* CitationSourceSheet.swift */; };
 		A4BA26FF0D7EEA0E647942EF /* LocalRAG.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79D93DCE4450889A1414E77A /* LocalRAG.swift */; };
+		A63D53D5422FFD2ACE92D058 /* DocumentIngestor.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCA90955CC73F2C4C85BAC91 /* DocumentIngestor.swift */; };
 		A657A7B02E1C3D75AFCB934F /* WatchAssets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 71536D86BD802008C5004F4E /* WatchAssets.xcassets */; };
 		A80D330C848DB6E36CD85DAA /* OCRService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 330B0594740131BC9AD86870 /* OCRService.swift */; };
 		A93778AC3AD80A405E91C720 /* WatchConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2B3F9C5296B8CFFC385426A /* WatchConfig.swift */; };
@@ -179,25 +182,30 @@
 		C6654BF5F9919C4F487B8FC1 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E35C0AAFF7D2C70C8E2A87CD /* SettingsView.swift */; };
 		C78996E9CA30ECC970C788A5 /* PromptInsertSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9225F3D1DFEE437FE2D4A831 /* PromptInsertSheet.swift */; };
 		CA87B2B5A5F436A16EB363A1 /* WatchProvisioning.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98A906B0B941174A4522ACB4 /* WatchProvisioning.swift */; };
+		CB2E618BE3375CCC30700ACD /* MeetingNotesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F26532279DCE60DD3217C65 /* MeetingNotesView.swift */; };
 		CC1552B897246AAAD54DED89 /* WatchWidgetShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = 462FAFE6D8DE51C074C15814 /* WatchWidgetShared.swift */; };
 		CD04901B5FD0DC27455DEA7E /* SharedInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3F11DFFB8A9FFE6DB50744E /* SharedInbox.swift */; };
 		CDFC3FDA672F91DD8D4625D8 /* PromptLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1702AA0FBEAF53BA209851D3 /* PromptLibraryView.swift */; };
 		CF1D44E619A154597DA7913A /* KeyboardConfigBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5A1425D45270006C2A774DD /* KeyboardConfigBridge.swift */; };
 		CFA048418CE5060B3A8F1948 /* KnowledgeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24972427100FFEF10F125CA6 /* KnowledgeView.swift */; };
 		CFF9005E44B1ED1F91895360 /* MemoryExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59EBF4CDBC6CBE88276707F4 /* MemoryExtractor.swift */; };
+		D3690CDE435700CBAA2D4869 /* VoiceActivityDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E63DF501FCBEA16935FF4D1 /* VoiceActivityDetector.swift */; };
 		D37D3E8240DEB54160D94C8F /* MacClipboardActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BB288DCD6F24E1A079F84CD /* MacClipboardActions.swift */; };
 		D45CCB09544429246689C809 /* TTSConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04A1D89FDE418310F86252CD /* TTSConfig.swift */; };
 		D7332E40CDB3F891B4CBF817 /* SummarizeLinkIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20BADD3ED97E1EEE9E591276 /* SummarizeLinkIntent.swift */; };
 		D7CFCCB6B48B7C5B8C1BD753 /* ToolRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA6FD3F87CC14D2137033982 /* ToolRouter.swift */; };
 		DE2F9170F1B8CA0B9EB0A70B /* ScheduledTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21BD6D3F7F8646A42D81AF05 /* ScheduledTask.swift */; };
 		DEFDBEA0F65071DB6F94261A /* PendingFileWritesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A556D42C7BC4D52477DBD55 /* PendingFileWritesView.swift */; };
+		E08E007019E7B8CE0BD87FE8 /* AudioTranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C5017B94C8D2DDD7ED17805 /* AudioTranscriptionService.swift */; };
 		E1EDD91FC9A168156721DE1C /* MCPSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BCC447C25F1D74B5D5EDB23 /* MCPSession.swift */; };
 		E3D67524B05E79C3A1292833 /* SynthesisService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42775EDE891788EC6007019D /* SynthesisService.swift */; };
 		E4267F2E961E70EA0EFE57A7 /* CodeSandboxService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A54BD68A818D07424D12A5BC /* CodeSandboxService.swift */; };
+		E46C57AA81B1D3D85E2CEF61 /* MeetingNotesSummarizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D48DB339181BA91F47161579 /* MeetingNotesSummarizer.swift */; };
 		E476A4B522B8A761BE0D6B5F /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6FD94D467DED20B51080333 /* SidebarView.swift */; };
 		E5E2A454A6F97E841940F174 /* InputBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C04EF4455512C9A909E259AD /* InputBarView.swift */; };
 		E64396294AA8548734D2685A /* ModelLeaderboardStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32D8C894F98EB9753795AB5A /* ModelLeaderboardStore.swift */; };
 		E75F3AE6650D9CA6487EEE8E /* AppViewModel+GitHub.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C5B0D8D92210F6F94901E06 /* AppViewModel+GitHub.swift */; };
+		E8DF5D15E48CDD384DC3D451 /* PIIRedactor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BC84EA35CA7F0A761DA3D4A /* PIIRedactor.swift */; };
 		EA1AC8AA47EB259469AA9204 /* MCPStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADF164D41A452DE898CC5160 /* MCPStore.swift */; };
 		EA91D719497A9303E2E38C52 /* KownApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DF6818851B93421ECA4E3A9 /* KownApp.swift */; };
 		EB6A0B7FE348DA2E94CAE8E3 /* PromptHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 525A51A1B37FA00A2DCF4B6F /* PromptHistoryStore.swift */; };
@@ -294,6 +302,7 @@
 /* Begin PBXFileReference section */
 		018F8104DC4500AA2A85C7D0 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		01C6440E1BA18B0B39D27F54 /* KeyboardScreenshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardScreenshot.swift; sourceTree = "<group>"; };
+		01F0748A455A4C341408D64E /* MeetingNotes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingNotes.swift; sourceTree = "<group>"; };
 		024CBFE5F4874DACF9F38D7E /* MCPSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPSettingsView.swift; sourceTree = "<group>"; };
 		04A1D89FDE418310F86252CD /* TTSConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSConfig.swift; sourceTree = "<group>"; };
 		04CEE855B57F844FAE5C0B10 /* AppViewModel+Consensus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppViewModel+Consensus.swift"; sourceTree = "<group>"; };
@@ -306,10 +315,12 @@
 		09F9C0C72C5E6B8BE0912EC5 /* FirecrawlClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirecrawlClient.swift; sourceTree = "<group>"; };
 		0BA2DF2D3D56CD5E2A5C1119 /* ArtifactBlock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtifactBlock.swift; sourceTree = "<group>"; };
 		0BB288DCD6F24E1A079F84CD /* MacClipboardActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacClipboardActions.swift; sourceTree = "<group>"; };
+		0C5017B94C8D2DDD7ED17805 /* AudioTranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioTranscriptionService.swift; sourceTree = "<group>"; };
 		0D645C797069A3DE2337B644 /* MCPServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPServer.swift; sourceTree = "<group>"; };
 		0DA6D1FF8E4A123472626AAD /* NeuralTTS.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NeuralTTS.swift; sourceTree = "<group>"; };
 		0DF6818851B93421ECA4E3A9 /* KownApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KownApp.swift; sourceTree = "<group>"; };
 		0EB39177D9D2AFD88D8C099E /* UpdateSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateSettingsView.swift; sourceTree = "<group>"; };
+		0F26532279DCE60DD3217C65 /* MeetingNotesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingNotesView.swift; sourceTree = "<group>"; };
 		1579F4433E6315F8F389A769 /* CLIPendingPrompt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLIPendingPrompt.swift; sourceTree = "<group>"; };
 		15D0C046F529DCD6B7F2817E /* KownKeyboard.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = KownKeyboard.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		1702AA0FBEAF53BA209851D3 /* PromptLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptLibraryView.swift; sourceTree = "<group>"; };
@@ -353,6 +364,7 @@
 		4B2FF343C76EE2CFEBA65443 /* ChangelogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChangelogView.swift; sourceTree = "<group>"; };
 		4B33D99C78787CD1C29BF517 /* WorkspaceManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceManager.swift; sourceTree = "<group>"; };
 		4BA092EA11A22D3DD7476DB9 /* EvalRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EvalRunner.swift; sourceTree = "<group>"; };
+		4BC84EA35CA7F0A761DA3D4A /* PIIRedactor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PIIRedactor.swift; sourceTree = "<group>"; };
 		4C6E53123BAD518723E88034 /* BriefingWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefingWidget.swift; sourceTree = "<group>"; };
 		4E4E094E41276DCD5885F54E /* SyntaxHighlighter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyntaxHighlighter.swift; sourceTree = "<group>"; };
 		5025B9B883A8A0770DBE2E56 /* UsageDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageDashboardView.swift; sourceTree = "<group>"; };
@@ -407,6 +419,7 @@
 		8A6F20A976B98805EACD3A0C /* BackupStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupStore.swift; sourceTree = "<group>"; };
 		8BE1BFEFB25AC9AA2F9B1624 /* KeyboardModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardModel.swift; sourceTree = "<group>"; };
 		8DEFC40E9873DEDC8D163DAF /* WebSearchSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSearchSettingsView.swift; sourceTree = "<group>"; };
+		8E63DF501FCBEA16935FF4D1 /* VoiceActivityDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceActivityDetector.swift; sourceTree = "<group>"; };
 		9225F3D1DFEE437FE2D4A831 /* PromptInsertSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptInsertSheet.swift; sourceTree = "<group>"; };
 		92FA792E1FD684E441AFF1C3 /* VoiceConversationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceConversationView.swift; sourceTree = "<group>"; };
 		930B9ACFF11DE0FB4D41A1E2 /* AppViewModel+Persona.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppViewModel+Persona.swift"; sourceTree = "<group>"; };
@@ -432,6 +445,7 @@
 		ADA92F9F4265F9028E79506A /* WatchWebSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchWebSearch.swift; sourceTree = "<group>"; };
 		ADF164D41A452DE898CC5160 /* MCPStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPStore.swift; sourceTree = "<group>"; };
 		B4533FAD7ABC9BD4696DE27D /* PersonaStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonaStore.swift; sourceTree = "<group>"; };
+		B582CFD690CA8A8575884483 /* PrivacySettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacySettingsView.swift; sourceTree = "<group>"; };
 		B71C6F5AB4A30C9729DA6449 /* ArtifactPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtifactPreviewView.swift; sourceTree = "<group>"; };
 		B85A21C1BBF19EC1C0455BA0 /* UpdaterService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdaterService.swift; sourceTree = "<group>"; };
 		B89607358BC61C15FF77CAF8 /* KownWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = KownWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -449,10 +463,12 @@
 		C784D052713746629D4DCA0E /* PerformanceSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceSettingsView.swift; sourceTree = "<group>"; };
 		C7DAAA51347C72D66295BA63 /* ConversationSummarizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationSummarizer.swift; sourceTree = "<group>"; };
 		CA5805505A4905663EE74CE7 /* DeviceToolsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceToolsSettingsView.swift; sourceTree = "<group>"; };
+		CCA90955CC73F2C4C85BAC91 /* DocumentIngestor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentIngestor.swift; sourceTree = "<group>"; };
 		CE5C4405041E203FC52EA1BA /* DebateTurnsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebateTurnsView.swift; sourceTree = "<group>"; };
 		CE6EDBB6EE19B3E06EB8BA46 /* BackgroundCompanion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundCompanion.swift; sourceTree = "<group>"; };
 		CFDDC6E57D56E5FE87D2E871 /* AskKownIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskKownIntent.swift; sourceTree = "<group>"; };
 		D025C7805F828C5A7D33766C /* WrappingHStack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WrappingHStack.swift; sourceTree = "<group>"; };
+		D48DB339181BA91F47161579 /* MeetingNotesSummarizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingNotesSummarizer.swift; sourceTree = "<group>"; };
 		D543C2F2DA02ECE5F5FAE137 /* CouncilTurnsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CouncilTurnsView.swift; sourceTree = "<group>"; };
 		D670400A46606C585819F2CC /* Provider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Provider.swift; sourceTree = "<group>"; };
 		D76436AAFFE48E40E499C438 /* ProviderRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderRowView.swift; sourceTree = "<group>"; };
@@ -579,12 +595,14 @@
 				A7FB6008C2D33BD132FB334F /* MainContentView.swift */,
 				88D780422A7B7696C677A8B2 /* MarkdownText.swift */,
 				024CBFE5F4874DACF9F38D7E /* MCPSettingsView.swift */,
+				0F26532279DCE60DD3217C65 /* MeetingNotesView.swift */,
 				2CB350AD24EA8294A96ECF89 /* MemorySettingsView.swift */,
 				19C42B62D779696D4A48F9C7 /* ModeTabsView.swift */,
 				5A556D42C7BC4D52477DBD55 /* PendingFileWritesView.swift */,
 				C784D052713746629D4DCA0E /* PerformanceSettingsView.swift */,
 				655919E5276A12E37E387D95 /* PersonaPicker.swift */,
 				5CD51FC887E0A626E6D2C083 /* PersonaSettingsView.swift */,
+				B582CFD690CA8A8575884483 /* PrivacySettingsView.swift */,
 				9225F3D1DFEE437FE2D4A831 /* PromptInsertSheet.swift */,
 				1702AA0FBEAF53BA209851D3 /* PromptLibraryView.swift */,
 				D76436AAFFE48E40E499C438 /* ProviderRowView.swift */,
@@ -754,6 +772,7 @@
 				066FE4203C9EF0565D456149 /* AnthropicClient.swift */,
 				762CDAD4AAD71ABC98CDFAEA /* ArtifactExtractor.swift */,
 				1AC73FA88E40DA6DB0902EE2 /* ArtifactVersionStore.swift */,
+				0C5017B94C8D2DDD7ED17805 /* AudioTranscriptionService.swift */,
 				8A6F20A976B98805EACD3A0C /* BackupStore.swift */,
 				C55B3E38FB52C4C951FD64CE /* BatchRunner.swift */,
 				DBFEC89F18F75162E6DE8151 /* ChainRunner.swift */,
@@ -769,6 +788,7 @@
 				7001CD7173A6003309E0338A /* CrashLogger.swift */,
 				3B088C91A6C7E5BF2D288E27 /* DebugLogStore.swift */,
 				FB383352B4FDF16510CA2C35 /* DeepTaskEvents.swift */,
+				CCA90955CC73F2C4C85BAC91 /* DocumentIngestor.swift */,
 				F22FFF375DFABC3EF84B7018 /* EscalationAdvisor.swift */,
 				4BA092EA11A22D3DD7476DB9 /* EvalRunner.swift */,
 				413813311A24C7F55B0B1C3D /* EventKitService.swift */,
@@ -788,6 +808,7 @@
 				67C2675B072A72E2CEB50490 /* MCPClient.swift */,
 				1BCC447C25F1D74B5D5EDB23 /* MCPSession.swift */,
 				ADF164D41A452DE898CC5160 /* MCPStore.swift */,
+				D48DB339181BA91F47161579 /* MeetingNotesSummarizer.swift */,
 				59EBF4CDBC6CBE88276707F4 /* MemoryExtractor.swift */,
 				1EC284496AF678C1CD74658F /* MemoryStore.swift */,
 				32D8C894F98EB9753795AB5A /* ModelLeaderboardStore.swift */,
@@ -795,6 +816,7 @@
 				330B0594740131BC9AD86870 /* OCRService.swift */,
 				6652CB52E9921B5880BDFCFB /* OpenAICompatibleClient.swift */,
 				B4533FAD7ABC9BD4696DE27D /* PersonaStore.swift */,
+				4BC84EA35CA7F0A761DA3D4A /* PIIRedactor.swift */,
 				3217D675229F2C856721ACD3 /* PromptBuilders.swift */,
 				525A51A1B37FA00A2DCF4B6F /* PromptHistoryStore.swift */,
 				C635BF4CA8D4A79975C77578 /* PromptLibraryStore.swift */,
@@ -816,6 +838,7 @@
 				AA6FD3F87CC14D2137033982 /* ToolRouter.swift */,
 				B85A21C1BBF19EC1C0455BA0 /* UpdaterService.swift */,
 				7C7B12B5A033AA11149DE807 /* UsageStore.swift */,
+				8E63DF501FCBEA16935FF4D1 /* VoiceActivityDetector.swift */,
 				98A906B0B941174A4522ACB4 /* WatchProvisioning.swift */,
 				A7D922F336CE8710523C5561 /* WidgetBridge.swift */,
 				4B33D99C78787CD1C29BF517 /* WorkspaceManager.swift */,
@@ -879,6 +902,7 @@
 				671D479F29E08EBEC1F1B685 /* KnowledgeFolder.swift */,
 				0687940C49D7DC9598C4D2AE /* LLMStreamChunk.swift */,
 				0D645C797069A3DE2337B644 /* MCPServer.swift */,
+				01F0748A455A4C341408D64E /* MeetingNotes.swift */,
 				2D6422AC4D8871AC4783F65F /* Persona.swift */,
 				5E8B537708352E5EA070D4FE /* PromptChain.swift */,
 				D670400A46606C585819F2CC /* Provider.swift */,
@@ -1114,6 +1138,7 @@
 				6847559821CBF6966E14C15A /* ArtifactVersionStore.swift in Sources */,
 				B1C3734602EA607CCB60A9EF /* AskKownIntent.swift in Sources */,
 				1D2F258436D3A95D0C941FF2 /* Attachment.swift in Sources */,
+				E08E007019E7B8CE0BD87FE8 /* AudioTranscriptionService.swift in Sources */,
 				2DE4CB8A385A990438C05770 /* BackgroundAudioKeepalive.swift in Sources */,
 				8341991AF39A8425B699B75E /* BackgroundCompanion.swift in Sources */,
 				3CC5FEA9353CFE14294D54F2 /* BackupSettingsView.swift in Sources */,
@@ -1150,6 +1175,7 @@
 				190A990FC10735E5A3105034 /* DeepTaskEvents.swift in Sources */,
 				3E6FCE753AD36EC955F15DAA /* DeviceToolsSettingsView.swift in Sources */,
 				38123390632F07ACF834D2E5 /* DirectTurnsView.swift in Sources */,
+				A63D53D5422FFD2ACE92D058 /* DocumentIngestor.swift in Sources */,
 				8BBD742F51B41452CD0D5313 /* EditTurnSheet.swift in Sources */,
 				6D2E44573433660608F68953 /* EmptyStateCard.swift in Sources */,
 				23ADBD01F9963D858AD83748 /* EscalationAdvisor.swift in Sources */,
@@ -1191,6 +1217,9 @@
 				69BB4FF2EA193279647FB534 /* MacQuickAsk.swift in Sources */,
 				6C5BC5667F9AD4332419D490 /* MainContentView.swift in Sources */,
 				1F47FFDFD07EBB60A3637C0D /* MarkdownText.swift in Sources */,
+				016D8068BC45BD3431CB03CF /* MeetingNotes.swift in Sources */,
+				E46C57AA81B1D3D85E2CEF61 /* MeetingNotesSummarizer.swift in Sources */,
+				CB2E618BE3375CCC30700ACD /* MeetingNotesView.swift in Sources */,
 				CFF9005E44B1ED1F91895360 /* MemoryExtractor.swift in Sources */,
 				40F35937B86707BBB5CEE7E0 /* MemorySettingsView.swift in Sources */,
 				4757EB2D8C778E22DF9DED26 /* MemoryStore.swift in Sources */,
@@ -1200,6 +1229,7 @@
 				1DBC37746FCA3749A27AE462 /* NotesService.swift in Sources */,
 				A80D330C848DB6E36CD85DAA /* OCRService.swift in Sources */,
 				8C122A039F0ABC0D0CEC5D5D /* OpenAICompatibleClient.swift in Sources */,
+				E8DF5D15E48CDD384DC3D451 /* PIIRedactor.swift in Sources */,
 				DEFDBEA0F65071DB6F94261A /* PendingFileWritesView.swift in Sources */,
 				F727C3615DE3849FDB843581 /* PerformanceSettingsView.swift in Sources */,
 				43CF60DFB9E174558911F02D /* Persona.swift in Sources */,
@@ -1207,6 +1237,7 @@
 				12034E64B70A8EF6B20543C3 /* PersonaSettingsView.swift in Sources */,
 				944CB90A8920901980BA33A6 /* PersonaStore.swift in Sources */,
 				1D401FF4AC8DB5FE24672944 /* Platform.swift in Sources */,
+				805ED76EA852C31701257DA1 /* PrivacySettingsView.swift in Sources */,
 				0C232B91657AE51EBF9473DD /* PromptBuilders.swift in Sources */,
 				B97984674DD5744C615449E2 /* PromptChain.swift in Sources */,
 				EB6A0B7FE348DA2E94CAE8E3 /* PromptHistoryStore.swift in Sources */,
@@ -1259,6 +1290,7 @@
 				6E752F01958F053E21FD5E3F /* UsageDashboardView.swift in Sources */,
 				91AF69BB07BE8A51A139E82D /* UsageSettingsView.swift in Sources */,
 				BAB89506C06D863220F3662B /* UsageStore.swift in Sources */,
+				D3690CDE435700CBAA2D4869 /* VoiceActivityDetector.swift in Sources */,
 				7C5BB8BFF375E8C3C22E5D67 /* VoiceConversationView.swift in Sources */,
 				F67A36CA947A0CC0BCDB0188 /* VoteResultsCard.swift in Sources */,
 				CA87B2B5A5F436A16EB363A1 /* WatchProvisioning.swift in Sources */,
@@ -1373,7 +1405,7 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "KownWatch-Info.plist";
-				MARKETING_VERSION = 0.27.1;
+				MARKETING_VERSION = 0.28.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown.watchkitapp;
 				PROVISIONING_PROFILE_SPECIFIER = "Kown Watch AppStore";
 				SDKROOT = watchos;
@@ -1401,7 +1433,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.27.1;
+				MARKETING_VERSION = 0.28.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown.Share;
 				PROVISIONING_PROFILE_SPECIFIER = "Kown Share AppStore";
 				SDKROOT = iphoneos;
@@ -1427,7 +1459,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.27.1;
+				MARKETING_VERSION = 0.28.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown.watchkitapp.widgets;
 				PROVISIONING_PROFILE_SPECIFIER = "Kown Watch Widgets AppStore";
 				SDKROOT = watchos;
@@ -1572,7 +1604,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.27.1;
+				MARKETING_VERSION = 0.28.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown.widgets;
 				PROVISIONING_PROFILE_SPECIFIER = "Kown Widgets AppStore";
 				SDKROOT = iphoneos;
@@ -1598,7 +1630,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.27.1;
+				MARKETING_VERSION = 0.28.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown.Keyboard;
 				PROVISIONING_PROFILE_SPECIFIER = "Kown Keyboard AppStore";
 				SDKROOT = iphoneos;
@@ -1624,7 +1656,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.27.1;
+				MARKETING_VERSION = 0.28.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown.Share;
 				PROVISIONING_PROFILE_SPECIFIER = "Kown Share AppStore";
 				SDKROOT = iphoneos;
@@ -1650,7 +1682,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.27.1;
+				MARKETING_VERSION = 0.28.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown.widgets;
 				PROVISIONING_PROFILE_SPECIFIER = "Kown Widgets AppStore";
 				SDKROOT = iphoneos;
@@ -1676,7 +1708,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.27.1;
+				MARKETING_VERSION = 0.28.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown.Keyboard;
 				PROVISIONING_PROFILE_SPECIFIER = "Kown Keyboard AppStore";
 				SDKROOT = iphoneos;
@@ -1703,7 +1735,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.27.1;
+				MARKETING_VERSION = 0.28.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown;
 				PROVISIONING_PROFILE_SPECIFIER = "Kown AppStore";
 				SDKROOT = iphoneos;
@@ -1724,7 +1756,7 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "KownWatch-Info.plist";
-				MARKETING_VERSION = 0.27.1;
+				MARKETING_VERSION = 0.28.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown.watchkitapp;
 				PROVISIONING_PROFILE_SPECIFIER = "Kown Watch AppStore";
 				SDKROOT = watchos;
@@ -1752,7 +1784,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.27.1;
+				MARKETING_VERSION = 0.28.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown.watchkitapp.widgets;
 				PROVISIONING_PROFILE_SPECIFIER = "Kown Watch Widgets AppStore";
 				SDKROOT = watchos;
@@ -1781,7 +1813,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.27.1;
+				MARKETING_VERSION = 0.28.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown;
 				PROVISIONING_PROFILE_SPECIFIER = "Kown AppStore";
 				SDKROOT = iphoneos;
