@@ -17,6 +17,29 @@ final class VoiceLoopController: ObservableObject {
     @Published private(set) var confirmProgress: Double = 0
     @Published private(set) var confirmationNeedsManualSend = false
 
+    // MARK: - 连续对话(duplex / barge-in)模式
+    /// 连续模式开关(持久化):开启后每轮 TTS 朗读结束自动恢复聆听、跳过手动确认直接发送,
+    /// 且朗读期间用 VAD 监听用户开口 → 一开口立刻打断朗读转入聆听(barge-in)。
+    @Published var continuousMode: Bool = VoiceLoopController.loadContinuousMode() {
+        didSet {
+            VoiceLoopController.saveContinuousMode(continuousMode)
+            // 朗读中途关掉连续模式 → 立刻停掉 barge-in VAD,不再监听麦克风。
+            if !continuousMode { vad.stop() }
+        }
+    }
+    /// 朗读期间是否检测到了用户开口(VAD 命中),用于 runLoop 决定播完后行为。
+    private var bargedIn = false
+    /// barge-in 用的 VAD,仅在 .speaking 阶段且开启连续模式时运行。
+    private let vad = VoiceActivityDetector()
+    private static let continuousModeKey = "kown.voice.continuousMode.v1"
+
+    static func loadContinuousMode() -> Bool {
+        UserDefaults.standard.bool(forKey: continuousModeKey)
+    }
+    static func saveContinuousMode(_ on: Bool) {
+        UserDefaults.standard.set(on, forKey: continuousModeKey)
+    }
+
     private let viewModel: AppViewModel
     private var loopTask: Task<Void, Never>?
     private var isPaused = false
@@ -60,6 +83,7 @@ final class VoiceLoopController: ObservableObject {
     func stop() {
         loopTask?.cancel()
         loopTask = nil
+        vad.stop()
         SpeechRecognizer.shared.stop()
         SpeechService.shared.stop()
         pendingUtterance = ""
@@ -79,6 +103,7 @@ final class VoiceLoopController: ObservableObject {
             confirmProgress = 0
             confirmationNeedsManualSend = false
         }
+        vad.stop()
         SpeechRecognizer.shared.stop()
         SpeechService.shared.stop()
         phase = .paused
@@ -126,6 +151,8 @@ final class VoiceLoopController: ObservableObject {
 
     func interruptSpeechAndListen() {
         isPaused = false
+        bargedIn = true
+        vad.stop()
         SpeechService.shared.stop()
         phase = .listening
     }
@@ -165,9 +192,16 @@ final class VoiceLoopController: ObservableObject {
             }
             if Task.isCancelled { break }
             guard !heard.isEmpty else { await sleep(300); continue }  // 没听清,重听
-            guard let confirmed = await confirmHeardText(heard), !confirmed.isEmpty else {
-                await sleep(120)
-                continue
+            // 连续模式:跳过手动确认,静音判定到一句话说完就直接发,体感更接近实时助手。
+            let confirmed: String
+            if continuousMode {
+                confirmed = heard
+            } else {
+                guard let c = await confirmHeardText(heard), !c.isEmpty else {
+                    await sleep(120)
+                    continue
+                }
+                confirmed = c
             }
 
             // 2. 想(发送 + 等本轮跑完)
@@ -197,9 +231,28 @@ final class VoiceLoopController: ObservableObject {
             await waitIfPaused()
             if Task.isCancelled { break }
             phase = .speaking
+            bargedIn = false
             SpeechService.shared.speak(reply)
+            // 连续模式:朗读期间起 VAD,用户一开口立刻打断转聆听(barge-in)。
+            if continuousMode {
+                startBargeInDetection()
+            }
             await waitSpeakDone()
+            vad.stop()
+            // barge-in 命中时 interruptSpeechAndListen 已把 phase 置为 .listening,
+            // 这里不需要额外处理,直接回到 1 即可无缝继续听。
             // 4. 回到 1 继续听
+        }
+    }
+
+    /// 起 barge-in VAD:检测到用户开口就调 interruptSpeechAndListen 打断朗读。
+    /// 仅当仍在朗读阶段时才生效(避免播完后误触发)。
+    private func startBargeInDetection() {
+        vad.start { [weak self] in
+            guard let self else { return }
+            // 命中时若已不在朗读(已自然播完 / 被暂停),忽略。
+            guard self.phase == .speaking, self.continuousMode, !self.isPaused else { return }
+            self.interruptSpeechAndListen()
         }
     }
 
@@ -482,9 +535,30 @@ struct VoiceConversationView: View {
                 }
             }
             Spacer(minLength: 0)
+            continuousToggle
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 14)
+    }
+
+    /// 连续对话(duplex)开关:开启后自动发送 + 朗读时可被打断,体感接近实时语音助手。
+    private var continuousToggle: some View {
+        Button {
+            controller.continuousMode.toggle()
+        } label: {
+            VStack(spacing: 2) {
+                Image(systemName: controller.continuousMode ? "infinity.circle.fill" : "infinity.circle")
+                    .font(.system(size: 20, weight: .semibold))
+                Text("连续")
+                    .font(.system(size: 9, weight: .bold))
+            }
+            .foregroundStyle(controller.continuousMode ? viewModel.currentMode.kownTint : .secondary)
+        }
+        .buttonStyle(.plain)
+        .help(controller.continuousMode
+              ? "连续对话已开启:说完自动发送,朗读时一开口即打断"
+              : "开启连续对话:说完自动发送,朗读时一开口即打断")
+        .accessibilityLabel(controller.continuousMode ? "关闭连续对话" : "开启连续对话")
     }
 
     // MARK: - 对话历史(可滚动)
@@ -799,14 +873,18 @@ struct VoiceConversationView: View {
         case .idle:
             return "点击开始进入语音循环"
         case .listening:
-            return controller.transcript.isEmpty ? "请开始说话，静音后会进入确认" : controller.transcript
+            if controller.transcript.isEmpty {
+                return controller.continuousMode ? "请开始说话，静音后自动发送" : "请开始说话，静音后会进入确认"
+            }
+            return controller.transcript
         case .confirming:
             return controller.pendingUtterance.isEmpty ? "可重说，也可等待自动发送" : controller.pendingUtterance
         case .thinking:
             return "正在生成回答，可取消或暂停后续聆听"
         case .speaking:
             if speech.preparing { return "正在合成语音…" }
-            return speech.lastNote ?? "正在朗读回答，可打断并继续提问"
+            if let note = speech.lastNote { return note }
+            return controller.continuousMode ? "正在朗读回答，开口即可打断提问" : "正在朗读回答，可打断并继续提问"
         case .paused:
             return viewModel.isRunning ? "当前回答仍在生成，完成后等待继续" : "语音输入和朗读已暂停"
         case .error(let msg):
