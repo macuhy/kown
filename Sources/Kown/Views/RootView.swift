@@ -5,6 +5,8 @@ struct RootView: View {
     @State private var showSettings = false
     @State private var showConversations = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    // [MeetingNotes] 录音/会议转写工具 sheet 开关。
+    @State private var showMeetingNotes = false
 
     var body: some View {
         Group {
@@ -49,6 +51,10 @@ struct RootView: View {
                 settingsButton
             }
             #else
+            // [MeetingNotes] Mac 工具栏入口:录音/会议转写。
+            ToolbarItem(placement: .primaryAction) {
+                meetingNotesButton
+            }
             ToolbarItem(placement: .primaryAction) {
                 artifactToggleButton
             }
@@ -65,6 +71,10 @@ struct RootView: View {
         }
         .sheet(isPresented: $viewModel.showCommandPalette) {
             CommandPaletteView(viewModel: viewModel)
+        }
+        // [MeetingNotes] 录音/会议转写工具。
+        .sheet(isPresented: $showMeetingNotes) {
+            MeetingNotesView(viewModel: viewModel)
         }
     }
 
@@ -137,6 +147,13 @@ struct RootView: View {
                 .presentationDragIndicator(.visible)
                 .presentationCornerRadius(28)
         }
+        // [MeetingNotes] 录音/会议转写工具(iOS)。
+        .sheet(isPresented: $showMeetingNotes) {
+            MeetingNotesView(viewModel: viewModel)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .presentationCornerRadius(28)
+        }
     }
 
     private var iOSNavigationIdentity: some View {
@@ -187,6 +204,22 @@ struct RootView: View {
                 #endif
         }
         .help("Artifacts 预览")
+    }
+
+    // [MeetingNotes] 工具栏按钮:打开录音/会议转写工具。
+    private var meetingNotesButton: some View {
+        Button {
+            showMeetingNotes = true
+        } label: {
+            Image(systemName: "waveform.badge.mic")
+                #if os(iOS)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(.primary)
+                .frame(width: 36, height: 36)
+                .background(.thinMaterial, in: Circle())
+                #endif
+        }
+        .help("录音 / 会议转写 → AI 纪要")
     }
 
     private var settingsButton: some View {
@@ -264,6 +297,12 @@ struct RootView: View {
                 viewModel.showArtifactPanel = true
             } label: {
                 Label("Artifacts 预览", systemImage: "rectangle.righthalf.inset.filled")
+            }
+            // [MeetingNotes] iOS「更多操作」菜单入口。
+            Button {
+                showMeetingNotes = true
+            } label: {
+                Label("会议纪要", systemImage: "waveform.badge.mic")
             }
             Button {
                 showSettings = true
