@@ -73,6 +73,7 @@ struct AnswerFooterBar: View {
             chip(copied ? "已复制" : "复制", systemImage: copied ? "checkmark" : "doc.on.doc",
                  color: copied ? .green : .secondary)
         }.buttonStyle(.borderless)
+        if !text.isEmpty { QuoteReplyMenu(text: text) }
         if !text.isEmpty { SaveToDeviceMenu(text: text) }
     }
 
@@ -648,6 +649,7 @@ struct HistoricalResponseCard: View {
         }
         .buttonStyle(.borderless)
         .disabled(text.isEmpty)
+        if !text.isEmpty { QuoteReplyMenu(text: text, compact: compactFooter) }
         if !text.isEmpty { SaveToDeviceMenu(text: text, compact: compactFooter) }
     }
 
@@ -1457,6 +1459,7 @@ struct ChairSummaryCard: View {
                        tint: copied ? .green : .secondary)
         }
         .buttonStyle(.borderless)
+        if !shownText.isEmpty { QuoteReplyMenu(text: shownText) }
         if !shownText.isEmpty { SaveToDeviceMenu(text: shownText) }
     }
 
