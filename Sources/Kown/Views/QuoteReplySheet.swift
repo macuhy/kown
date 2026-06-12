@@ -43,6 +43,14 @@ final class QuoteReplyCenter: ObservableObject {
             pendingPrompt = "请翻译以下内容:\n\(block)"
         }
     }
+
+    /// 直接预填一段完整文本(不做引用块格式化),同样不自动发送。
+    /// 供代码块「让 AI 修复」等已自带格式(代码围栏 + 报错)的入口使用。
+    func prefill(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        pendingPrompt = trimmed + "\n"
+    }
 }
 
 // MARK: - 答卡入口(footer 小药丸菜单)
