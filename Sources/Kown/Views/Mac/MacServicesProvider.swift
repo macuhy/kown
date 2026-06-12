@@ -34,8 +34,41 @@ final class MacServicesProvider: NSObject {
     /// 保证冷启动被服务唤起时也能收到回调。
     func register() {
         NSApp.servicesProvider = self
+        // 把四个服务写进系统的服务启用表(= 系统设置→键盘→服务 里的勾选),
+        // 用户无需手动勾选;必须在 NSUpdateDynamicServices 之前写好。
+        ensureServicesEnabled()
         // 让 pbs 重扫一遍服务声明 —— 新装/更新 app 后服务菜单能尽快出现,无需注销。
         NSUpdateDynamicServices()
+    }
+
+    /// Info.plist NSServices 的 (菜单标题, NSMessage) 清单 —— 改服务声明时这里要同步。
+    private static let serviceEntries: [(title: String, message: String)] = [
+        ("用 Kown 翻译", "kownServiceTranslate"),
+        ("用 Kown 总结", "kownServiceSummarize"),
+        ("问 Kown", "kownServiceAsk"),
+        ("存入 Kown 知识库", "kownServiceSaveToKnowledge"),
+    ]
+
+    /// 服务的启用状态存在 `pbs` 偏好域的 NSServicesStatus 里,key 形如
+    /// "bundleID - 菜单标题 - NSMessage"。没有条目时系统按默认规则决定是否出现在
+    /// 右键菜单,部分 app 里会缺席;这里主动写入「双菜单启用」,让服务装完即用。
+    /// 只补缺失的条目 —— 用户在系统设置里手动关过的(条目已存在)绝不覆盖。
+    private func ensureServicesEnabled() {
+        guard let bundleID = Bundle.main.bundleIdentifier,
+              let pbs = UserDefaults(suiteName: "pbs") else { return }
+        var status = pbs.dictionary(forKey: "NSServicesStatus") ?? [:]
+        var changed = false
+        for entry in Self.serviceEntries {
+            let key = "\(bundleID) - \(entry.title) - \(entry.message)"
+            guard status[key] == nil else { continue }
+            status[key] = [
+                "enabled_context_menu": true,
+                "enabled_services_menu": true,
+                "presentation_modes": ["ContextMenu": true, "ServicesMenu": true],
+            ]
+            changed = true
+        }
+        if changed { pbs.set(status, forKey: "NSServicesStatus") }
     }
 
     /// 注入主 ViewModel,并补发注册前积压的服务请求。
