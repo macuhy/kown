@@ -185,6 +185,11 @@ final class AppViewModel {
     var deepAgentEnabledForNextSend: Bool {
         didSet { UserDefaults.standard.set(deepAgentEnabledForNextSend, forKey: Self.deepAgentToggleKey) }
     }
+    /// 输入栏「深度研究」开关(仅 Direct,需 Web Search 已配置)— 开启后本次发送走深度研究引擎:
+    /// 大纲→搜索→抓正文→提炼→缺口自查 多轮循环,产出带 [n] 角标与参考文献的长报告。持久化。
+    var deepResearchEnabledForNextSend: Bool {
+        didSet { UserDefaults.standard.set(deepResearchEnabledForNextSend, forKey: Self.deepResearchToggleKey) }
+    }
     /// 技能库(命名的「系统提示 + 工具白名单」能力包)。
     let skillsStore = SkillsStore()
     /// Persona 库(可切换的 Agent 档案:系统提示 + 默认模型 + 工具/技能/知识库打包)。
@@ -257,6 +262,7 @@ final class AppViewModel {
     private static let deviceToolsToggleKey = "kown.deviceTools.toggle.v1"
     private static let mcpToggleKey = "kown.mcp.toggle.v1"
     private static let deepAgentToggleKey = "kown.deepAgent.toggle.v1"
+    private static let deepResearchToggleKey = "kown.deepResearch.toggle.v1"
     private static let skillAutoTriggerKey = "kown.skill.autoTrigger.v1"
     private static let autoTagKey = "kown.autoTag.v1"
     // 发送编排已移到 AppViewModel+Send.swift,以下原 private 状态降为 internal 供其访问。
@@ -295,6 +301,7 @@ final class AppViewModel {
         self.deviceToolsEnabledForNextSend = UserDefaults.standard.bool(forKey: Self.deviceToolsToggleKey)
         self.mcpEnabledForNextSend = UserDefaults.standard.bool(forKey: Self.mcpToggleKey)
         self.deepAgentEnabledForNextSend = UserDefaults.standard.bool(forKey: Self.deepAgentToggleKey)
+        self.deepResearchEnabledForNextSend = UserDefaults.standard.bool(forKey: Self.deepResearchToggleKey)
         self.fileToolsEnabledForNextSend = UserDefaults.standard.bool(forKey: Self.fileToolsToggleKey)
         // 自动触发默认开:首次启动 UserDefaults 没有该键时取 true。
         self.skillAutoTriggerEnabled = (UserDefaults.standard.object(forKey: Self.skillAutoTriggerKey) as? Bool) ?? true

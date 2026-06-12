@@ -68,6 +68,12 @@ struct ToolStep: Identifiable, Sendable, Hashable, Codable {
         case "local_read_file":  return "读取本地文件"
         case "local_list_dir":   return "列出目录"
         case "local_write_file": return "暂存文件改动"
+        // 深度研究引擎的伪工具步骤(DeepResearchEngine,不暴露给模型)。
+        case "research_outline": return "研究大纲"
+        case "research_scrape":  return "抓取正文"
+        case "research_digest":  return "提炼要点"
+        case "research_gap":     return "缺口自查"
+        case "research_report":  return "综合报告"
         default:
             // MCP 工具:mcp__<slug>__<tool> → 「<tool> · <slug>」,去掉前缀更易读。
             if toolName.hasPrefix("mcp__") {
@@ -108,6 +114,11 @@ struct ToolStep: Identifiable, Sendable, Hashable, Codable {
         case "create_note":      return "note.text"
         case "github_read_file": return "chevron.left.forwardslash.chevron.right"
         case "local_read_file", "local_list_dir", "local_write_file": return "folder"
+        case "research_outline": return "list.number"
+        case "research_scrape":  return "doc.text.magnifyingglass"
+        case "research_digest":  return "text.badge.checkmark"
+        case "research_gap":     return "questionmark.circle"
+        case "research_report":  return "doc.richtext"
         default:                  return toolName.hasPrefix("mcp__") ? "powerplug" : "wrench.and.screwdriver"
         }
     }
