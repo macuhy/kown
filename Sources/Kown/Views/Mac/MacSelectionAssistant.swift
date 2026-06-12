@@ -225,6 +225,8 @@ final class SelectionAssistantState {
     private(set) var result = ""
     private(set) var errorText: String?
     private(set) var providerName = ""
+    /// 思考型模型正在输出思考、正文还没来(占位文案显示「思考中…」)。
+    private(set) var isThinking = false
 
     /// 用户指定的生成模型(nil = 自动:主席优先)。跨次唤起持久化。
     private(set) var chosenProviderID: UUID?
@@ -266,17 +268,28 @@ final class SelectionAssistantState {
 
         task = Task { [weak self] in
             guard let self else { return }
+            var collected = ""
+            var sawReasoning = false
             do {
                 let apiKey = (try? KeychainStore.load(id: cfg.id)) ?? ""
                 let client = ProviderRegistry.client(for: cfg.kind)
-                let options = ChatOptions(systemPrompt: nil, temperature: 0.3, maxTokens: 2048)
-                var collected = ""
+                // maxTokens 给足:思考型模型(豆包/DeepSeek thinking)的思考也计入输出上限,
+                // 2048 会被思考吃光导致正文为空。
+                let options = ChatOptions(systemPrompt: nil, temperature: 0.3, maxTokens: 8192)
                 for try await chunk in client.stream(prompt: prompt, options: options,
                                                      config: cfg, apiKey: apiKey) {
                     if Task.isCancelled { break }
-                    if case .text(let t) = chunk {
+                    switch chunk {
+                    case .text(let t):
                         collected += t
                         self.result = collected
+                    case .reasoning:
+                        // 思考过程不上屏,但置位标记:占位文案变「思考中…」,
+                        // 跑完没正文时也能给出明确的原因提示而不是空白框。
+                        sawReasoning = true
+                        self.isThinking = self.result.isEmpty
+                    default:
+                        break
                     }
                 }
             } catch {
@@ -284,7 +297,15 @@ final class SelectionAssistantState {
                     self.errorText = error.localizedDescription
                 }
             }
+            self.isThinking = false
             self.runningTitle = nil
+            // 流式正常结束但一个正文字都没有:把原因说清楚,别留空白框。
+            if !Task.isCancelled, self.errorText == nil,
+               collected.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                self.errorText = sawReasoning
+                    ? "模型只输出了思考过程,没有正文。换个非思考模型(右上角可选)或再试一次。"
+                    : "模型没有返回内容,稍后再试,或换个模型(右上角可选)。"
+            }
         }
     }
 
@@ -594,7 +615,9 @@ struct SelectionAssistantView: View {
                     .textSelection(.enabled)
             } else {
                 ScrollView {
-                    Text(state.result.isEmpty && state.isRunning ? "生成中…" : state.result)
+                    Text(state.result.isEmpty && state.isRunning
+                         ? (state.isThinking ? "思考中…" : "生成中…")
+                         : state.result)
                         .font(.callout)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .textSelection(.enabled)
