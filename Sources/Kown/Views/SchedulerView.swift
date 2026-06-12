@@ -827,6 +827,15 @@ private struct SchedulerTaskEditor: View {
                 }
 
                 editorSection(
+                    "增量记忆",
+                    subtitle: "记住上次运行的结果摘要,下次运行自动带上,只聚焦新增与变化 —— 适合盯更新、追热点、周期复盘类任务。",
+                    icon: "clock.arrow.circlepath",
+                    tint: schedulerTint
+                ) {
+                    incrementalControls
+                }
+
+                editorSection(
                     promptSectionTitle,
                     subtitle: promptSectionSubtitle,
                     icon: "text.quote",
@@ -1067,6 +1076,56 @@ private struct SchedulerTaskEditor: View {
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    /// [增量记忆] 增量开关 + 上次运行摘要的只读展示。
+    private var incrementalControls: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            controlCard(
+                title: "增量模式",
+                subtitle: "把上次运行摘要注入下次 prompt,避免重复汇报",
+                icon: "arrow.triangle.2.circlepath",
+                tint: schedulerTint
+            ) {
+                Toggle("", isOn: $task.incrementalMode)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+            }
+
+            if let digest = task.lastRunDigest?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !digest.isEmpty {
+                VStack(alignment: .leading, spacing: 7) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "text.alignleft")
+                            .font(.caption2.weight(.black))
+                            .foregroundStyle(schedulerTint)
+                        Text("上次运行摘要(只读)")
+                            .font(.caption.weight(.black))
+                        Spacer(minLength: 8)
+                        if let date = task.lastRunDate {
+                            Text(date.formatted(.dateTime.month(.twoDigits).day(.twoDigits)
+                                .hour(.twoDigits(amPM: .omitted)).minute(.twoDigits)))
+                                .font(.caption2.weight(.semibold))
+                                .monospacedDigit()
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    Text(digest)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(10)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(12)
+                .background(inputBackground(tint: schedulerTint))
+            } else {
+                Text("还没有运行记录,首次运行完成后这里会显示结果摘要。")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+        }
     }
 
     private var promptSectionTitle: String {

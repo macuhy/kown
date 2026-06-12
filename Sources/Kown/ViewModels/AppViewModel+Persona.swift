@@ -90,4 +90,36 @@ extension AppViewModel {
         }
         return fx
     }
+
+    // MARK: - Persona 维度记忆(send / 抽取调度的薄入口,正逻辑都在 MemoryStore)
+
+    /// send() 快照用:全局记忆 + 当前会话 Persona 的专属记忆。
+    /// Persona 关了长期记忆(或没绑 Persona)→ 只取全局。后续 BM25 打分仍在后台跑。
+    var memoryItemsForCurrentSend: [MemoryItem] {
+        MemoryStore.shared.injectableItems(personaID: memoryPersonaID(for: selectedConversation))
+    }
+
+    /// 会话的「记忆归属 Persona」:绑定了 Persona 且其长期记忆开着 → 该 Persona;
+    /// 否则(无绑定 / Persona 已删 / 长期记忆关)→ nil(全局)。
+    func memoryPersonaID(for conv: Conversation?) -> UUID? {
+        guard let pid = conv?.personaID,
+              let persona = personaStore.persona(id: pid),
+              persona.memoryEnabled else { return nil }
+        return pid
+    }
+
+    /// 该会话是否允许记忆抽取:绑定的 Persona 明确关了长期记忆 → 不抽取;
+    /// 其余(无 Persona / Persona 已删 / 开着)→ 允许。全局 `memoryInjectionEnabled` 总开关由调用方把守。
+    func memoryExtractionAllowed(for conv: Conversation) -> Bool {
+        guard let pid = conv.personaID, let persona = personaStore.persona(id: pid) else { return true }
+        return persona.memoryEnabled
+    }
+
+    /// 把抽取产物写进记忆库,按来源会话自动归属 Persona(开了长期记忆才归属;否则全局)。
+    /// 写入前 MemoryStore 会做归一化 / 高相似判重,近重复条目直接跳过。
+    @discardableResult
+    func storeExtractedMemories(_ texts: [String], from conv: Conversation) -> Int {
+        MemoryStore.shared.addMany(texts, sourceConversationID: conv.id,
+                                   personaID: memoryPersonaID(for: conv))
+    }
 }

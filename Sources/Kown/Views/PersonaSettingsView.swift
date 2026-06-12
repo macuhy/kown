@@ -261,6 +261,9 @@ private struct PersonaEditor: View {
     @State private var enableMCP: Bool
     @State private var selectedSkillIDs: Set<UUID>
     @State private var knowledgeFolderID: UUID?
+    @State private var memoryEnabled: Bool
+    /// 展开「该 Persona 的专属记忆」面板。
+    @State private var showingMemory = false
 
     private static let tint = PersonaSettingsView.tint
     /// 图标快捷选项(emoji)。
@@ -282,6 +285,7 @@ private struct PersonaEditor: View {
         _enableMCP = State(initialValue: persona.enableMCP)
         _selectedSkillIDs = State(initialValue: Set(persona.skillIDs))
         _knowledgeFolderID = State(initialValue: persona.knowledgeFolderID)
+        _memoryEnabled = State(initialValue: persona.memoryEnabled)
     }
 
     private var canSave: Bool {
@@ -380,6 +384,29 @@ private struct PersonaEditor: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+
+                Section("长期记忆") {
+                    Toggle("启用专属长期记忆", isOn: $memoryEnabled)
+                    Text("开着时,该 Persona 的会话会沉淀专属记忆,发送时注入「全局 + 该 Persona」的记忆;关掉则不抽取、也不注入它的专属记忆(全局记忆仍按「设置 ▸ 记忆」总开关生效)。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if !isCreating {
+                        Button {
+                            showingMemory = true
+                        } label: {
+                            HStack {
+                                Label("查看专属记忆", systemImage: "brain")
+                                Spacer()
+                                Text("\(MemoryStore.shared.items(ownedBy: persona.id).count) 条")
+                                    .foregroundStyle(.secondary)
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                        .disabled(!memoryEnabled)
+                    }
+                }
             }
             .formStyle(.grouped)
             .navigationTitle(isCreating ? "新建 Persona" : "编辑 Persona")
@@ -406,6 +433,7 @@ private struct PersonaEditor: View {
                         // 保持技能库的稳定顺序。
                         result.skillIDs = viewModel.skillsStore.skills.map(\.id).filter { selectedSkillIDs.contains($0) }
                         result.knowledgeFolderID = knowledgeFolderID
+                        result.memoryEnabled = memoryEnabled
                         onSave(result)
                     }
                     .disabled(!canSave)
@@ -416,6 +444,13 @@ private struct PersonaEditor: View {
             #else
             .frame(minHeight: 460)
             #endif
+            .sheet(isPresented: $showingMemory) {
+                PersonaMemorySheet(
+                    personaID: persona.id,
+                    personaName: name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        ? persona.name : name.trimmingCharacters(in: .whitespacesAndNewlines)
+                )
+            }
         }
     }
 

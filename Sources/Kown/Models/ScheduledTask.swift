@@ -62,6 +62,17 @@ struct ScheduledTask: Identifiable, Codable, Hashable, Sendable {
     /// 上次运行的一句话结果摘要(成功 = 答案摘要;失败 = 错误信息)。
     var lastRunSummary: String?
 
+    // MARK: 增量记忆(所有任务类型通用)
+
+    /// 上次运行**拿到有效结果**的时间。与 `lastRun` 不同:lastRun 是发火时间(失败也写,
+    /// 用于「当天已跑过」判断);本字段只在采收到结果时与 `lastRunDigest` 成对写回。
+    var lastRunDate: Date?
+    /// 上次运行结果的摘要(截断约 800 字)。增量模式下注入下次运行的 prompt,
+    /// 让模型聚焦新增与变化,不重复已报告内容。
+    var lastRunDigest: String?
+    /// 增量模式(默认开):下次运行自动带上上次摘要。关掉则每次都从零开始回答。
+    var incrementalMode: Bool
+
     init(
         id: UUID = UUID(),
         title: String = "",
@@ -80,7 +91,10 @@ struct ScheduledTask: Identifiable, Codable, Hashable, Sendable {
         agentDeviceTools: Bool = false,
         agentDeepMode: Bool = true,
         lastRunStatus: RunStatus? = nil,
-        lastRunSummary: String? = nil
+        lastRunSummary: String? = nil,
+        lastRunDate: Date? = nil,
+        lastRunDigest: String? = nil,
+        incrementalMode: Bool = true
     ) {
         self.id = id
         self.title = title
@@ -100,12 +114,16 @@ struct ScheduledTask: Identifiable, Codable, Hashable, Sendable {
         self.agentDeepMode = agentDeepMode
         self.lastRunStatus = lastRunStatus
         self.lastRunSummary = lastRunSummary
+        self.lastRunDate = lastRunDate
+        self.lastRunDigest = lastRunDigest
+        self.incrementalMode = incrementalMode
     }
 
     // 兼容旧 JSON(缺字段容错,避免整份解码失败丢任务)。
     enum CodingKeys: String, CodingKey {
         case id, title, prompt, kind, briefingTopics, mode, hour, minute, repeatsDaily, weekday, enabled, lastRun
         case agentWebSearch, agentMCP, agentDeviceTools, agentDeepMode, lastRunStatus, lastRunSummary
+        case lastRunDate, lastRunDigest, incrementalMode
     }
 
     init(from decoder: Decoder) throws {
@@ -128,6 +146,9 @@ struct ScheduledTask: Identifiable, Codable, Hashable, Sendable {
         self.agentDeepMode = try c.decodeIfPresent(Bool.self, forKey: .agentDeepMode) ?? true
         self.lastRunStatus = try c.decodeIfPresent(RunStatus.self, forKey: .lastRunStatus)
         self.lastRunSummary = try c.decodeIfPresent(String.self, forKey: .lastRunSummary)
+        self.lastRunDate = try c.decodeIfPresent(Date.self, forKey: .lastRunDate)
+        self.lastRunDigest = try c.decodeIfPresent(String.self, forKey: .lastRunDigest)
+        self.incrementalMode = try c.decodeIfPresent(Bool.self, forKey: .incrementalMode) ?? true
     }
 
     /// 是否为简报任务。
@@ -163,6 +184,30 @@ struct ScheduledTask: Identifiable, Codable, Hashable, Sendable {
         let names = ["日", "一", "二", "三", "四", "五", "六"]
         guard wd >= 1, wd <= 7 else { return nil }
         return "周" + names[wd - 1]
+    }
+
+    /// [增量记忆] 注入下次运行 prompt 的「上次运行回顾」段:
+    /// 增量模式开 + 有上次摘要时返回;否则 nil(首跑 / 关增量 / 上次失败没采到摘要)。
+    var incrementalPromptBlock: String? {
+        guard incrementalMode,
+              let digest = lastRunDigest?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !digest.isEmpty else { return nil }
+        let when: String
+        if let d = lastRunDate ?? lastRun {
+            let df = DateFormatter()
+            df.locale = Locale(identifier: "zh_CN")
+            df.dateFormat = "yyyy-MM-dd HH:mm"
+            when = df.string(from: d)
+        } else {
+            when = "此前"
+        }
+        return """
+        【上次运行回顾 · \(when)】
+        \(digest)
+        ——
+        以上是上次运行已报告过的内容。本次请聚焦**上次之后的新增与变化**,不要重复已报告的信息;\
+        若没有实质性新进展,请直接说明「与上次相比无明显变化」。
+        """
     }
 }
 

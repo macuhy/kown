@@ -167,7 +167,10 @@ extension AppViewModel {
         let knowledgeFolderForSend = currentKnowledgeFolder ?? personaFx.knowledgeFolder
             ?? projectKnowledgeFolder(of: conversations[convIdx])
         // memory items 取一份快照(O(1) COW),供后台 BM25 打分,避免触碰 @MainActor 的 MemoryStore。
-        let memoryItemsForSend: [MemoryItem] = memoryInjectionEnabled ? MemoryStore.shared.items : []
+        // 注入范围 = 全局记忆 + 当前 Persona 专属记忆(Persona 关闭长期记忆/未绑定时退化为仅全局)。
+        let memoryItemsForSend: [MemoryItem] = memoryInjectionEnabled
+            ? MemoryStore.shared.injectableItems(personaID: memoryPersonaID(for: conversations[convIdx]))
+            : []
         let memoryQueryForSend: String? = memoryInjectionEnabled ? trimmed : nil
         // 跨对话召回:取 conversations 值快照(COW,O(1)),后台用纯函数打分。排除当前会话避免自召回。
         let recallCorpusForSend: [Conversation] = recallEnabled ? conversations : []
@@ -1303,6 +1306,8 @@ extension AppViewModel {
         if let running = memoryExtractionTasks[convID], !running.isCancelled { return }
         guard let idx = conversations.firstIndex(where: { $0.id == convID }) else { return }
         let convSnapshot = conversations[idx]
+        // Persona 关闭了长期记忆时,该 Persona 的会话不做抽取。
+        guard memoryExtractionAllowed(for: convSnapshot) else { return }
         // 太短的会话不抽;距上次抽取又攒够增量轮才再抽。
         guard convSnapshot.turns.count >= MemoryExtractor.triggerTurnCount else { return }
         let remaining = convSnapshot.turns.count - convSnapshot.memoryExtractedThroughTurnCount
@@ -1318,7 +1323,8 @@ extension AppViewModel {
                 for: convSnapshot, chair: chair, firstEnabled: firstEnabled
             ) else { return }
             if !result.memories.isEmpty {
-                MemoryStore.shared.addMany(result.memories, sourceConversationID: convID)
+                // 按会话归属 Persona 落库(内部走 addMany 去重)。
+                self.storeExtractedMemories(result.memories, from: convSnapshot)
             }
             // 推进水位(即便没抽到内容也前进,避免重复对同样的轮次调用小模型)。只前进,防竞态回退。
             guard let liveIdx = self.conversations.firstIndex(where: { $0.id == convID }) else { return }

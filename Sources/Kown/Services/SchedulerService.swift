@@ -28,6 +28,12 @@ final class SchedulerService {
     /// 是否已申请过通知权限(惰性,首次设置任务时申请)。
     private var permissionAsked = false
 
+    /// [增量记忆] 待采收的运行结果:会话 ID → 任务 ID。
+    /// 普通 / 简报任务走 `vm.send()` 既有管线,本服务拿不到完成回调 —— 发火时登记,
+    /// 之后每个巡检 tick 检查该会话是否已落盘第一轮,完成后把答案摘要写回任务。
+    /// 仅存内存:app 中途退出最多丢一次摘要,下次运行退化为全量,无害。
+    private var pendingDigestHarvests: [UUID: UUID] = [:]
+
     private init() {
         self.tasks = ScheduledTaskStore.load()
     }
@@ -103,7 +109,9 @@ final class SchedulerService {
     // MARK: - 调度核心
 
     /// 检查所有任务,把「启用 + 已到今天的触发时刻 + 当天还没跑过」的逐个发火。
+    /// 顺带采收上一轮已完成的运行结果摘要(增量记忆)。
     func checkAndFire() {
+        harvestPendingDigests()
         let now = Date()
         let cal = Calendar.current
         for task in tasks where task.enabled {
@@ -149,13 +157,21 @@ final class SchedulerService {
         }
 
         let vm = viewModel
-        Task { @MainActor in
+        Task { @MainActor [weak self] in
             let promptText: String
             switch task.kind {
             case .morningBriefing:
                 promptText = await Self.buildBriefingPrompt(task: task)
             case .plainPrompt, .agentTask:
-                promptText = task.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+                // [增量记忆] 固定 prompt 后附「上次运行回顾」,引导只报新增与变化。
+                let base = task.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+                if base.isEmpty {
+                    promptText = ""
+                } else if let inc = task.incrementalPromptBlock {
+                    promptText = base + "\n\n" + inc
+                } else {
+                    promptText = base
+                }
             }
             if let vm, !promptText.isEmpty {
                 // 新建该模式会话 → 填 prompt → 走既有发送流程。
@@ -166,6 +182,10 @@ final class SchedulerService {
                 }
                 vm.prompt = promptText
                 vm.send()
+                // [增量记忆] 登记结果采收:回答落盘后(下个巡检 tick)把答案摘要写回任务。
+                if let self, let convID = vm.selectedConversationID {
+                    self.pendingDigestHarvests[convID] = task.id
+                }
             }
         }
 
@@ -216,6 +236,11 @@ final class SchedulerService {
             sections.append("【额外指示】\n" + extra)
         }
 
+        // 5) [增量记忆] 上次简报回顾:订阅话题只报新增与变化,不重复昨天已讲过的。
+        if let inc = task.incrementalPromptBlock {
+            sections.append(inc)
+        }
+
         let context = sections.isEmpty
             ? "(暂无日程 / 关注点 / 话题数据)"
             : sections.joined(separator: "\n\n")
@@ -262,6 +287,8 @@ final class SchedulerService {
                               summary: "任务没有填写指令,请编辑任务补上要做的事", conversationID: nil)
             return
         }
+        // [增量记忆] 目标后附「上次运行回顾」,Agent 聚焦上次之后的新增与变化。
+        let fullPrompt = task.incrementalPromptBlock.map { promptText + "\n\n" + $0 } ?? promptText
         guard let vm = viewModel else { return }
         // 选执行模型:优先第一个启用的非 CLI provider(CLI 沙箱差异大且不支持工具循环),兜底任意启用项。
         guard let provider = vm.providers.first(where: { $0.enabled && !$0.kind.isCLI })
@@ -308,11 +335,11 @@ final class SchedulerService {
 
             // 流式收集在后台 executor 跑(nonisolated static),不碰主线程。
             let result = await Self.collectAgentRun(
-                prompt: promptText, provider: providerSnapshot, apiKey: apiKey, options: options)
+                prompt: fullPrompt, provider: providerSnapshot, apiKey: apiKey, options: options)
             if let mcp = mcpSession { await mcp.closeAll() }
 
             self?.archiveAgentRun(
-                taskID: taskID, taskTitle: displayTitle, prompt: promptText,
+                taskID: taskID, taskTitle: displayTitle, prompt: fullPrompt,
                 provider: providerSnapshot, result: result, firedAt: now)
         }
     }
@@ -425,6 +452,10 @@ final class SchedulerService {
             ? Self.oneLineSummary(text)
             : (result.error ?? "模型返回了空响应")
         setRunResult(taskID, status: success ? .success : .failure, summary: summary)
+        // [增量记忆] 成功的运行写回「完成时间 + 结果摘要(~800 字)」;失败不覆盖上次有效摘要。
+        if success {
+            setLastRunDigest(taskID, digest: Self.makeDigest(text), date: Date())
+        }
         notifyAgentResult(taskTitle: taskTitle, success: success, summary: summary, conversationID: conv.id)
     }
 
@@ -434,6 +465,57 @@ final class SchedulerService {
         tasks[idx].lastRunStatus = status
         tasks[idx].lastRunSummary = summary
         persist()
+    }
+
+    // MARK: - 增量记忆(结果摘要写回 + 采收)
+
+    /// 写回一次运行的「完成时间 + 结果摘要」(增量模式下注入下次运行)并落盘。
+    private func setLastRunDigest(_ id: UUID, digest: String, date: Date) {
+        guard let idx = tasks.firstIndex(where: { $0.id == id }) else { return }
+        tasks[idx].lastRunDate = date
+        tasks[idx].lastRunDigest = digest
+        persist()
+    }
+
+    /// 采收普通 / 简报任务的运行结果:发火时登记的会话一旦落盘了第一轮,
+    /// 就把最佳答案截成摘要写回任务。失败轮(没有任何答案文本)不覆盖上次有效摘要。
+    private func harvestPendingDigests() {
+        guard !pendingDigestHarvests.isEmpty, let vm = viewModel else { return }
+        for (convID, taskID) in pendingDigestHarvests {
+            guard let conv = vm.conversations.first(where: { $0.id == convID }) else {
+                pendingDigestHarvests.removeValue(forKey: convID)   // 会话被删 → 放弃采收
+                continue
+            }
+            // 任务发火时新建的会话,第一轮即任务结果;还没落盘说明仍在跑,下个 tick 再看。
+            guard let turn = conv.turns.first else { continue }
+            pendingDigestHarvests.removeValue(forKey: convID)
+            let answer = Self.bestAnswerText(turn)
+            guard !answer.isEmpty else { continue }
+            setLastRunDigest(taskID, digest: Self.makeDigest(answer), date: turn.timestamp)
+        }
+    }
+
+    /// 一轮的最佳答案文本:主持人综合 > 总结列 > 第一个非空回答。全空(失败轮)返回 ""。
+    private static func bestAnswerText(_ turn: Turn) -> String {
+        if let s = turn.chairSummary?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty {
+            return s
+        }
+        if let s = turn.summaryText?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty {
+            return s
+        }
+        for key in turn.panelOrder {
+            if let t = turn.responses[key]?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty {
+                return t
+            }
+        }
+        return ""
+    }
+
+    /// 把运行结果截成可注入的摘要:保留段落结构,截断到约 `maxChars` 字。
+    nonisolated static func makeDigest(_ text: String, maxChars: Int = 800) -> String {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard t.count > maxChars else { return t }
+        return String(t.prefix(maxChars)) + "…"
     }
 
     /// 把多行回答压成一行摘要(通知正文 / 列表用):合并空白、去掉常见 Markdown 记号、截断到 100 字。

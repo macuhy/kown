@@ -30,6 +30,10 @@ struct Persona: Identifiable, Codable, Equatable, Sendable {
     var skillIDs: [UUID]
     /// 绑定的知识库资料夹 id(对应 `KnowledgeFolder.id`)。会话自己绑了资料夹时以会话为准。
     var knowledgeFolderID: UUID?
+    /// 长期记忆(默认开):开着时,该 Persona 的会话抽取的记忆归属它专属,
+    /// 发送时注入「全局 + 该 Persona」的记忆;关掉则不抽取、也不注入它的专属记忆
+    /// (全局记忆仍按「设置 ▸ 记忆」总开关生效)。
+    var memoryEnabled: Bool
     var createdAt: Date
     var updatedAt: Date
 
@@ -45,6 +49,7 @@ struct Persona: Identifiable, Codable, Equatable, Sendable {
          enableMCP: Bool = false,
          skillIDs: [UUID] = [],
          knowledgeFolderID: UUID? = nil,
+         memoryEnabled: Bool = true,
          createdAt: Date = Date(),
          updatedAt: Date = Date()) {
         self.id = id
@@ -59,6 +64,7 @@ struct Persona: Identifiable, Codable, Equatable, Sendable {
         self.enableMCP = enableMCP
         self.skillIDs = skillIDs
         self.knowledgeFolderID = knowledgeFolderID
+        self.memoryEnabled = memoryEnabled
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -84,6 +90,7 @@ struct Persona: Identifiable, Codable, Equatable, Sendable {
         self.enableMCP = try c.decodeIfPresent(Bool.self, forKey: .enableMCP) ?? false
         self.skillIDs = try c.decodeIfPresent([UUID].self, forKey: .skillIDs) ?? []
         self.knowledgeFolderID = try c.decodeIfPresent(UUID.self, forKey: .knowledgeFolderID)
+        self.memoryEnabled = try c.decodeIfPresent(Bool.self, forKey: .memoryEnabled) ?? true
         self.createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         self.updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
     }
