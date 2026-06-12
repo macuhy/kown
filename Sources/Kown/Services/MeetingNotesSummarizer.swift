@@ -88,6 +88,61 @@ enum MeetingNotesSummarizer {
         return notes
     }
 
+    /// 带**说话人维度**的会议纪要(双轨捕获专用)。
+    ///
+    /// 转写文字形如 `[00:05] 我:…` / `[00:12] 对方:…`,prompt 让模型利用说话人信息:
+    /// 谁提议、谁承诺行动项、决议是谁拍板的。复用同一套 `MeetingNotes` 结构 + 解析。
+    @MainActor
+    static func summarizeMeeting(
+        transcript: String,
+        provider: ProviderConfig
+    ) async throws -> MeetingNotes {
+        let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw SummarizeError.emptyTranscript }
+        guard !provider.kind.isCLI else { throw SummarizeError.noProvider }
+
+        let userPrompt = """
+        下面是一段会议的双轨语音转写。每行格式为 `[时间] 说话人:内容`,
+        说话人只有「我」(本机麦克风,即当前用户)和「对方」(会议里其他参会者,可能不止一人)。
+        转写可能有识别错误、缺标点、口语化,请理解其意图后提炼成会议纪要。要求:
+        - summary:整场会议在讲什么、得出什么结论。可点明是「我」还是「对方」推动的关键议题。
+        - decisions:明确拍板的决定 / 共识,逐条;尽量注明是谁(我 / 对方)提出或拍板;没有就空数组。
+        - action_items:接下来要做的事;**owner 优先依据说话人**——
+          「我」承诺要做的事 owner 写「我」;「对方」承诺的写「对方」(或转写里提到的具体人名);
+          没法判断就给空字符串,不要编造。截止时间(due)同理,转写里没提就空字符串。
+        - 全部用中文。
+
+        【双轨转写】
+        \(snippet(trimmed, max: 12000))
+        """
+        let prompt = StructuredOutput.buildStructuredPrompt(userPrompt: userPrompt, schema: schema)
+
+        let key = try KeychainStore.load(id: provider.id)
+        let client = ProviderRegistry.client(for: provider.kind)
+        let options = ChatOptions(
+            systemPrompt: "你是一个会议纪要助手,擅长区分不同说话人的发言与承诺。只输出一个严格合法的 JSON 对象,不要任何解释或 markdown 围栏。",
+            temperature: 0.2,
+            maxTokens: 1500
+        )
+
+        var collected = ""
+        do {
+            for try await chunk in client.stream(
+                prompt: prompt, options: options, config: provider, apiKey: key
+            ) {
+                if case .text(let t) = chunk { collected += t }
+                if collected.count >= 8000 { break }
+            }
+        } catch {
+            throw SummarizeError.underlying(error.localizedDescription)
+        }
+
+        guard let notes = parse(collected) else {
+            throw SummarizeError.parseFailed("模型没有返回可解析的 JSON")
+        }
+        return notes
+    }
+
     // MARK: - 解析
 
     /// 从模型回答里抽 JSON 并映射成 `MeetingNotes`。失败返回 nil。

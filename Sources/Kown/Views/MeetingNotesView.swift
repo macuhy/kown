@@ -30,6 +30,11 @@ struct MeetingNotesView: View {
 
     @State private var errorMessage: String?
 
+    #if os(macOS)
+    // 会议实时双轨捕获(macOS 专属)入口。
+    @State private var showLiveMeeting = false
+    #endif
+
     private let tint = Color(red: 0.85, green: 0.42, blue: 0.18)
 
     var body: some View {
@@ -37,6 +42,9 @@ struct MeetingNotesView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     heroCard
+                    #if os(macOS)
+                    liveMeetingEntryCard
+                    #endif
                     captureCard
                     transcriptCard
                     if let notes { notesSection(notes) }
@@ -61,6 +69,27 @@ struct MeetingNotesView: View {
         }
         #if os(macOS)
         .frame(minWidth: 560, minHeight: 620)
+        .sheet(isPresented: $showLiveMeeting) {
+            NavigationStack {
+                ScrollView {
+                    MeetingCaptureView(viewModel: viewModel)
+                        .padding(.horizontal, 20).padding(.vertical, 18)
+                }
+                .scrollIndicators(.hidden)
+                .navigationTitle("会议实时捕获")
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("完成") {
+                            if MeetingCaptureService.shared.isCapturing {
+                                Task { await MeetingCaptureService.shared.stop() }
+                            }
+                            showLiveMeeting = false
+                        }
+                    }
+                }
+            }
+            .frame(minWidth: 600, minHeight: 640)
+        }
         #endif
         .fileImporter(
             isPresented: $showImporter,
@@ -99,6 +128,42 @@ struct MeetingNotesView: View {
         .padding(16)
         .background(tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
+
+    #if os(macOS)
+    // MARK: - 会议实时双轨捕获入口(macOS 专属)
+
+    private var liveMeetingEntryCard: some View {
+        Button {
+            showLiveMeeting = true
+        } label: {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "person.2.wave.2.fill")
+                    .font(.system(size: 22))
+                    .foregroundStyle(tint)
+                    .frame(width: 30)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("开会时直接用 · 双轨实时捕获")
+                        .font(.callout.weight(.bold))
+                        .foregroundStyle(.primary)
+                    Text("Zoom / 腾讯会议开着时,同时录对方声音(系统声音)和你的麦克风,实时双色字幕,停止后出带说话人维度的纪要。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                Image(systemName: "chevron.right").foregroundStyle(.secondary).font(.caption)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(tint.opacity(0.25), lineWidth: 1)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+    #endif
 
     // MARK: - 采集(录音 / 导入)
 
