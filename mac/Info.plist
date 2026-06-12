@@ -45,6 +45,69 @@
 	<string>Kown 用麦克风把你的语音转成文字,填进输入框。</string>
 	<key>NSRemindersFullAccessUsageDescription</key>
 	<string>Kown 可以把你的待办写进系统「提醒事项」。</string>
+	<key>NSServices</key>
+	<array>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>用 Kown 翻译</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>kownServiceTranslate</string>
+			<key>NSPortName</key>
+			<string>Kown</string>
+			<key>NSSendTypes</key>
+			<array>
+				<string>NSStringPboardType</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>用 Kown 总结</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>kownServiceSummarize</string>
+			<key>NSPortName</key>
+			<string>Kown</string>
+			<key>NSSendTypes</key>
+			<array>
+				<string>NSStringPboardType</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>问 Kown</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>kownServiceAsk</string>
+			<key>NSPortName</key>
+			<string>Kown</string>
+			<key>NSSendTypes</key>
+			<array>
+				<string>NSStringPboardType</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>存入 Kown 知识库</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>kownServiceSaveToKnowledge</string>
+			<key>NSPortName</key>
+			<string>Kown</string>
+			<key>NSSendTypes</key>
+			<array>
+				<string>NSStringPboardType</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Kown 用语音识别把你说的话转写成文字。</string>
 	<key>NSUbiquitousContainers</key>
