@@ -984,6 +984,14 @@ extension AppViewModel {
                 self.conversations[idx].turns.append(turn)
                 self.conversations[idx].updatedAt = Date()
                 ConversationStore.save(self.conversations[idx])
+                // 回答完成后自动分析共识(opt-in,默认关):仅 Council / Compare 且 ≥2 家非空回答。
+                // 复用手动按钮同一条 analyzeConsensus 路径(独立后台 state,失败静默)。
+                if self.autoConsensusEnabled, mode == .council || mode == .compare {
+                    let nonEmpty = responses.values.filter {
+                        !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    }.count
+                    if nonEmpty >= 2 { self.analyzeConsensus(turnID: turn.id) }
+                }
                 // 晨报会话:本轮回答即晨报内容 → 提取要点发布到 iOS 桌面小组件(非晨报会话 no-op)。
                 WidgetBridge.publishBriefingIfPending(
                     conversationID: convID,

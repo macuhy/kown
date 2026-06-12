@@ -11,6 +11,8 @@ struct PerformanceSettingsView: View {
     @AppStorage("kown.autoFailover.v1") private var autoFailover: Bool = false
     /// 与 AppViewModel.councilVotingEnabled 同一 key。
     @AppStorage("kown.councilVoting.v1") private var councilVoting: Bool = false
+    /// 与 AppViewModel.autoConsensusEnabled 同一 key。默认关。
+    @AppStorage("kown.consensus.auto.v1") private var autoConsensus: Bool = false
     /// 与 AppViewModel.autoRouteEnabled 同一 key。
     @AppStorage("kown.autoRoute.v1") private var autoRoute: Bool = false
     /// 与 AppViewModel.costCascadeEnabled 同一 key(默认关)。
@@ -47,6 +49,7 @@ struct PerformanceSettingsView: View {
                 panelsPerRowCard
                 autoFailoverCard
                 councilVotingCard
+                autoConsensusCard
                 autoRouteCard
                 costCascadeCard
                 escalationCard
@@ -68,6 +71,7 @@ struct PerformanceSettingsView: View {
                 panelsPerRowCard
                 autoFailoverCard
                 councilVotingCard
+                autoConsensusCard
                 autoRouteCard
                 costCascadeCard
                 escalationCard
@@ -165,6 +169,31 @@ struct PerformanceSettingsView: View {
                     Text("Council 投票打分")
                         .font(.body.weight(.semibold))
                     Text("Council 模式里,主席综合后再额外跑一次评审,对各家答案按准确/完整/可执行/清晰四维打分并排名。会多一次模型调用。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .tint(secondaryTint)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(secondaryTint.opacity(0.16), lineWidth: 1)
+        }
+    }
+
+    // MARK: - 自动分析共識
+
+    private var autoConsensusCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Toggle(isOn: $autoConsensus) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("回答完成后自动分析共識")
+                        .font(.body.weight(.semibold))
+                    Text("Council / Compare 模式答完后,自动用小模型抽取各家回答的「一致度 + 共識 + 分歧点(各模型立场)」并展示。会多一次轻量模型调用。手动「分析分歧」按钮始终保留。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

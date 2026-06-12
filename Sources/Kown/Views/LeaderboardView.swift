@@ -3,13 +3,26 @@ import SwiftUI
 /// 设置 ▸ 排行榜:Compare 模式裁判判定累计出的「模型胜率榜」。
 /// 按胜率降序排名,展示胜/负/平、对战数与胜率。可清空。
 struct LeaderboardView: View {
+    /// 推荐阵容需要读 / 写 provider 配置;由设置页注入。
+    var viewModel: AppViewModel?
+
     private var store = ModelLeaderboardStore.shared
     @State private var confirmClear = false
+    @State private var appliedRecommendation = false
+
+    private var recommendTint: Color { Color(red: 0.45, green: 0.4, blue: 0.85) }
+
+    init(viewModel: AppViewModel? = nil) {
+        self.viewModel = viewModel
+    }
 
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 12) {
                 let standings = store.standings
+                if viewModel != nil {
+                    recommendationCard
+                }
                 if standings.isEmpty {
                     emptyState
                 } else {
@@ -26,6 +39,111 @@ struct LeaderboardView: View {
             Button("清空", role: .destructive) { store.reset() }
             Button("取消", role: .cancel) { }
         }
+    }
+
+    // MARK: - 按胜率推荐阵容
+
+    @ViewBuilder
+    private var recommendationCard: some View {
+        if let vm = viewModel {
+            let recs = vm.recommendedCouncilLineup(limit: 4)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Image(systemName: "wand.and.stars")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(recommendTint)
+                    Text("按胜率推荐阵容")
+                        .font(.system(.subheadline, design: .rounded).weight(.bold))
+                    Spacer()
+                }
+                if !vm.hasEnoughLeaderboardSamples {
+                    Text("战绩样本不足(单个模型至少 \(CouncilRecommender.minSampleMatches) 场评判才纳入推荐)。先用 Compare 模式多跑几轮「让裁判评判」攒数据。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else if recs.isEmpty {
+                    Text("胜率榜里暂无能映射回已配置 provider 的模型 —— 榜上的模型可能没在 provider 列表里,或都是 CLI。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    Text("根据 Compare 裁判累计胜率,推荐启用以下 \(recs.count) 个模型作为 Council 阵容:")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    ForEach(Array(recs.enumerated()), id: \.element.id) { idx, rec in
+                        recommendationRow(rank: idx + 1, rec: rec, vm: vm)
+                    }
+                    Button {
+                        vm.applyRecommendedLineup(recs)
+                        appliedRecommendation = true
+                    } label: {
+                        Label(appliedRecommendation ? "已启用推荐阵容" : "一键启用推荐阵容",
+                              systemImage: appliedRecommendation ? "checkmark.circle.fill" : "person.3.fill")
+                            .font(.callout.weight(.semibold))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(recommendTint.opacity(0.12), in: Capsule())
+                            .foregroundStyle(recommendTint)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(appliedRecommendation)
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                ZStack {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous).fill(.regularMaterial)
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(LinearGradient(colors: [recommendTint.opacity(0.10), .clear],
+                                             startPoint: .topLeading, endPoint: .bottomTrailing))
+                }
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(recommendTint.opacity(0.22), lineWidth: 1)
+            }
+        }
+    }
+
+    private func recommendationRow(rank: Int, rec: CouncilRecommender.Recommendation, vm: AppViewModel) -> some View {
+        let alreadyEnabled = vm.providers.first(where: { $0.id == rec.providerID })?.enabled ?? false
+        return HStack(spacing: 10) {
+            Text("\(rank)")
+                .font(.system(.caption, design: .rounded).weight(.heavy))
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+                .frame(width: 22, height: 22)
+                .background(Color.secondary.opacity(0.12), in: Circle())
+            VStack(alignment: .leading, spacing: 2) {
+                Text(rec.displayName)
+                    .font(.subheadline.weight(.bold))
+                    .lineLimit(1).truncationMode(.middle)
+                Text(rec.model)
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1).truncationMode(.middle)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(winRateText(rec.winRate))
+                    .font(.system(.subheadline, design: .rounded).weight(.bold))
+                    .foregroundStyle(rateColor(rec.winRate))
+                    .monospacedDigit()
+                Text("\(rec.decisiveMatches) 场决胜 · 共 \(rec.totalMatches) 场")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .monospacedDigit()
+            }
+            if alreadyEnabled {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.green)
+            }
+        }
+        .padding(10)
+        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private func header(count: Int) -> some View {

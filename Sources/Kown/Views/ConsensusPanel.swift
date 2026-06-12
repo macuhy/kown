@@ -15,15 +15,23 @@ struct ConsensusPanel: View {
         VStack(alignment: .leading, spacing: 12) {
             header
             if !collapsed {
+                // 一致度徽章(结构化分析才有 score;纯文本退路不显示)。
+                if let score = analysis.agreementScore {
+                    agreementBadge(score)
+                }
                 if !analysis.agreements.isEmpty {
                     section(title: "共識", systemImage: "checkmark.seal.fill",
                             color: agreeColor, items: analysis.agreements)
                 }
-                if !analysis.disagreements.isEmpty {
+                // 结构化分歧点(各模型立场卡片)优先;否则退回纯文本分歧列表。
+                if let points = analysis.disagreementPoints, !points.isEmpty {
+                    disagreementPointsSection(points)
+                } else if !analysis.disagreements.isEmpty {
                     section(title: "分歧", systemImage: "arrow.triangle.branch",
                             color: disagreeColor, items: analysis.disagreements)
                 }
-                if analysis.agreements.isEmpty && analysis.disagreements.isEmpty {
+                if analysis.agreements.isEmpty && analysis.disagreements.isEmpty
+                    && (analysis.disagreementPoints?.isEmpty ?? true) {
                     Text("未发现明显的共識或分歧。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -63,12 +71,127 @@ struct ConsensusPanel: View {
                     .font(.system(.subheadline, design: .rounded).weight(.bold))
                     .foregroundStyle(.primary)
                 Spacer()
+                // 折叠时也能一眼看到一致度。
+                if collapsed, let score = analysis.agreementScore {
+                    Text("\(score)% 一致")
+                        .font(.caption2.weight(.bold))
+                        .monospacedDigit()
+                        .foregroundStyle(scoreColor(score))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(scoreColor(score).opacity(0.14), in: Capsule())
+                }
                 Image(systemName: collapsed ? "chevron.down" : "chevron.up")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(.secondary)
             }
         }
         .buttonStyle(.plain)
+    }
+
+    /// 一致度分档配色:高(绿)/ 中(橙)/ 低(红)。
+    private func scoreColor(_ score: Int) -> Color {
+        if score >= 70 { return agreeColor }
+        if score >= 40 { return Color(red: 0.86, green: 0.60, blue: 0.16) }
+        return Color(red: 0.82, green: 0.30, blue: 0.26)
+    }
+
+    private func scoreLabel(_ score: Int) -> String {
+        if score >= 70 { return "高度一致" }
+        if score >= 40 { return "部分一致" }
+        return "分歧较大"
+    }
+
+    /// 一致度徽章:进度条 + 百分比 + 分档文案。
+    private func agreementBadge(_ score: Int) -> some View {
+        let color = scoreColor(score)
+        return HStack(spacing: 10) {
+            ZStack {
+                Circle().stroke(color.opacity(0.18), lineWidth: 4)
+                Circle()
+                    .trim(from: 0, to: CGFloat(max(0, min(100, score))) / 100)
+                    .stroke(color, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                Text("\(score)")
+                    .font(.system(size: 13, weight: .heavy, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(color)
+            }
+            .frame(width: 42, height: 42)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("一致度 \(score)%")
+                    .font(.subheadline.weight(.bold))
+                    .monospacedDigit()
+                    .foregroundStyle(.primary)
+                Text(scoreLabel(score))
+                    .font(.caption)
+                    .foregroundStyle(color)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(color.opacity(0.07), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(color.opacity(0.18), lineWidth: 1)
+        }
+    }
+
+    /// 分歧点卡片组:每个分歧点一张卡,卡内列各模型立场。
+    private func disagreementPointsSection(_ points: [ConsensusDisagreement]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.triangle.branch")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(disagreeColor)
+                Text("分歧点")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(disagreeColor)
+            }
+            ForEach(Array(points.enumerated()), id: \.offset) { _, point in
+                disagreementCard(point)
+            }
+        }
+    }
+
+    private func disagreementCard(_ point: ConsensusDisagreement) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(point.point)
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .textSelection(.enabled)
+            if !point.positions.isEmpty {
+                VStack(alignment: .leading, spacing: 5) {
+                    ForEach(Array(point.positions.enumerated()), id: \.offset) { _, pos in
+                        HStack(alignment: .top, spacing: 6) {
+                            if !pos.model.isEmpty {
+                                Text(pos.model)
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(disagreeColor)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(disagreeColor.opacity(0.12), in: Capsule())
+                                    .fixedSize()
+                            }
+                            Text(pos.stance)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .textSelection(.enabled)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(disagreeColor.opacity(0.07), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(disagreeColor.opacity(0.16), lineWidth: 1)
+        }
     }
 
     private func section(title: String, systemImage: String, color: Color, items: [String]) -> some View {

@@ -64,6 +64,41 @@ final class TurnNewFieldsCodableTests: XCTestCase {
         XCTAssertNil(turn.imageGenErrors)
     }
 
+    func testStructuredConsensusFieldsRoundTrip() throws {
+        let turn = Turn(
+            prompt: "比较",
+            systemPrompt: "",
+            consensusAnalysis: ConsensusAnalysis(
+                agreements: ["都同意A"],
+                disagreements: ["在B上分歧(甲:左;乙:右)"],
+                agreementScore: 73,
+                disagreementPoints: [
+                    ConsensusDisagreement(point: "在B上分歧", positions: [
+                        .init(model: "甲", stance: "左"),
+                        .init(model: "乙", stance: "右"),
+                    ])
+                ]
+            )
+        )
+        let data = try JSONEncoder().encode(turn)
+        let decoded = try JSONDecoder().decode(Turn.self, from: data)
+        XCTAssertEqual(decoded.consensusAnalysis?.agreementScore, 73)
+        XCTAssertEqual(decoded.consensusAnalysis?.disagreementPoints?.count, 1)
+        XCTAssertEqual(decoded.consensusAnalysis?.disagreementPoints?.first?.positions.count, 2)
+    }
+
+    func testLegacyConsensusWithoutStructuredFieldsDecodes() throws {
+        // 旧 consensusAnalysis(只有 agreements/disagreements)解码:新字段为 nil。
+        let turn = Turn(
+            prompt: "q", systemPrompt: "",
+            consensusAnalysis: ConsensusAnalysis(agreements: ["a"], disagreements: ["d"])
+        )
+        let data = try JSONEncoder().encode(turn)
+        let decoded = try JSONDecoder().decode(Turn.self, from: data)
+        XCTAssertNil(decoded.consensusAnalysis?.agreementScore)
+        XCTAssertNil(decoded.consensusAnalysis?.disagreementPoints)
+    }
+
     func testTurnInsideConversationRoundTrips() throws {
         // 整条会话(含带新字段的 Turn)往返,确认嵌套层级也不丢。
         var conv = Conversation(mode: .tournament)

@@ -213,17 +213,54 @@ struct CompareVerdict: Codable, Hashable, Sendable {
     }
 }
 
+/// 一条结构化分歧点:分歧的内容 + 各模型在该点上的立场(结构化 JSON 分析才有)。
+struct ConsensusDisagreement: Codable, Hashable, Sendable {
+    /// 一个模型在该分歧点上的立场。
+    struct Position: Codable, Hashable, Sendable {
+        /// 模型展示名(与送进分析 prompt 的 provider 名一致)。
+        var model: String
+        /// 该模型的立场,一句话。
+        var stance: String
+
+        init(model: String, stance: String) {
+            self.model = model
+            self.stance = stance
+        }
+    }
+
+    /// 分歧点是什么,一句话。
+    var point: String
+    /// 各模型立场列表。
+    var positions: [Position]
+
+    init(point: String, positions: [Position] = []) {
+        self.point = point
+        self.positions = positions
+    }
+}
+
 /// 各家答案差异分析:共識(各模型一致点)/ 分歧(意见分歧点)。
 /// 由小模型抽取(`ConsensusAnalyzer`),opt-in「分析分歧」按钮触发,随 Turn 存盘/同步。
 struct ConsensusAnalysis: Codable, Hashable, Sendable {
     /// 各模型一致认同的要点。
     var agreements: [String]
-    /// 意见分歧点(尽量带「哪个模型怎么不同」)。
+    /// 意见分歧点(尽量带「哪个模型怎么不同」)。结构化分析时由 `disagreementPoints` 合成,
+    /// 保留这份纯文本是为了旧 UI / 导出 / 合成终稿等既有消费方不变。
     var disagreements: [String]
+    /// 0-100 一致度(结构化 JSON 分析才有;旧数据 / 纯文本退路为 nil)。
+    /// optional + 合成 Codable 自动 decodeIfPresent,旧存档解码不受影响。
+    var agreementScore: Int?
+    /// 结构化分歧点(每点列各模型立场;结构化 JSON 分析才有)。旧存档为 nil。
+    var disagreementPoints: [ConsensusDisagreement]?
 
-    init(agreements: [String] = [], disagreements: [String] = []) {
+    init(agreements: [String] = [],
+         disagreements: [String] = [],
+         agreementScore: Int? = nil,
+         disagreementPoints: [ConsensusDisagreement]? = nil) {
         self.agreements = agreements
         self.disagreements = disagreements
+        self.agreementScore = agreementScore
+        self.disagreementPoints = disagreementPoints
     }
 }
 

@@ -521,6 +521,13 @@ final class AppViewModel {
         UserDefaults.standard.object(forKey: Self.escalationSuggestionsKey) as? Bool ?? true
     }
 
+    /// 「回答完成后自动分析共識」开关。默认**关**(成本考量);开启时 Council / Compare 答完自动跑一次差异分析。
+    /// 手动「分析分歧」按钮始终保留。读 / 写同一 UserDefaults key(供 AppStorage 绑定)。
+    static let autoConsensusKey = "kown.consensus.auto.v1"
+    var autoConsensusEnabled: Bool {
+        UserDefaults.standard.object(forKey: Self.autoConsensusKey) as? Bool ?? false
+    }
+
     /// 正在生成图片(用于按钮 loading 态)。
     var isGeneratingImage = false
 
@@ -1459,6 +1466,54 @@ final class AppViewModel {
 
     var chairProvider: ProviderConfig? {
         providers.first { $0.isChair && $0.enabled }
+    }
+
+    // MARK: - 按胜率推荐 Council 阵容
+
+    /// 当前能给出的推荐阵容(读 leaderboard + 已配置 provider)。空 = 没有满足样本门槛 / 无配置命中的模型。
+    /// 候选含**所有已配置、非 CLI**的 provider(不限当前是否启用),这样推荐能把没启用的好模型也提出来。
+    func recommendedCouncilLineup(limit: Int = 4) -> [CouncilRecommender.Recommendation] {
+        let standings = ModelLeaderboardStore.shared.standings.map { s in
+            CouncilRecommender.StandingInput(
+                providerKindRaw: s.providerKind?.rawValue ?? "",
+                model: s.model,
+                winRate: s.record.winRate,
+                wins: s.record.wins,
+                losses: s.record.losses,
+                draws: s.record.draws
+            )
+        }
+        let candidates = providers
+            .filter { !$0.kind.isCLI }
+            .map { cfg in
+                CouncilRecommender.ProviderCandidate(
+                    id: cfg.id,
+                    displayName: cfg.displayName,
+                    kindRaw: cfg.kind.rawValue,
+                    model: cfg.model,
+                    knownModels: ProviderModelCatalog.knownModels(for: cfg)
+                )
+            }
+        return CouncilRecommender.recommend(standings: standings, candidates: candidates, limit: limit)
+    }
+
+    /// 战绩样本是否足够给出推荐(任一模型总场次 ≥ 门槛)。不足时 UI 提示「先用 Compare 攒数据」。
+    var hasEnoughLeaderboardSamples: Bool {
+        ModelLeaderboardStore.shared.standings.contains {
+            $0.record.total >= CouncilRecommender.minSampleMatches
+        }
+    }
+
+    /// 应用推荐阵容:把推荐里的 provider 全部置为启用(其它 provider 不动),并落盘。
+    func applyRecommendedLineup(_ recs: [CouncilRecommender.Recommendation]) {
+        let ids = Set(recs.map { $0.providerID })
+        guard !ids.isEmpty else { return }
+        var changed = false
+        for i in providers.indices where ids.contains(providers[i].id) && !providers[i].enabled {
+            providers[i].enabled = true
+            changed = true
+        }
+        if changed { saveProviders() }
     }
 
     /// Summary 单选语义,跟 Chair 一样。一个 provider 同时勾 chair+summary 是允许的(罕见但合法)。

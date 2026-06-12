@@ -223,7 +223,7 @@ struct SettingsView: View {
                     case .favorites:
                         FavoritesSettingsView()
                     case .leaderboard:
-                        LeaderboardView()
+                        LeaderboardView(viewModel: viewModel)
                     case .eval:
                         EvalView(viewModel: viewModel)
                     case .scheduler:
@@ -823,7 +823,7 @@ struct SettingsView: View {
             case .favorites:
                 FavoritesSettingsView()
             case .leaderboard:
-                LeaderboardView()
+                LeaderboardView(viewModel: viewModel)
             case .eval:
                 EvalView(viewModel: viewModel)
             case .scheduler:
