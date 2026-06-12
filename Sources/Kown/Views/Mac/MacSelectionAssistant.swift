@@ -135,6 +135,9 @@ final class MacSelectionAssistant {
             onReplace: { [weak self] result in self?.replaceSelection(with: result) }
         )
         let host = NSHostingController(rootView: root)
+        // 结果区出现/长高时让窗口跟着内容长,否则 ScrollView 会被压扁成一条缝,
+        // 看起来像「结果没显示」(实际文字在,被压没了)。
+        host.sizingOptions = .preferredContentSize
         let panel = NSPanel(contentViewController: host)
         // 非激活面板:弹出时不把前台 app 的焦点抢走,点按钮才接收事件。
         panel.styleMask = [.titled, .closable, .nonactivatingPanel, .fullSizeContentView]
@@ -306,6 +309,22 @@ final class SelectionAssistantState {
                     ? "模型只输出了思考过程,没有正文。换个非思考模型(右上角可选)或再试一次。"
                     : "模型没有返回内容,稍后再试,或换个模型(右上角可选)。"
             }
+            // 落一条调试日志(设置 ▸ 调试日志 可见),排查「没结果」类问题有据可查。
+            ResponseLogger.writeAsync(ResponseLogger.Entry(
+                roundID: UUID().uuidString,
+                timestamp: Date(),
+                providerName: cfg.displayName,
+                providerKind: cfg.kind.rawValue,
+                baseURL: cfg.baseURL,
+                model: cfg.model,
+                prompt: prompt,
+                systemPrompt: "",
+                response: collected,
+                elapsedSeconds: nil,
+                error: self.errorText,
+                conversationTitle: "划词助手",
+                conversationID: "selection-assistant"
+            ))
         }
     }
 
@@ -623,7 +642,8 @@ struct SelectionAssistantView: View {
                         .textSelection(.enabled)
                         .foregroundStyle(state.result.isEmpty ? .secondary : .primary)
                 }
-                .frame(maxHeight: 200)
+                // minHeight 兜底:就算窗口尺寸没跟上,结果区也不会被压扁到不可见。
+                .frame(minHeight: 64, maxHeight: 200)
 
                 HStack {
                     if !state.providerName.isEmpty {
