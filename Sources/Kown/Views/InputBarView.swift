@@ -481,6 +481,7 @@ struct InputBarView: View {
             deviceToolsToggle
             mcpToggle
             deepAgentToggle
+            deepResearchToggle
             skillPicker
             PersonaPickerControl(viewModel: viewModel, buttonSize: toolButtonSize)
             if viewModel.currentMode == .debate {
@@ -675,6 +676,14 @@ struct InputBarView: View {
             } label: {
                 Label(viewModel.deepAgentEnabledForNextSend ? "关闭深入模式" : "启用深入模式",
                       systemImage: viewModel.deepAgentEnabledForNextSend ? "checkmark.circle" : "brain.head.profile")
+            }
+            if viewModel.canEnableWebSearch {
+                Button {
+                    viewModel.deepResearchEnabledForNextSend.toggle()
+                } label: {
+                    Label(viewModel.deepResearchEnabledForNextSend ? "关闭深度研究" : "启用深度研究",
+                          systemImage: viewModel.deepResearchEnabledForNextSend ? "checkmark.circle" : "doc.text.magnifyingglass")
+                }
             }
         }
         #if os(macOS)
@@ -1349,6 +1358,46 @@ struct InputBarView: View {
         }
     }
 
+    /// 深度研究开关(仅 Direct,需 Web Search 已配置)— 本次发送走深度研究引擎:
+    /// 大纲→搜索→抓正文→提炼→缺口自查 多轮循环,产出带引用角标与参考文献的长报告。
+    @ViewBuilder
+    private var deepResearchToggle: some View {
+        if viewModel.currentMode == .direct {
+            let canEnable = viewModel.canEnableWebSearch
+            let isOn = canEnable && viewModel.deepResearchEnabledForNextSend
+            Button {
+                if canEnable {
+                    viewModel.deepResearchEnabledForNextSend.toggle()
+                }
+            } label: {
+                Image(systemName: "doc.text.magnifyingglass")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(isOn ? Color.white : .secondary)
+                    .frame(width: toolButtonSize, height: toolButtonSize)
+                    .background {
+                        Circle().fill(
+                            isOn
+                                ? LinearGradient(colors: [Color(red: 0.86, green: 0.42, blue: 0.22), Color.orange.opacity(0.80)],
+                                                 startPoint: .topLeading, endPoint: .bottomTrailing)
+                                : LinearGradient(colors: [Color.primary.opacity(canEnable ? 0.06 : 0.025),
+                                                          Color.primary.opacity(canEnable ? 0.035 : 0.015)],
+                                                 startPoint: .topLeading, endPoint: .bottomTrailing)
+                        )
+                    }
+                    .overlay {
+                        Circle().strokeBorder(isOn ? Color.white.opacity(0.24) : Color.primary.opacity(0.08), lineWidth: 1)
+                    }
+            }
+            .buttonStyle(.plain)
+            .disabled(!canEnable)
+            .opacity(canEnable ? 1 : 0.45)
+            .help(canEnable
+                  ? (isOn ? "深度研究:大纲→多轮搜索抓取→带引用的长报告(再按关闭)" : "本次发送启用深度研究(多轮搜索,耗时较长)")
+                  : "深度研究需要先到 设置 → Web Search 启用并填好 API Key")
+            .accessibilityLabel(canEnable ? (isOn ? "关闭深度研究" : "启用深度研究") : "深度研究不可用")
+        }
+    }
+
     /// 技能选择 — 手动给当前会话绑定一个技能,或留空走自动触发。
     @ViewBuilder
     private var skillPicker: some View {
@@ -1470,6 +1519,7 @@ struct InputBarView: View {
         viewModel.deviceToolsEnabledForNextSend ||
         viewModel.mcpEnabledForNextSend ||
         (viewModel.deepAgentEnabledForNextSend && viewModel.currentMode == .direct) ||
+        (viewModel.deepResearchEnabledForNextSend && viewModel.currentMode == .direct && viewModel.canEnableWebSearch) ||
         viewModel.currentBoundSkill != nil ||
         viewModel.currentPersona != nil ||
         viewModel.currentGitHubRepo != nil
@@ -1503,6 +1553,16 @@ struct InputBarView: View {
                         tint: Color(red: 0.52, green: 0.36, blue: 0.86)
                     ) {
                         viewModel.deepAgentEnabledForNextSend = false
+                    }
+                }
+                if viewModel.deepResearchEnabledForNextSend && viewModel.currentMode == .direct
+                    && viewModel.canEnableWebSearch {
+                    contextChip(
+                        "深度研究",
+                        icon: "doc.text.magnifyingglass",
+                        tint: Color(red: 0.86, green: 0.42, blue: 0.22)
+                    ) {
+                        viewModel.deepResearchEnabledForNextSend = false
                     }
                 }
                 if let skill = viewModel.currentBoundSkill {

@@ -213,8 +213,13 @@ extension AppViewModel {
         // MCP:开关开(或 Persona 点亮)时,带上已启用的 server 配置快照,连接 + tools/list 在后台做。
         let mcpServersForSend: [MCPServerConfig] =
             (mcpEnabledForNextSend || personaFx.mcp) ? mcpStore.enabledServers : []
-        // 深入模式(仅 Direct):抬高工具循环上限 + 注入 Agent 规划/自检指令。
-        let deepAgentForSend = (currentMode == .direct && deepAgentEnabledForNextSend)
+        // 深度研究(仅 Direct):需 Firecrawl 配置就绪;引擎自驱「搜索→抓取→提炼→缺口」循环,
+        // 不依赖输入栏 🌐 开关(研究本身必然要联网,userToggle 恒 true)。
+        let researchSessionForSend: WebSearchSession? = (currentMode == .direct && deepResearchEnabledForNextSend)
+            ? WebSearchSession.makeIfReady(userToggle: true) : nil
+        // 深入模式(仅 Direct):抬高工具循环上限 + 注入 Agent 规划/自检指令。深度研究激活时让位
+        // (研究引擎自己编排循环,不走工具 Agent 链,也不起 Live Activity)。
+        let deepAgentForSend = (currentMode == .direct && deepAgentEnabledForNextSend && researchSessionForSend == nil)
         let modeSnapshot = currentMode
         let debateRoundsSnapshot = debateRoundsForNextSend
         // Summary 只在 Council 模式跑
@@ -249,7 +254,8 @@ extension AppViewModel {
             recallQuery: recallQueryForSend,
             recallExcludeID: recallExcludeID,
             mcpServers: mcpServersForSend,
-            deepAgent: deepAgentForSend
+            deepAgent: deepAgentForSend,
+            researchSession: researchSessionForSend
         )
     }
 
@@ -353,7 +359,9 @@ extension AppViewModel {
         // 本次发送启用的 MCP server(已启用 + 开关开时才非空);连接在后台任务里做。
         mcpServers: [MCPServerConfig] = [],
         // 深入模式(仅 Direct):多步 Agent 长链。
-        deepAgent: Bool = false
+        deepAgent: Bool = false,
+        // 深度研究(仅 Direct):非 nil 时本次发送走 DeepResearchEngine(自带 Firecrawl 会话快照)。
+        researchSession: WebSearchSession? = nil
     ) {
         guard !panel.isEmpty else { return }
         // 别名:让下方异步体与原 send() 逐行一致,降低抽取风险
@@ -560,6 +568,21 @@ extension AppViewModel {
                 }
 
                 debateRounds = rounds
+            } else if let research = researchSession, modeAtSend == .direct, let researchCfg = panel.first {
+                // 深度研究(仅 Direct,单模型):DeepResearchEngine 自驱「大纲→搜索→抓取→提炼→缺口」
+                // 多轮循环,进度走 ToolStep 步骤树,来源/角标/参考文献沿用现有引用管线。
+                let researchResult = await self.runDeepResearch(
+                    config: researchCfg,
+                    question: promptSnapshot,
+                    systemPrompt: sysSnapshot,
+                    web: research,
+                    roundDate: roundDate,
+                    roundID: roundID + "-research",
+                    conversationTitle: convTitleSnapshot,
+                    conversationID: convIDString
+                )
+                responses = researchResult.responses
+                errors = researchResult.errors
             } else {
                 // Structured 模式:给每家拼上「按 schema 返回严格 JSON」的 prompt(全 provider 通用)。
                 // 其它模式 prompts 为空,沿用 defaultPrompt。
@@ -1659,6 +1682,66 @@ extension AppViewModel {
             }
         }
         return (responses, errors)
+    }
+
+    // MARK: - 深度研究(Direct 子模式)
+
+    /// 跑一次深度研究:把直播状态(panel 首家的 ResponseState)交给 `DeepResearchEngine` 驱动,
+    /// 来源经回调并入 `liveSources` / `state.sources`(落盘进 Turn.sources,角标 [n] 可点)。
+    /// 返回值形状与 `runPanelRound` 一致,后续落盘逻辑零改动复用。
+    private func runDeepResearch(
+        config: ProviderConfig,
+        question: String,
+        systemPrompt: String,
+        web: WebSearchSession,
+        roundDate: Date,
+        roundID: String,
+        conversationTitle: String,
+        conversationID: String
+    ) async -> (responses: [String: String], errors: [String: String]) {
+        guard let state = liveStates[config.id] else {
+            return ([:], [config.id.uuidString: "状态丢失"])
+        }
+        let apiKey = config.kind.isCLI ? "" : ((try? KeychainStore.load(id: config.id)) ?? "")
+        let engine = DeepResearchEngine(
+            provider: config, apiKey: apiKey, web: web, state: state,
+            onSources: { [weak self, weak state] refs in
+                guard let self else { return }
+                // 与 runOne 的 .sources 分支同款去重合并:全轮 liveSources + 本卡 state.sources。
+                let known = Set(self.liveSources.map(\.url))
+                self.liveSources.append(contentsOf: refs.filter { !known.contains($0.url) })
+                if let state {
+                    let stateKnown = Set(state.sources.map(\.url))
+                    state.sources.append(contentsOf: refs.filter { !stateKnown.contains($0.url) })
+                }
+            }
+        )
+        let result = await engine.run(question: question, systemPrompt: systemPrompt)
+        if let err = result.error {
+            state.fail(err)
+        } else {
+            state.finish()
+        }
+
+        ResponseLogger.writeAsync(.init(
+            roundID: roundID,
+            timestamp: roundDate,
+            providerName: config.displayName,
+            providerKind: config.kind.rawValue,
+            baseURL: config.baseURL,
+            model: config.model,
+            prompt: question,
+            systemPrompt: systemPrompt,
+            response: state.text,
+            elapsedSeconds: state.elapsedSeconds,
+            error: result.error,
+            conversationTitle: conversationTitle,
+            conversationID: conversationID
+        ))
+
+        var errors: [String: String] = [:]
+        if let err = result.error { errors[config.id.uuidString] = err }
+        return ([config.id.uuidString: state.text], errors)
     }
 
     // MARK: - Tournament(擂台 / 淘汰赛)裁定
