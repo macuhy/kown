@@ -4,6 +4,7 @@ import Foundation
 ///
 /// 存盘沿用 `PromptLibraryStore` 的约定:Application Support 下 App 专属子目录的一个 JSON 文件,
 /// JSONEncoder/JSONDecoder 编解码、日期 `.iso8601`。和 Prompt 库一样属本地库(不另起 iCloud 容器)。
+@MainActor
 @Observable
 final class SkillsStore {
     private(set) var skills: [Skill] = []
@@ -57,15 +58,43 @@ final class SkillsStore {
     func add(_ skill: Skill) -> Skill {
         skills.insert(skill, at: 0)
         save()
+        scheduleTriggerPhraseSynthesis(for: skill)
         return skill
     }
 
     func update(_ skill: Skill) {
         guard let idx = skills.firstIndex(where: { $0.id == skill.id }) else { return }
+        let old = skills[idx]
         var updated = skill
         updated.updatedAt = Date()
         skills[idx] = updated
         save()
+        // 只有触发匹配相关字段变了才值得重算同义触发说法(避免每次小编辑都打模型)。
+        if old.name != updated.name || old.summary != updated.summary
+            || old.keywords != updated.keywords || old.instructions != updated.instructions {
+            scheduleTriggerPhraseSynthesis(for: updated)
+        }
+    }
+
+    /// 后台用便宜模型为技能生成 ≤15 条同义触发说法,完成后写回该技能的 `triggerPhrases`。
+    /// 无可用 provider / 超时 / 失败 → 静默保持原样(保存永不因此变慢或失败)。
+    /// 直接改数组、不走 `update()`,避免触发递归再生成。
+    private func scheduleTriggerPhraseSynthesis(for skill: Skill) {
+        guard !isRunningUnderXCTest else { return }
+        let snapshot = skill
+        Task { [weak self] in
+            // synthesize 是 nonisolated async,自动跳出主线程跑模型调用,不卡 UI。
+            guard let phrases = await SkillTriggerSynthesizer.synthesize(for: snapshot) else { return }
+            guard let self else { return }
+            // 期间技能可能被改/删:按 id 重新定位,且确认触发相关字段未变(否则这批已过期)。
+            guard let idx = self.skills.firstIndex(where: { $0.id == snapshot.id }) else { return }
+            let cur = self.skills[idx]
+            guard cur.name == snapshot.name, cur.summary == snapshot.summary,
+                  cur.keywords == snapshot.keywords, cur.instructions == snapshot.instructions else { return }
+            guard cur.triggerPhrases != phrases else { return }
+            self.skills[idx].triggerPhrases = phrases
+            self.save()
+        }
     }
 
     func setEnabled(_ id: UUID, _ enabled: Bool) {

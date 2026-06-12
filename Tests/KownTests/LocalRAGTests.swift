@@ -73,4 +73,138 @@ final class LocalRAGTests: XCTestCase {
         let hits = await LocalRAG.retrieve(query: "任何", folder: folder, topK: 3)
         XCTAssertTrue(hits.isEmpty)
     }
+
+    // MARK: - 缓存版本纪律(后端标签:键空间不相交,向量绝不混算)
+
+    func testBackendTagSeparatesContextualFromLegacy() {
+        // legacy 标签就是语言名(兼容旧缓存文件)。
+        XCTAssertEqual(RAGVectorCache.backendTag(contextualRevision: nil, lang: "zh"), "zh")
+        XCTAssertEqual(RAGVectorCache.backendTag(contextualRevision: nil, lang: "en"), "en")
+        // contextual 标签带修订号前缀,与 legacy 天然不相交。
+        let cv = RAGVectorCache.backendTag(contextualRevision: 2, lang: "zh")
+        XCTAssertEqual(cv, "cv2-zh")
+        XCTAssertNotEqual(cv, "zh")
+        XCTAssertTrue(RAGVectorCache.isContextualTag(cv))
+        XCTAssertFalse(RAGVectorCache.isContextualTag("zh"))
+    }
+
+    func testBackendTagRevisionBumpInvalidatesOldVectors() {
+        // 修订号升级 → 标签变化 → 缓存键变化 → 旧向量惰性失效重算(键不再命中)。
+        let rev1 = RAGVectorCache.backendTag(contextualRevision: 1, lang: "zh")
+        let rev2 = RAGVectorCache.backendTag(contextualRevision: 2, lang: "zh")
+        XCTAssertNotEqual(rev1, rev2)
+    }
+
+    func testLanguageOfTag() {
+        XCTAssertEqual(RAGVectorCache.language(ofTag: "cv2-zh"), "zh")
+        XCTAssertEqual(RAGVectorCache.language(ofTag: "cv10-en"), "en")
+        XCTAssertEqual(RAGVectorCache.language(ofTag: "zh"), "zh")   // legacy
+        XCTAssertEqual(RAGVectorCache.language(ofTag: "en"), "en")
+    }
+
+    func testStableHashDeterministic() {
+        // 缓存键依赖稳定哈希:同输入恒定、异输入不同。
+        XCTAssertEqual(RAGVectorCache.stableHash("光合作用"), RAGVectorCache.stableHash("光合作用"))
+        XCTAssertNotEqual(RAGVectorCache.stableHash("光合作用"), RAGVectorCache.stableHash("篮球"))
+    }
+
+    // MARK: - 无 contextual 资产时回退不崩(测试环境强制 legacy 路径)
+
+    @MainActor
+    func testRetrieveFallsBackWithoutContextualAssets() async {
+        // isRunningUnderXCTest 为真 → contextualModel 一律返回 nil(不下载资产、不加载大模型),
+        // 走 legacy/BM25 回退路径。这里验证回退路径不崩且仍能命中。
+        XCTAssertTrue(isRunningUnderXCTest)
+        let folder = KnowledgeFolder(name: "回退", docs: [
+            KnowledgeDoc(name: "B", text: "光合作用是植物把二氧化碳和水转化成有机物的过程。"),
+            KnowledgeDoc(name: "C", text: "篮球是一项团队运动,两队各五人争夺得分。"),
+        ])
+        let hits = await LocalRAG.retrieve(query: "光合作用", folder: folder, topK: 1)
+        XCTAssertEqual(hits.first?.contains("光合作用"), true)
+    }
+
+    @MainActor
+    func testEngineStatusInTestIsLegacy() async {
+        // 测试环境禁用 contextual,引擎状态应为 legacy(资产从不在测试里下载)。
+        let status = await RAGVectorCache.shared.engineStatus()
+        XCTAssertEqual(status, .legacy)
+    }
+
+    @MainActor
+    func testPreindexNoCrashOnEmptyAndPopulated() async {
+        // 预索引在测试环境走 legacy(或两后端都不可用直接跳过),不得崩。
+        await LocalRAG.preindex(folder: KnowledgeFolder(name: "空", docs: []))
+        let folder = KnowledgeFolder(name: "有", docs: [
+            KnowledgeDoc(name: "A", text: "光合作用是植物把二氧化碳和水转化成有机物的过程。"),
+        ])
+        await LocalRAG.preindex(folder: folder)   // 不崩即通过
+    }
+
+    // MARK: - 重排 JSON 解析与失败回退
+
+    func testRerankParseOrderBasic() {
+        // 1-based 输入 → 0-based 输出,顺序保留。
+        XCTAssertEqual(RAGReranker.parseOrder("[3,1,2]", candidateCount: 3), [2, 0, 1])
+    }
+
+    func testRerankParseOrderStripsFenceAndProse() {
+        // 容错:跳过 ``` 围栏与前后废话,只取第一个 [...]。
+        let raw = "好的,结果如下:\n```json\n[2, 1]\n```\n仅供参考"
+        XCTAssertEqual(RAGReranker.parseOrder(raw, candidateCount: 3), [1, 0])
+    }
+
+    func testRerankParseOrderDedupAndDropOutOfRange() {
+        // 越界(5,0)丢弃、重复(2 出现两次)去重。
+        XCTAssertEqual(RAGReranker.parseOrder("[2,2,5,0,1]", candidateCount: 3), [1, 0])
+    }
+
+    func testRerankParseOrderAcceptsFloats() {
+        XCTAssertEqual(RAGReranker.parseOrder("[1.0, 3.0]", candidateCount: 3), [0, 2])
+    }
+
+    func testRerankParseOrderFailureReturnsNil() {
+        // 解析失败 → nil → 调用方静默回退 RRF 顺序。
+        XCTAssertNil(RAGReranker.parseOrder("没有数组", candidateCount: 3))
+        XCTAssertNil(RAGReranker.parseOrder("[]", candidateCount: 3))            // 空数组无有效序号
+        XCTAssertNil(RAGReranker.parseOrder("[9,9,9]", candidateCount: 3))       // 全越界
+        XCTAssertNil(RAGReranker.parseOrder("[1]", candidateCount: 0))           // 无候选
+    }
+
+    @MainActor
+    func testRerankSkippedUnderTest() async {
+        // 测试不得依赖网络:rerank 在 XCTest 下一律返回 nil(静默回退 RRF)。
+        let order = await RAGReranker.rerank(
+            query: "查询", candidates: ["a", "b", "c", "d", "e"], topK: 2)
+        XCTAssertNil(order)
+    }
+
+    // MARK: - 重排 provider 自动挑选(纯函数,不触网)
+
+    func testRerankAutoPickPrefersBudgetTier() {
+        let flagship = ProviderConfig(displayName: "F", kind: .anthropic,
+                                      baseURL: "", model: "claude-opus-4", enabled: true)
+        let budget = ProviderConfig(displayName: "B", kind: .anthropic,
+                                    baseURL: "", model: "claude-haiku-4", enabled: true)
+        let picked = RAGReranker.autoPick(from: [flagship, budget])
+        XCTAssertEqual(picked?.model, "claude-haiku-4")
+    }
+
+    func testRerankAutoPickNilWhenNoUsable() {
+        XCTAssertNil(RAGReranker.autoPick(from: []))
+        let disabled = ProviderConfig(displayName: "D", kind: .anthropic,
+                                      baseURL: "", model: "x", enabled: false)
+        XCTAssertNil(RAGReranker.autoPick(from: [disabled]))
+    }
+
+    func testRerankConfigCodableDefaultsOnMissingFields() throws {
+        // decodeIfPresent 容错:空对象 / 缺字段都解出默认(enabled 默认 true)。
+        let empty = try JSONDecoder().decode(RAGRerankConfig.self, from: Data("{}".utf8))
+        XCTAssertTrue(empty.enabled)
+        XCTAssertNil(empty.providerID)
+        XCTAssertNil(empty.model)
+
+        let partial = try JSONDecoder().decode(
+            RAGRerankConfig.self, from: Data(#"{"enabled":false}"#.utf8))
+        XCTAssertFalse(partial.enabled)
+    }
 }

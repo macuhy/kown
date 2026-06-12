@@ -8,6 +8,9 @@ struct KnowledgeView: View {
 
     @State private var newFolderName = ""
     @State private var confirmDeleteFolderID: UUID?
+    // 检索引擎设置(语义引擎状态 + LLM 智能重排)。
+    @State private var rerankConfig = RAGRerankConfig.default
+    @State private var engineStatus: RAGEngineStatus?
     private let tint = Color(red: 0.10, green: 0.58, blue: 0.52)
 
     var body: some View {
@@ -18,6 +21,7 @@ struct KnowledgeView: View {
                     bindingCard
                     foldersSection
                     createFolderCard
+                    retrievalEngineCard
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 18)
@@ -331,6 +335,126 @@ struct KnowledgeView: View {
         }
         .buttonStyle(.borderedProminent)
         .disabled(newFolderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
+    // MARK: - 检索引擎(语义引擎状态 + 智能重排)
+
+    private var retrievalEngineCard: some View {
+        cardContainer {
+            VStack(alignment: .leading, spacing: 12) {
+                sectionTitle("检索引擎", icon: "brain.head.profile", color: .purple)
+
+                HStack(alignment: .top, spacing: 8) {
+                    Circle()
+                        .fill(engineStatusColor)
+                        .frame(width: 8, height: 8)
+                        .padding(.top, 5)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(engineStatusTitle)
+                            .font(.callout.weight(.semibold))
+                        Text(engineStatusDetail)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 0)
+                }
+
+                Divider().opacity(0.45)
+
+                Toggle(isOn: Binding(
+                    get: { rerankConfig.enabled },
+                    set: { on in
+                        rerankConfig.enabled = on
+                        RAGRerankConfigStore.save(rerankConfig)
+                    }
+                )) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("智能重排")
+                            .font(.callout.weight(.semibold))
+                        Text("检索候选先用便宜模型按相关度重排再注入;超时或失败自动回退本地排序,检索不会因此变慢失败。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .tint(tint)
+
+                if rerankConfig.enabled {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 10) {
+                            Text("重排模型")
+                                .font(.callout)
+                            Spacer(minLength: 12)
+                            rerankModelPicker
+                        }
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("重排模型")
+                                .font(.callout)
+                            rerankModelPicker
+                        }
+                    }
+                }
+            }
+        }
+        .task {
+            rerankConfig = RAGRerankConfigStore.load()
+            engineStatus = await RAGVectorCache.shared.engineStatus()
+        }
+    }
+
+    private var rerankModelPicker: some View {
+        Picker("重排模型", selection: Binding(
+            get: { rerankConfig.providerID },
+            set: { id in
+                rerankConfig.providerID = id
+                rerankConfig.model = nil   // 换 provider 后用它自己配置的模型
+                RAGRerankConfigStore.save(rerankConfig)
+            }
+        )) {
+            Text("自动(挑便宜模型)").tag(UUID?.none)
+            ForEach(rerankProviders) { p in
+                Text("\(p.displayName) · \(p.model)").tag(UUID?.some(p.id))
+            }
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .frame(minWidth: 150, alignment: .trailing)
+    }
+
+    private var rerankProviders: [ProviderConfig] {
+        viewModel.providers.filter { $0.enabled && !$0.kind.isCLI }
+    }
+
+    private var engineStatusColor: Color {
+        switch engineStatus {
+        case .contextual:        return .green
+        case .downloadingAssets: return .orange
+        case .legacy:            return .secondary
+        case nil:                return .secondary.opacity(0.4)
+        }
+    }
+
+    private var engineStatusTitle: String {
+        switch engineStatus {
+        case .contextual:        return "语义引擎:上下文向量已就绪"
+        case .downloadingAssets: return "语义引擎:模型资产下载中"
+        case .legacy:            return "语义引擎:基础句向量"
+        case nil:                return "语义引擎:状态检测中…"
+        }
+    }
+
+    private var engineStatusDetail: String {
+        switch engineStatus {
+        case .contextual(let rev):
+            return "Apple 神经网络上下文向量(修订 \(rev)),中文语义区分度更好,完全本地运行。"
+        case .downloadingAssets:
+            return "已请求系统后台下载上下文向量模型,完成前暂用基础句向量,之后自动切换。"
+        case .legacy:
+            return "当前使用 NLEmbedding 静态句向量;上下文向量模型可用后会自动切换。"
+        case nil:
+            return "正在探测本机语义模型可用性。"
+        }
     }
 
     private func sectionTitle(_ text: String, icon: String, color: Color) -> some View {

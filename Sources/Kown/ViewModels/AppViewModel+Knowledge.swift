@@ -47,6 +47,7 @@ extension AppViewModel {
         knowledgeFolders[idx].docs.append(KnowledgeDoc(name: name, text: trimmed))
         knowledgeFolders[idx].updatedAt = Date()
         saveKnowledge()
+        schedulePreindex(folderID: folderID)
     }
 
     /// 从一个 URL 抓取正文(Firecrawl)并作为文档加入资料夹。成功返回 nil,否则返回错误文案。
@@ -82,6 +83,17 @@ extension AppViewModel {
         knowledgeFolders[idx].docs.append(contentsOf: docs)
         knowledgeFolders[idx].updatedAt = Date()
         saveKnowledge()
+        schedulePreindex(folderID: folderID)
+    }
+
+    /// 文档变更后,后台预热该资料夹全部块的句向量(增量,已缓存的跳过)。
+    /// contextual 后端比静态句向量慢一个量级,提前批量算好,首次检索不用现场扫全量;
+    /// 整个过程跑在 `RAGVectorCache`(actor)上,不碰主线程;新任务开始时旧任务自动让位。
+    func schedulePreindex(folderID: UUID) {
+        guard let folder = knowledgeFolders.first(where: { $0.id == folderID }) else { return }
+        Task.detached(priority: .utility) {
+            await LocalRAG.preindex(folder: folder)
+        }
     }
 
     func removeKnowledgeDoc(folderID: UUID, docID: UUID) {

@@ -12,6 +12,10 @@ struct Skill: Identifiable, Codable, Equatable, Sendable {
     var instructions: String
     /// 自动触发用的关键词(命中 prompt 即加分)。
     var keywords: [String]
+    /// 自动生成的同义触发说法(便宜模型据 name/summary/keywords 扩写,≤15 条)。
+    /// 与 `keywords` 同样参与 `SkillRouter` 命中加分,提升口语化触发召回。
+    /// 可选字段:旧数据 / 未生成时为空,`decodeIfPresent` 容错。
+    var triggerPhrases: [String]
     /// 该技能允许模型调用的工具名(如 "create_reminder"、"web_search")。
     var allowedTools: [String]
     /// 关闭后不参与自动触发,也不能被手动选中。
@@ -26,6 +30,7 @@ struct Skill: Identifiable, Codable, Equatable, Sendable {
          summary: String = "",
          instructions: String,
          keywords: [String] = [],
+         triggerPhrases: [String] = [],
          allowedTools: [String] = [],
          enabled: Bool = true,
          isPreset: Bool = false,
@@ -36,11 +41,32 @@ struct Skill: Identifiable, Codable, Equatable, Sendable {
         self.summary = summary
         self.instructions = instructions
         self.keywords = keywords
+        self.triggerPhrases = triggerPhrases
         self.allowedTools = allowedTools
         self.enabled = enabled
         self.isPreset = isPreset
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+    }
+
+    // Codable 容错:新增字段一律 decodeIfPresent(仓库惯例),旧数据缺 triggerPhrases 解空数组。
+    enum CodingKeys: String, CodingKey {
+        case id, name, summary, instructions, keywords, triggerPhrases, allowedTools, enabled, isPreset, createdAt, updatedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id             = try c.decode(UUID.self, forKey: .id)
+        self.name           = try c.decode(String.self, forKey: .name)
+        self.summary        = try c.decodeIfPresent(String.self, forKey: .summary) ?? ""
+        self.instructions   = try c.decode(String.self, forKey: .instructions)
+        self.keywords       = try c.decodeIfPresent([String].self, forKey: .keywords) ?? []
+        self.triggerPhrases = try c.decodeIfPresent([String].self, forKey: .triggerPhrases) ?? []
+        self.allowedTools   = try c.decodeIfPresent([String].self, forKey: .allowedTools) ?? []
+        self.enabled        = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        self.isPreset       = try c.decodeIfPresent(Bool.self, forKey: .isPreset) ?? false
+        self.createdAt      = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        self.updatedAt      = try c.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
     }
 
     /// 正文里出现的全部 `{{变量}}` 名(去重、保持首次出现顺序)。
