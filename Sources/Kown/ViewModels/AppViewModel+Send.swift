@@ -674,8 +674,9 @@ extension AppViewModel {
             //      打分的调用方式,见 CostRouter.scoreAnswer);低于阈值 → 同 provider 换旗舰档重答一遍。
             //      初答原样保留,升级答存进 Turn.autoEscalation,UI 标注「已自动升级」。
             //      打分失败 / 分数达标 / 取消时不升级,零行为差异。
+            // 深度研究轮不参与级联:报告由多轮检索综合而来,旗舰「重答」拿不到研究上下文,只会更差。
             var autoEscalationResult: AutoEscalation? = nil
-            if let plan = cascadePlan, modeAtSend == .direct, !Task.isCancelled,
+            if let plan = cascadePlan, modeAtSend == .direct, researchSession == nil, !Task.isCancelled,
                let firstKey = panelOrder.first, errors[firstKey] == nil,
                let firstAnswer = responses[firstKey]?.trimmingCharacters(in: .whitespacesAndNewlines),
                !firstAnswer.isEmpty,
