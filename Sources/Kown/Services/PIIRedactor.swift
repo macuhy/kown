@@ -64,10 +64,10 @@ enum PIIRedactor {
 
     // MARK: - 本地 provider 判断(本地则跳过脱敏)
 
-    /// provider 是否「本地」:CLI(本机子进程)、Ollama(vendor 标记)、或 baseURL 指向本机回环地址。
-    /// 本地 = 数据不出本机,无需脱敏。
+    /// provider 是否「本地」:CLI(本机子进程)、Apple 本地模型(端侧推理)、Ollama(vendor 标记)、
+    /// 或 baseURL 指向本机回环地址。本地 = 数据不出本机,无需脱敏。
     static func isLocalProvider(_ config: ProviderConfig) -> Bool {
-        if config.kind.isCLI { return true }
+        if config.kind.isCLI || config.kind.isAppleFM { return true }
         if config.vendor?.lowercased() == "ollama" { return true }
         return isLocalBaseURL(config.baseURL)
     }

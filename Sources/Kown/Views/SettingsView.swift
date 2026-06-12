@@ -1354,7 +1354,7 @@ private struct MobileProviderSummaryRow: View {
                     if config.isSummary {
                         roleChip("总结", color: .teal)
                     }
-                    if !config.kind.isCLI && !isEndpointComplete {
+                    if !config.kind.isCLI && !config.kind.isAppleFM && !isEndpointComplete {
                         roleChip("待补全", color: .orange)
                     }
                 }
@@ -1456,6 +1456,8 @@ private struct MobileProviderEditorView: View {
             identitySection
             if config.kind.isCLI {
                 cliSection
+            } else if config.kind.isAppleFM {
+                appleFMSection
             } else {
                 connectionSection
             }
@@ -1665,6 +1667,34 @@ private struct MobileProviderEditorView: View {
         }
     }
 
+    /// Apple 本地模型:无 URL / 无 Key,展示说明 + 可用状态 + 测试按钮。
+    private var appleFMSection: some View {
+        Section("端侧模型") {
+            Text("系统内置端侧模型 — 免 API Key、零成本、全离线,数据不出本机。上下文窗口约 4096 token,适合日常问答与短文本处理。")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            if let notice = AppleFMClient.availabilityNotice {
+                Label(notice, systemImage: "exclamationmark.triangle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+            } else {
+                Label("可用 · 端侧运行", systemImage: "checkmark.circle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.green)
+            }
+            Button {
+                runTest()
+            } label: {
+                if testing {
+                    Label("测试中", systemImage: "hourglass")
+                } else {
+                    Label("测试生成", systemImage: "bolt.horizontal.circle")
+                }
+            }
+            .disabled(testing)
+        }
+    }
+
     private var cliSection: some View {
         Section("命令") {
             TextField("Command", text: Binding(
@@ -1812,12 +1842,14 @@ private struct MobileProviderEditorView: View {
     }
 
     private var isEndpointComplete: Bool {
-        !config.baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        // Apple 本地模型不需要 Base URL / Key,始终视为配置完整。
+        if config.kind.isAppleFM { return true }
+        return !config.baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
         !config.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var canTest: Bool {
-        !testing && isEndpointComplete && (!apiKey.isEmpty || hasStoredKey)
+        !testing && isEndpointComplete && (!apiKey.isEmpty || hasStoredKey || !config.kind.needsAPIKey)
     }
 
     private var kindColor: Color {
@@ -1845,7 +1877,7 @@ private struct MobileProviderEditorView: View {
         testing = true
 
         let resolvedKey: String
-        if config.kind.isCLI {
+        if !config.kind.needsAPIKey {
             resolvedKey = ""
         } else {
             do {

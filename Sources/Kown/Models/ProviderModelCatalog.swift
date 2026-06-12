@@ -72,6 +72,9 @@ enum ProviderModelCatalog {
         switch config.kind {
         case .cliCommand:
             return []
+        case .appleFM:
+            // 端侧只有一个系统内置模型,不提供下拉选择。
+            return []
         case .anthropic:
             return [
                 "claude-opus-4-7", "claude-opus-4-6",

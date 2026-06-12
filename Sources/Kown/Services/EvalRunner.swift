@@ -142,7 +142,7 @@ final class EvalRunner {
         var failure: String?
 
         do {
-            let apiKey = provider.kind.isCLI ? "" : (try KeychainStore.load(id: provider.id))
+            let apiKey = provider.kind.needsAPIKey ? (try KeychainStore.load(id: provider.id)) : ""
             let client = ProviderRegistry.client(for: provider.kind)
             let options = ChatOptions(
                 systemPrompt: nil,

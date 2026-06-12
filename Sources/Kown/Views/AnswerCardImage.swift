@@ -61,6 +61,7 @@ private func shareAccent(_ kind: ProviderKind) -> Color {
     case .anthropic:        return Color(red: 0.83, green: 0.38, blue: 0.18)
     case .gemini:           return Color(red: 0.26, green: 0.52, blue: 0.96)
     case .cliCommand:       return Color(red: 0.55, green: 0.45, blue: 0.78)
+    case .appleFM:          return Color(red: 0.78, green: 0.40, blue: 0.86)
     }
 }
 
@@ -70,6 +71,7 @@ private func shareSymbol(_ kind: ProviderKind) -> String {
     case .anthropic:        return "text.book.closed"
     case .gemini:           return "diamond.fill"
     case .cliCommand:       return "terminal"
+    case .appleFM:          return "apple.logo"
     }
 }
 

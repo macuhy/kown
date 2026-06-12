@@ -205,6 +205,8 @@ struct ProviderRowView: View {
         Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 10) {
             if config.kind.isCLI {
                 cliFieldRows
+            } else if config.kind.isAppleFM {
+                appleFMFieldRows
             } else {
                 httpFieldRows
             }
@@ -395,6 +397,47 @@ struct ProviderRowView: View {
                     cliTestButton
                 }
             }
+        }
+    }
+
+    /// Apple 本地模型:无 URL / 无 Key,只展示说明 + 可用状态 + 测试按钮。
+    @ViewBuilder
+    private var appleFMFieldRows: some View {
+        GridRow {
+            label("说明")
+            Text("系统内置端侧模型 — 免 API Key、零成本、全离线,数据不出本机。上下文窗口约 4096 token,适合日常问答与短文本处理。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        GridRow {
+            label("状态")
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    appleFMStatus
+                    Spacer(minLength: 0)
+                    cliTestButton
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    appleFMStatus
+                    cliTestButton
+                }
+            }
+        }
+    }
+
+    /// Apple 本地模型可用性:可用给绿色;不可用直接展示原因(老系统 / 未开 Apple Intelligence / 模型未下载)。
+    @ViewBuilder
+    private var appleFMStatus: some View {
+        if let notice = AppleFMClient.availabilityNotice {
+            Label(notice, systemImage: "exclamationmark.triangle.fill")
+                .font(.caption)
+                .foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+        } else {
+            Label("可用 · 端侧运行", systemImage: "checkmark.circle.fill")
+                .font(.caption)
+                .foregroundStyle(.green)
         }
     }
 
@@ -628,12 +671,14 @@ struct ProviderRowView: View {
     }
 
     private var isEndpointComplete: Bool {
-        !config.baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        // Apple 本地模型不需要 Base URL / Key,始终视为配置完整。
+        if config.kind.isAppleFM { return true }
+        return !config.baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
         !config.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var canTest: Bool {
-        !testing && isEndpointComplete && (!apiKey.isEmpty || hasStoredKey)
+        !testing && isEndpointComplete && (!apiKey.isEmpty || hasStoredKey || !config.kind.needsAPIKey)
     }
 
     private var advancedSummary: String {
@@ -692,7 +737,7 @@ struct ProviderRowView: View {
         testing = true
 
         let resolvedKey: String
-        if config.kind.isCLI {
+        if !config.kind.needsAPIKey {
             resolvedKey = ""
         } else {
             do {

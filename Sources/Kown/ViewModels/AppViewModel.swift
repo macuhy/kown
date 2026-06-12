@@ -1559,7 +1559,7 @@ final class AppViewModel {
         enhancerTask = Task { [weak self] in
             guard let self else { return }
             do {
-                let key = snapshot.kind.isCLI ? "" : (try KeychainStore.load(id: snapshot.id))
+                let key = snapshot.kind.needsAPIKey ? (try KeychainStore.load(id: snapshot.id)) : ""
                 let client = ProviderRegistry.client(for: snapshot.kind)
                 let options = ChatOptions(systemPrompt: nil, temperature: 0.3, maxTokens: 1024)
                 var collected = ""

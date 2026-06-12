@@ -822,6 +822,7 @@ private extension ProviderKind {
         case .anthropic:        return "anthropic"
         case .gemini:           return "google"
         case .cliCommand:       return "cli"
+        case .appleFM:          return "apple"
         }
     }
 }
