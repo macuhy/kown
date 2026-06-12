@@ -4,14 +4,22 @@ import NaturalLanguage
 /// 隐私脱敏层(PII redaction)。
 ///
 /// 发往**云端** LLM 前,本地检测并假名化 PII —— 手机号 / 邮箱 / 身份证号 / 银行卡(信用卡)号,
-/// 可选人名 —— 用稳定、像自然语言的占位符(如「张三的电话1」式的「[电话1]」)替换原文发送;
+/// 以及 NER 识别的人名(默认开)/ 地名 / 机构名(默认关)——
+/// 用稳定、像自然语言的占位符(如「张三的电话1」式的「[电话1]」)替换原文发送;
 /// 模型流式返回时再把占位符**还原**成原文展示 / 存储。每次请求一份可逆映射(`RedactionMap`)。
 ///
 /// 设计要点:
-/// - 占位符稳定 + 自然:`[人名1]` / `[电话1]` / `[邮箱1]` / `[身份证1]` / `[银行卡1]`,
+/// - 占位符稳定 + 自然:`[人名1]` / `[电话1]` / `[邮箱1]` / `[身份证1]` / `[银行卡1]` / `[地名1]` / `[机构名1]`,
 ///   带方括号 + 中文类别 + 序号,既好让模型当作一个不可拆的实体保留,又不至于干扰语义。
 /// - 同一原文在一次请求内复用同一个占位符(去重),还原时一一对应。
-/// - 检测器:正则(身份证 / 银行卡)+ `NSDataDetector`(电话 / 邮箱 / 链接里的邮箱)+ `NLTagger`(人名,可选)。
+/// - 检测器:正则(身份证 / 银行卡)+ `NSDataDetector`(电话 / 邮箱 / 链接里的邮箱)+ `NLTagger` NER
+///   (人名 / 地名 / 机构名;人名默认开,地名 / 机构名默认关)。
+/// - **统一命中区间**:所有检测器输出同构的 `Hit`(区间 + 类别 + 来源),在**原文**上一次性收集后
+///   经 `mergeHits` 合并(重叠取并集、类型正则优先、相邻同类合并),再从尾到头一次性替换 ——
+///   不再串行「替换后再检测」,NER 与正则互不踩偏移。
+/// - NER 前先把结构化命中**等长空格遮蔽**(`maskingRanges`):实测句中夹长邮箱 / 号码串会让
+///   NLTagger 整句失灵(「…发给刘强东和马云,抄送 john.smith@example.com」一个实体都不出),
+///   遮蔽后恢复;等长替换保证 NSRange 与原文对齐。
 /// - **本地 provider(Ollama / OpenAICompatible 指向 localhost / CLI)跳过脱敏**:数据没出本机,
 ///   假名化只会徒增模型负担。判断见 `isLocalProvider(_:)`。
 /// - 还原要处理「占位符被拆在多个流式 chunk 边界」的情况:用 `StreamingRestorer` 做缓冲,
@@ -29,8 +37,12 @@ enum PIIRedactor {
     static let emailKey   = "kown.privacy.piiRedaction.email"
     static let idCardKey  = "kown.privacy.piiRedaction.idcard"
     static let bankKey    = "kown.privacy.piiRedaction.bank"
-    /// 人名脱敏默认 **关闭**(NLTagger 误报率比正则高,opt-in)。
+    /// 人名(NLTagger NER)默认 **开**:实测常见中文 / 英文姓名识别可用、纯叙述句几乎零误报
+    ///   (详见 `detectEntities` 注释);误中也只是占位符替换、回流自动还原,代价低。
     static let nameKey    = "kown.privacy.piiRedaction.name"
+    /// 地名 / 机构名(NLTagger NER)默认 **关**:地名多数场景不敏感,中文机构名漏报多,opt-in。
+    static let placeKey   = "kown.privacy.piiRedaction.place"
+    static let orgKey     = "kown.privacy.piiRedaction.org"
 
     struct Settings: Sendable {
         var enabled: Bool
@@ -39,13 +51,18 @@ enum PIIRedactor {
         var idCard: Bool
         var bank: Bool
         var name: Bool
+        /// 地名 / 机构名(NER 类别,后加):带默认值,老构造点不传时视为关闭。
+        var place: Bool = false
+        var org: Bool = false
 
         /// 任一分类开着才有脱敏意义。
-        var anyCategoryOn: Bool { phone || email || idCard || bank || name }
+        var anyCategoryOn: Bool { phone || email || idCard || bank || name || place || org }
         var active: Bool { enabled && anyCategoryOn }
+        /// 任一 NER 类别开着才需要跑 NLTagger。
+        var anyNEROn: Bool { name || place || org }
     }
 
-    /// 从 UserDefaults 读当前设置(分类开关缺省视为开,人名缺省为关)。
+    /// 从 UserDefaults 读当前设置(分类开关缺省视为开;NER 类别里人名缺省开,地名 / 机构名缺省关)。
     @MainActor
     static func currentSettings() -> Settings {
         let ud = UserDefaults.standard
@@ -58,7 +75,9 @@ enum PIIRedactor {
             email:   flag(emailKey,  default: true),
             idCard:  flag(idCardKey, default: true),
             bank:    flag(bankKey,   default: true),
-            name:    flag(nameKey,   default: false)
+            name:    flag(nameKey,   default: true),
+            place:   flag(placeKey,  default: false),
+            org:     flag(orgKey,    default: false)
         )
     }
 
@@ -112,8 +131,8 @@ enum PIIRedactor {
         }
     }
 
-    enum Category: CaseIterable {
-        case name, phone, email, idCard, bank
+    enum Category: CaseIterable, Sendable {
+        case name, phone, email, idCard, bank, place, org
         var label: String {
             switch self {
             case .name:   return "人名"
@@ -121,8 +140,26 @@ enum PIIRedactor {
             case .email:  return "邮箱"
             case .idCard: return "身份证"
             case .bank:   return "银行卡"
+            case .place:  return "地名"
+            case .org:    return "机构名"
             }
         }
+    }
+
+    // MARK: - 命中区间(正则 / NER 同构)
+
+    /// 一次检测命中:区间 + 类别 + 来源。所有检测器(正则 / NSDataDetector / NLTagger)的输出
+    /// 统一成这个形态后交给 `mergeHits` 合并,再一次性替换。
+    struct Hit: Equatable, Sendable {
+        enum Source: Equatable, Sendable {
+            /// 结构化检测(正则 / NSDataDetector):更确定,合并时类型优先。
+            case regex
+            /// NLTagger 命名实体识别:精度不如正则,合并时让位。
+            case ner
+        }
+        var range: NSRange
+        var category: Category
+        var source: Source
     }
 
     // MARK: - 出站:脱敏
@@ -134,7 +171,6 @@ enum PIIRedactor {
                        map: RedactionMap = RedactionMap()) -> (text: String, map: RedactionMap) {
         guard settings.active, !text.isEmpty else { return (text, map) }
 
-        var working = text
         var resultMap = map
         // 类别计数器随映射走(已有映射时从已分配数接续,避免占位符重号)。
         var counters: [Category: Int] = [:]
@@ -142,52 +178,133 @@ enum PIIRedactor {
             counters[cat] = resultMap.placeholderToOriginal.keys.filter { $0.hasPrefix("[\(cat.label)") }.count
         }
 
-        // 顺序:先结构化(身份证 / 银行卡 / 邮箱 / 电话),最后人名。
-        // 先长后短,避免银行卡号里的子串被电话规则先吃掉。
-        if settings.idCard {
-            working = replaceMatches(in: working, ranges: detectIDCards(working),
-                                     category: .idCard, map: &resultMap, counters: &counters)
+        // ① 结构化检测(正则 / NSDataDetector),全部在**原文**上找区间,互相不踩偏移。
+        var hits: [Hit] = []
+        if settings.idCard { hits += detectIDCards(text).map   { Hit(range: $0, category: .idCard, source: .regex) } }
+        if settings.bank   { hits += detectBankCards(text).map { Hit(range: $0, category: .bank,   source: .regex) } }
+        if settings.email  { hits += detectEmails(text).map    { Hit(range: $0, category: .email,  source: .regex) } }
+        if settings.phone  { hits += detectPhones(text).map    { Hit(range: $0, category: .phone,  source: .regex) } }
+
+        // ② NER(人名 / 地名 / 机构名)叠加:先把结构化命中等长空格遮蔽再喂 NLTagger
+        //   (长邮箱 / 号码串会让 NLTagger 整句失灵;等长遮蔽保证区间与原文对齐)。
+        if settings.anyNEROn {
+            let nerInput = hits.isEmpty ? text : maskingRanges(hits.map(\.range), in: text)
+            hits += detectEntities(nerInput, name: settings.name, place: settings.place, org: settings.org)
         }
-        if settings.bank {
-            working = replaceMatches(in: working, ranges: detectBankCards(working),
-                                     category: .bank, map: &resultMap, counters: &counters)
-        }
-        if settings.email {
-            working = replaceMatches(in: working, ranges: detectEmails(working),
-                                     category: .email, map: &resultMap, counters: &counters)
-        }
-        if settings.phone {
-            working = replaceMatches(in: working, ranges: detectPhones(working),
-                                     category: .phone, map: &resultMap, counters: &counters)
-        }
-        if settings.name {
-            working = replaceMatches(in: working, ranges: detectNames(working),
-                                     category: .name, map: &resultMap, counters: &counters)
-        }
-        return (working, resultMap)
+
+        // ③ 区间合并(重叠取并集、类型正则优先、相邻同类合并)→ ④ 一次性替换。
+        let out = replaceHits(in: text, hits: mergeHits(hits), map: &resultMap, counters: &counters)
+        return (out, resultMap)
     }
 
-    /// 把一批(已找到的)NSRange 从后往前替换成占位符,避免前面的替换打乱后面的偏移。
-    private static func replaceMatches(in text: String,
-                                       ranges: [NSRange],
-                                       category: Category,
-                                       map: inout RedactionMap,
-                                       counters: inout [Category: Int]) -> String {
-        guard !ranges.isEmpty else { return text }
+    /// 把合并后的命中替换成占位符:**升序**分配编号(文中第一个电话是「[电话1]」,同一原文复用同一占位符),
+    /// 再从尾往前替换,避免前面的替换打乱后面的偏移。
+    private static func replaceHits(in text: String,
+                                    hits: [Hit],
+                                    map: inout RedactionMap,
+                                    counters: inout [Category: Int]) -> String {
+        guard !hits.isEmpty else { return text }
         let ns = text as NSString
-        // 去重 + 按 location 降序,从尾部往前替换。
-        let sorted = ranges
-            .filter { $0.location != NSNotFound && NSMaxRange($0) <= ns.length }
-            .sorted { $0.location > $1.location }
+        let valid = hits
+            .filter { $0.range.location != NSNotFound && NSMaxRange($0.range) <= ns.length }
+            .sorted { $0.range.location < $1.range.location }
+        // 先按出现顺序分配占位符。
+        var replacements: [(NSRange, String)] = []
+        for hit in valid {
+            let original = ns.substring(with: hit.range)
+            var cnt = counters[hit.category] ?? 0
+            let ph = map.placeholder(for: original, category: hit.category, counter: &cnt)
+            counters[hit.category] = cnt
+            replacements.append((hit.range, ph))
+        }
+        // 从尾往前应用替换。
         let mutable = NSMutableString(string: text)
-        var cnt = counters[category] ?? 0
-        for r in sorted {
-            let original = ns.substring(with: r)
-            let ph = map.placeholder(for: original, category: category, counter: &cnt)
+        for (r, ph) in replacements.sorted(by: { $0.0.location > $1.0.location }) {
             mutable.replaceCharacters(in: r, with: ph)
         }
-        counters[category] = cnt
         return mutable as String
+    }
+
+    /// 把 ranges 全部替换成**等长**空格(NSRange.length 是 UTF-16 单元数,空格恰好 1 单元 →
+    /// 文本总长不变,后续在遮蔽文本上算出的 NSRange 与原文一一对齐)。NER 前用来挡掉结构化命中的干扰。
+    private static func maskingRanges(_ ranges: [NSRange], in text: String) -> String {
+        let ns = text as NSString
+        let mutable = NSMutableString(string: text)
+        for r in ranges.sorted(by: { $0.location > $1.location })
+        where r.location != NSNotFound && r.length > 0 && NSMaxRange(r) <= ns.length {
+            mutable.replaceCharacters(in: r, with: String(repeating: " ", count: r.length))
+        }
+        return mutable as String
+    }
+
+    // MARK: - 区间合并
+
+    /// 把正则 + NER 的命中合并成互不重叠的最终区间:
+    /// - **重叠(含嵌套)取并集,类型正则优先**(正则更确定):NER 命中撞上正则命中 → 区间并集、
+    ///   类别保留正则的;一个 NER 跨过多个正则命中时把它们桥接成一个(类别取其中结构化优先级最高者)。
+    /// - 正则 × 正则重叠:按结构化优先级(身份证 > 银行卡 > 邮箱 > 电话,即旧串行管线的替换顺序)
+    ///   保留强者、**丢弃**弱者(不扩区间,保持旧语义)。
+    /// - NER × NER 重叠:并集,类别取更长的那个(更长 = 上下文更完整)。
+    /// - **相邻同类合并**(前一个结束位置 == 后一个起始位置):主要服务 NLTagger 偶尔把中文姓名
+    ///   拆成相邻单字 token 的情况。
+    /// 返回按 location 升序、互不重叠的命中。
+    static func mergeHits(_ hits: [Hit]) -> [Hit] {
+        let valid = hits.filter { $0.range.location != NSNotFound && $0.range.length > 0 }
+        guard valid.count > 1 else { return valid }
+
+        // 处理顺序 = 优先级:正则按结构化强度,NER 殿后;同优先级先长后短(长的吸收短的)、再按位置稳定排序。
+        let ordered = valid.sorted { a, b in
+            let (pa, pb) = (priority(a), priority(b))
+            if pa != pb { return pa < pb }
+            if a.range.length != b.range.length { return a.range.length > b.range.length }
+            return a.range.location < b.range.location
+        }
+
+        var result: [Hit] = []
+        for hit in ordered {
+            // result 内部互不重叠,且插入序 = 优先级序(索引小者更强)。
+            let overlapping = result.indices.filter { NSIntersectionRange(result[$0].range, hit.range).length > 0 }
+            guard let strongest = overlapping.first else {
+                result.append(hit)
+                continue
+            }
+            // 正则命中撞上更强的已选命中(只可能是正则,NER 此时还没入场)→ 丢弃,不扩区间。
+            guard hit.source == .ner else { continue }
+            // NER 命中:并入最强的重叠者(类型保留对方的 → 正则优先 / 更长 NER 优先),
+            // 被同一个 NER 桥接起来的其余重叠者一并吸收。并集 = 精确覆盖(都与 hit 相交,连续无空洞),
+            // 因此不会与 result 里其它命中产生新重叠。
+            var union = hit.range
+            for idx in overlapping { union = NSUnionRange(union, result[idx].range) }
+            result[strongest].range = union
+            for idx in overlapping.dropFirst().reversed() { result.remove(at: idx) }
+        }
+
+        // 相邻同类合并(按位置升序扫一遍)。
+        var sorted = result.sorted { $0.range.location < $1.range.location }
+        var i = 0
+        while i + 1 < sorted.count {
+            let cur = sorted[i], next = sorted[i + 1]
+            if cur.category == next.category, NSMaxRange(cur.range) == next.range.location {
+                sorted[i].range = NSUnionRange(cur.range, next.range)
+                if next.source == .regex { sorted[i].source = .regex }
+                sorted.remove(at: i + 1)
+            } else {
+                i += 1
+            }
+        }
+        return sorted
+    }
+
+    /// 合并时的处理优先级(数值小者先安放、更强):正则按旧串行管线的替换顺序,NER 殿后。
+    private static func priority(_ hit: Hit) -> Int {
+        guard hit.source == .regex else { return 10 }
+        switch hit.category {
+        case .idCard: return 0
+        case .bank:   return 1
+        case .email:  return 2
+        case .phone:  return 3
+        default:      return 4   // 正则源理论上不出 NER 类别,兜底排在结构化之后、NER 之前
+        }
     }
 
     // MARK: - 检测器
@@ -245,24 +362,45 @@ enum PIIRedactor {
         }
     }
 
-    /// 人名(NLTagger 命名实体识别;中英文都能识)。仅取 .personalName。
-    static func detectNames(_ text: String) -> [NSRange] {
-        var ranges: [NSRange] = []
+    /// 命名实体识别(NLTagger `.nameType`):人名 / 地名 / 机构名,按开关取舍,输出与正则同构的 `Hit`。
+    ///
+    /// 实测(macOS 15,2026-06):
+    /// - **人名**:虽然 `availableTagSchemes` 没把 NameType 列进 zh-Hans,但中文实际可用且效果好 ——
+    ///   常见姓名(张伟 / 王芳)、复姓(诸葛青云 / 欧阳娜娜)、称呼式(老王 / 小张 / 陈经理)、
+    ///   句首人名、中英混排(王小明 + David Chen)全部命中;纯叙述句 / 技术问句零误报,
+    ///   品牌词(苹果手机 / 微信)不误标 → 默认开。
+    /// - **地名**:北京 / 上海 / 深圳 能识,但会把动词吃进去(「飞上海」整体标成地名);
+    /// - **机构名**:阿里巴巴 能识,腾讯 / 字节跳动 漏报,且有「上海开新办公室」式整段误报
+    ///   → 地名 / 机构名误报率高,默认关(opt-in)。
+    /// - 句中夹长邮箱 / 号码串会让整句 NER 失灵,调用前先 `maskingRanges` 等长遮蔽(见 `redact`)。
+    ///
+    /// `.joinNames` 把多 token 姓名(John Smith)合成一个命中;NLTagger 偶尔仍把中文姓名拆成
+    /// 相邻单字 token,交给 `mergeHits` 的相邻同类合并兜底。
+    static func detectEntities(_ text: String, name: Bool, place: Bool, org: Bool) -> [Hit] {
+        guard name || place || org, !text.isEmpty else { return [] }
+        var hits: [Hit] = []
         let tagger = NLTagger(tagSchemes: [.nameType])
         tagger.string = text
         let options: NLTagger.Options = [.omitWhitespace, .omitPunctuation, .joinNames]
-        let nsText = text as NSString
+        let nsLength = (text as NSString).length
         tagger.enumerateTags(in: text.startIndex..<text.endIndex,
                              unit: .word, scheme: .nameType, options: options) { tag, tokenRange in
-            if tag == .personalName {
+            let category: Category?
+            switch tag {
+            case .personalName?:     category = name  ? .name  : nil
+            case .placeName?:        category = place ? .place : nil
+            case .organizationName?: category = org   ? .org   : nil
+            default:                 category = nil
+            }
+            if let category {
                 let ns = NSRange(tokenRange, in: text)
-                if ns.location != NSNotFound && NSMaxRange(ns) <= nsText.length {
-                    ranges.append(ns)
+                if ns.location != NSNotFound && ns.length > 0 && NSMaxRange(ns) <= nsLength {
+                    hits.append(Hit(range: ns, category: category, source: .ner))
                 }
             }
             return true
         }
-        return dedupeRanges(ranges)
+        return hits
     }
 
     // MARK: - 工具
