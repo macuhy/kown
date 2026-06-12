@@ -294,7 +294,7 @@ final class SelectionAssistantState {
             do {
                 let messages = try await ChatWindowReader.readChat(of: app)
                 // 只带最近 30 条,聊天截图一屏也就这个量级,防超长。
-                let transcript = ChatWindowReader.transcript(Array(messages.suffix(30)))
+                let transcript = OCRService.chatTranscript(Array(messages.suffix(30)))
                 let prompt = """
                 下面是从聊天窗口识别出的最近对话(「我」是用户本人,气泡在右侧;\
                 「对方」是聊天对象,气泡在左侧),按时间从早到晚排列。OCR 可能有少量错字,按语境理解:

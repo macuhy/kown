@@ -71,7 +71,7 @@ enum KeyboardAction: String, CaseIterable, Identifiable, Sendable {
         case .translate:
             return "你是翻译助手。在中文与英文之间智能互译:输入主要是中文就译成地道英文,主要是英文就译成地道简体中文。只输出译文本身,不加任何解释。"
         case .reply:
-            return "你是回复建议助手。用户给的是别人发来的消息或一段对话上下文,请站在用户的立场拟一条得体、自然、可直接发送的回复(与对方语言一致)。只输出回复内容本身,不要解释。"
+            return "你是回复建议助手。用户给的是别人发来的消息或一段对话上下文;若上下文以「我:」「对方:」标注发言人,「我」就是用户本人,请针对对方最新的发言、延续「我」此前的语气拟回复。OCR 来源可能有少量错字,按语境理解。站在用户的立场输出一条得体、自然、可直接发送的回复(与对方语言一致),只输出回复内容本身,不要解释。"
         case .formal:
             return "把用户给的文字改写成正式、书面、礼貌的语气,保持原意和原语言。只输出改写后的文字,不要任何解释。"
         case .casual:
@@ -178,13 +178,24 @@ final class KeyboardModel {
             }
 
             do {
-                let text = try await OCRService.recognizeText(in: shot.image)
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                // 优先按聊天界面识别(右=我、左=对方,合并气泡内换行),模型能分清
+                // 谁说了什么、针对对方最新发言拟回复;不是聊天截图再回退平铺 OCR。
+                let text: String
+                let note: String
+                if let messages = try? await OCRService.recognizeChatMessages(in: shot.image),
+                   messages.contains(where: { $0.side == .other }) {
+                    text = OCRService.chatTranscript(Array(messages.suffix(30)))
+                    note = "取材:最近截图(已识别对话)"
+                } else {
+                    text = try await OCRService.recognizeText(in: shot.image)
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    note = "取材:最近截图"
+                }
                 // 标记这张已处理:同一张重复开键盘不再自动跑。
                 KeyboardScreenshot.lastHandledID = shot.localIdentifier
                 guard let self, !text.isEmpty else { self?.cancelShotPrep(); return }
                 self.isPreparingShot = false
-                self.startStream(action: .reply, source: text, note: "取材:最近截图")
+                self.startStream(action: .reply, source: text, note: note)
             } catch {
                 // OCR 没识别到文字等:标记已处理避免同一张图反复自动尝试。
                 KeyboardScreenshot.lastHandledID = shot.localIdentifier
