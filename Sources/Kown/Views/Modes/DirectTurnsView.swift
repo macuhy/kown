@@ -30,7 +30,9 @@ struct DirectTurnsView: View {
     var body: some View {
         LazyVStack(alignment: .leading, spacing: 18) {
             ForEach(conversation.turns) { turn in
+                // 显式稳定身份:切换会话时 conversation 整体替换,靠 turn.id 让 SwiftUI 做增量 diff,避免全量重建。
                 historicalTurn(turn)
+                    .id(turn.id)
             }
             if let livePrompt {
                 liveTurn(prompt: livePrompt)
