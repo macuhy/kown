@@ -654,6 +654,8 @@ struct MainContentView: View {
         let conv = viewModel.selectedConversation
         let hasTurns = conv?.turns.isEmpty == false
         let hasLive = viewModel.liveTurnPrompt != nil
+        // 一次 body 求值只算一遍(纯查询,内部对 providers 做 filter 等遍历),避免下面各分支重复调用。
+        let sendProviders = viewModel.providersForCurrentSend()
         if !hasTurns && !hasLive && viewModel.currentMode == .structured {
             // Structured 模式即使还没有任何 turn,也要让用户先编辑 / 校验 JSON Schema。
             ScrollView {
@@ -662,7 +664,7 @@ struct MainContentView: View {
                     conversation: conv ?? Conversation(),
                     liveStates: [:],
                     livePrompt: nil,
-                    livePanel: viewModel.providersForCurrentSend().panel,
+                    livePanel: sendProviders.panel,
                     onEditTurn: { requestEdit($0) },
                     onFollowUpTurn: { requestFollowUp($0) },
                     onExportTurn: { exportTurnReport($0) },
@@ -715,7 +717,7 @@ struct MainContentView: View {
                                 livePrompt: lPrompt,
                                 liveImages: lImages,
                                 isRunning: lIsRunning,
-                                livePanel: viewModel.providersForCurrentSend().panel,
+                                livePanel: sendProviders.panel,
                                 liveChair: viewModel.chairProvider,
                                 liveSummary: viewModel.summaryProvider,
                                 onEditTurn: { requestEdit($0) },
@@ -729,7 +731,7 @@ struct MainContentView: View {
                                 liveStates: lStates,
                                 livePrompt: lPrompt,
                                 liveImages: lImages,
-                                livePanel: viewModel.providersForCurrentSend().panel,
+                                livePanel: sendProviders.panel,
                                 onForkTurn: { viewModel.forkConversation(fromTurnID: $0) },
                                 onEditTurn: { requestEdit($0) },
                                 onFollowUpTurn: { requestFollowUp($0) },
@@ -749,8 +751,8 @@ struct MainContentView: View {
                                 liveChairState: lChair,
                                 livePrompt: lPrompt,
                                 liveImages: lImages,
-                                livePanel: viewModel.providersForCurrentSend().panel,
-                                liveChair: viewModel.providersForCurrentSend().chair,
+                                livePanel: sendProviders.panel,
+                                liveChair: sendProviders.chair,
                                 onEditTurn: { requestEdit($0) },
                                 onFollowUpTurn: { requestFollowUp($0) },
                                 onExportTurn: { exportTurnReport($0) },
@@ -766,7 +768,7 @@ struct MainContentView: View {
                                 livePrompt: lPrompt,
                                 liveImages: lImages,
                                 isRunning: lIsRunning,
-                                livePanel: viewModel.providersForCurrentSend().panel,
+                                livePanel: sendProviders.panel,
                                 liveChair: viewModel.chairProvider,
                                 onEditTurn: { requestEdit($0) },
                                 onFollowUpTurn: { requestFollowUp($0) },
@@ -780,7 +782,7 @@ struct MainContentView: View {
                                 liveStates: lStates,
                                 livePrompt: lPrompt,
                                 liveImages: lImages,
-                                livePanel: viewModel.providersForCurrentSend().panel,
+                                livePanel: sendProviders.panel,
                                 onEditTurn: { requestEdit($0) },
                                 onFollowUpTurn: { requestFollowUp($0) },
                                 onExportTurn: { exportTurnReport($0) },
@@ -795,7 +797,7 @@ struct MainContentView: View {
                                 livePrompt: lPrompt,
                                 liveImages: lImages,
                                 isRunning: lIsRunning,
-                                livePanel: viewModel.providersForCurrentSend().panel,
+                                livePanel: sendProviders.panel,
                                 onEditTurn: { requestEdit($0) },
                                 onFollowUpTurn: { requestFollowUp($0) },
                                 onExportTurn: { exportTurnReport($0) },
@@ -809,7 +811,7 @@ struct MainContentView: View {
                                 liveStates: lStates,
                                 livePrompt: lPrompt,
                                 liveImages: lImages,
-                                livePanel: viewModel.providersForCurrentSend().panel,
+                                livePanel: sendProviders.panel,
                                 onForkTurn: { viewModel.forkConversation(fromTurnID: $0) },
                                 onEditTurn: { requestEdit($0) },
                                 onFollowUpTurn: { requestFollowUp($0) },
@@ -823,19 +825,21 @@ struct MainContentView: View {
                     }
                     Color.clear.frame(height: 4).id("bottom")
                 }
+                // 滚动用明确的短动画:默认 withAnimation(0.35s easeInOut)会把整个可见子树
+                // 拉进隐式动画事务,流式输出时切回会话会明显卡顿。
                 .onChange(of: viewModel.liveTurnPrompt) { _, _ in
-                    withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
+                    withAnimation(.easeOut(duration: 0.15)) { proxy.scrollTo("bottom", anchor: .bottom) }
                 }
                 .onChange(of: scrollTarget) { _, target in
                     guard let target else { return }
-                    withAnimation { proxy.scrollTo(target, anchor: .top) }
+                    withAnimation(.easeOut(duration: 0.15)) { proxy.scrollTo(target, anchor: .top) }
                 }
                 // 全局搜索跳转:命令面板先切会话并置 pendingScrollTurnID,这里监听后滚到对应轮。
                 // 切会话后新内容需要一帧布局,稍延后再滚,避免目标 turn 还没渲染。
                 .onChange(of: viewModel.pendingScrollTurnID) { _, target in
                     guard let target else { return }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                        withAnimation { proxy.scrollTo(target, anchor: .top) }
+                        withAnimation(.easeOut(duration: 0.15)) { proxy.scrollTo(target, anchor: .top) }
                         viewModel.pendingScrollTurnID = nil
                     }
                 }
