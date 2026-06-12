@@ -40,6 +40,10 @@ struct TournamentTurnsView: View {
                 // 显式稳定身份:切换会话时 conversation 整体替换,靠 turn.id 让 SwiftUI 做增量 diff,避免全量重建。
                 historicalTurn(turn)
                     .id(turn.id)
+                // 「全新上下文」截断点:分隔线提示以上轮次不再随请求发送,可点击撤销。
+                if conversation.contextCutoffTurnID == turn.id {
+                    ContextCutoffDivider { viewModel.clearContextCutoff() }
+                }
             }
             if let livePrompt {
                 liveTurn(prompt: livePrompt)

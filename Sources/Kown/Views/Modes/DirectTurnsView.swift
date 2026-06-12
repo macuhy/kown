@@ -23,6 +23,8 @@ struct DirectTurnsView: View {
     /// 自动升级建议:换更强模型重答 / 转 Council 重答(turnID)。
     var onEscalateStronger: ((UUID) -> Void)? = nil
     var onEscalateCouncil: ((UUID) -> Void)? = nil
+    /// 撤销「全新上下文」截断(分隔线上的撤销按钮)。
+    var onClearContextCutoff: (() -> Void)? = nil
 
     @State private var collapsedTurns: Set<UUID> = []
     @Environment(\.horizontalSizeClass) private var hSizeClass
@@ -33,6 +35,10 @@ struct DirectTurnsView: View {
                 // 显式稳定身份:切换会话时 conversation 整体替换,靠 turn.id 让 SwiftUI 做增量 diff,避免全量重建。
                 historicalTurn(turn)
                     .id(turn.id)
+                // 「全新上下文」截断点:分隔线提示以上轮次不再随请求发送,可点击撤销。
+                if conversation.contextCutoffTurnID == turn.id {
+                    ContextCutoffDivider(onUndo: onClearContextCutoff)
+                }
             }
             if let livePrompt {
                 liveTurn(prompt: livePrompt)

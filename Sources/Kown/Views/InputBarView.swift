@@ -464,6 +464,7 @@ struct InputBarView: View {
                 captureScreenOCR()
             }
             .disabled(ocrRunning)
+            ContextUsageBadge(viewModel: viewModel, buttonSize: toolButtonSize)
             webSearchToggle
             deviceToolsToggle
             mcpToggle
@@ -521,6 +522,7 @@ struct InputBarView: View {
                 showOCRPicker = true
             }
             .disabled(ocrRunning)
+            ContextUsageBadge(viewModel: viewModel, buttonSize: toolButtonSize)
             if viewModel.canEnableWebSearch {
                 webSearchToggle
             }
