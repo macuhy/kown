@@ -13,6 +13,8 @@ struct PerformanceSettingsView: View {
     @AppStorage("kown.councilVoting.v1") private var councilVoting: Bool = false
     /// 与 AppViewModel.autoRouteEnabled 同一 key。
     @AppStorage("kown.autoRoute.v1") private var autoRoute: Bool = false
+    /// 与 AppViewModel.costCascadeEnabled 同一 key(默认关)。
+    @AppStorage("kown.costCascade.v1") private var costCascade: Bool = false
     /// 与 AppViewModel.escalationSuggestionsEnabled 同一 key(默认开)。
     @AppStorage("kown.escalation.enabled") private var escalationSuggestions: Bool = true
     /// 与 AppViewModel.autoTagEnabled 同一 key。默认开。
@@ -46,6 +48,7 @@ struct PerformanceSettingsView: View {
                 autoFailoverCard
                 councilVotingCard
                 autoRouteCard
+                costCascadeCard
                 escalationCard
                 autoTagCard
                 claudeThinkingCard
@@ -66,6 +69,7 @@ struct PerformanceSettingsView: View {
                 autoFailoverCard
                 councilVotingCard
                 autoRouteCard
+                costCascadeCard
                 escalationCard
                 autoTagCard
                 claudeThinkingCard
@@ -99,6 +103,31 @@ struct PerformanceSettingsView: View {
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .strokeBorder(tint.opacity(0.16), lineWidth: 1)
+        }
+    }
+
+    // MARK: - 省钱级联
+
+    private var costCascadeCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Toggle(isOn: $costCascade) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("省钱级联(实验)")
+                        .font(.body.weight(.semibold))
+                    Text("Direct 模式下,先用便宜档模型作答;答完由裁判模型快速打分(1-10),低于 6 分自动换该厂商旗舰档重答一次。两个回答都保留,升级答标注「已自动升级」。会多一次打分调用,触发升级时再多一次旗舰调用。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .tint(secondaryTint)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(secondaryTint.opacity(0.16), lineWidth: 1)
         }
     }
 
@@ -160,7 +189,7 @@ struct PerformanceSettingsView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("按难度自动选模型(Direct,实验)")
                         .font(.body.weight(.semibold))
-                    Text("Direct 模式下,按问题难度在当前模型所属厂商里自动切换档位:简单问题走便宜模型,复杂问题走旗舰。卡片会显示实际用的型号。")
+                    Text("Direct 模式下,按问题难度在当前模型所属厂商里自动切换档位:简单问题走便宜模型,复杂问题走旗舰。当本地胜率榜(Compare 裁判判定)按任务类别攒够战绩后,还会在同档位里优先选「胜率相当且单价更低」的模型,卡片会标注路由理由。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

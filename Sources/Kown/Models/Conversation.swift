@@ -368,6 +368,12 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
     var toolSteps: [ToolStep]?
     /// 多家回答合成的最优终稿(Council / Compare 的「合成最优答案」按钮触发)。旧会话没有,保持 optional。
     var synthesizedConclusion: SynthesizedConclusion?
+    /// 学习型成本路由的中文理由(如「路由:代码类 · xx 胜率相当,单价省约 80%」)。
+    /// 仅 Direct + 自动选模型且按本地战绩做了学习型决策时有。旧会话没有,保持 optional。
+    var routeNote: String?
+    /// 省钱级联(实验)的自动升级结果:初答评分低于阈值后旗舰档重答的留痕,
+    /// UI 在初答下方再放一张「已自动升级」卡。旧会话没有,保持 optional。
+    var autoEscalation: AutoEscalation?
 
     init(id: UUID = UUID(),
          timestamp: Date = Date(),
@@ -402,7 +408,9 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
          knowledgeSources: [KnowledgeSourceRef]? = nil,
          escalationSuggestion: EscalationSuggestion? = nil,
          toolSteps: [ToolStep]? = nil,
-         synthesizedConclusion: SynthesizedConclusion? = nil) {
+         synthesizedConclusion: SynthesizedConclusion? = nil,
+         routeNote: String? = nil,
+         autoEscalation: AutoEscalation? = nil) {
         self.id = id
         self.timestamp = timestamp
         self.prompt = prompt
@@ -437,6 +445,8 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
         self.escalationSuggestion = escalationSuggestion
         self.toolSteps = toolSteps
         self.synthesizedConclusion = synthesizedConclusion
+        self.routeNote = routeNote
+        self.autoEscalation = autoEscalation
     }
 
     // 兼容旧 JSON(缺新字段时 sources 等以 decodeIfPresent 解码,默认 nil),不破坏现有存档/同步。
@@ -449,6 +459,7 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
         case generatedImages, compareVerdict, consensusAnalysis, generatedImagesByProvider, imageGenErrors
         case selfRevision, factCheck, knowledgeSources, escalationSuggestion
         case toolSteps, synthesizedConclusion
+        case routeNote, autoEscalation
     }
 
     init(from decoder: Decoder) throws {
@@ -487,6 +498,8 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
         self.escalationSuggestion = try c.decodeIfPresent(EscalationSuggestion.self, forKey: .escalationSuggestion)
         self.toolSteps = try c.decodeIfPresent([ToolStep].self, forKey: .toolSteps)
         self.synthesizedConclusion = try c.decodeIfPresent(SynthesizedConclusion.self, forKey: .synthesizedConclusion)
+        self.routeNote = try c.decodeIfPresent(String.self, forKey: .routeNote)
+        self.autoEscalation = try c.decodeIfPresent(AutoEscalation.self, forKey: .autoEscalation)
     }
 
     /// 取顺序化的 panel 配置（按发送顺序，Chair 不在内）
@@ -546,6 +559,40 @@ struct KnowledgeSourceRef: Identifiable, Codable, Hashable, Sendable {
         self.docName = docName
         self.excerpt = excerpt
         self.page = page
+    }
+}
+
+/// 省钱级联(实验)的自动升级留痕:Direct 初答(便宜档)被裁判打了低分后,
+/// 自动用旗舰档重答的结果。初答原样保留在 `Turn.responses`,本结构只承载升级答与评分上下文,
+/// UI 据此在初答下方放一张「已自动升级」卡。随 Turn 落盘/同步。
+struct AutoEscalation: Codable, Hashable, Sendable {
+    /// 裁判给初答的分(1-10)。
+    var score: Int
+    /// 触发升级的阈值(初答分 < threshold 才会有本结构)。
+    var threshold: Int
+    /// 初答用的模型(便宜档)。
+    var fromModel: String
+    /// 升级重答用的模型(旗舰档)。
+    var toModel: String
+    /// 升级所用 provider kind 的 rawValue(成本角标按单价表算钱用)。
+    var providerKind: String
+    /// 升级答全文。
+    var text: String
+    /// 升级重答失败时的错误(此时 text 可能为空/半截)。
+    var error: String?
+    /// 升级答的 token 用量(成本角标用)。
+    var tokenUsage: TurnTokenUsage?
+
+    init(score: Int, threshold: Int, fromModel: String, toModel: String,
+         providerKind: String, text: String, error: String? = nil, tokenUsage: TurnTokenUsage? = nil) {
+        self.score = score
+        self.threshold = threshold
+        self.fromModel = fromModel
+        self.toModel = toModel
+        self.providerKind = providerKind
+        self.text = text
+        self.error = error
+        self.tokenUsage = tokenUsage
     }
 }
 

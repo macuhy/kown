@@ -77,9 +77,13 @@ extension AppViewModel {
         panel = personaFx.applyingModelOverride(to: panel, mode: currentMode)
 
         // Direct 模式 + 自动路由:按问题难度在当前 provider 的 vendor 内换 model(便宜↔旗舰)。
+        // 本地胜率榜样本足够时走学习型成本路由(同档位选「胜率相当且更便宜」,带中文理由落盘展示);
+        // 样本不足时 CostRouter 内部回退静态规则,行为与原 QuestionRouter 完全一致(reason = nil)。
+        var routeNoteForSend: String? = nil
         if autoRouteEnabled, currentMode == .direct, let first = panel.first {
-            let routed = QuestionRouter.route(first, prompt: trimmed)
+            let routed = CostRouter.route(first, prompt: trimmed)
             if routed.changed { panel[0] = routed.config }
+            routeNoteForSend = routed.reason
         }
         // 「换更强模型重答」:本次发送把 Direct panel[0] 强制换成该 vendor 的旗舰档(发完即复位)。
         if forceFlagshipOnce {
@@ -88,6 +92,23 @@ extension AppViewModel {
                let flagship = QuestionRouter.routedModel(for: first, difficulty: .hard),
                flagship != first.model {
                 var c = first; c.model = flagship; panel[0] = c
+            }
+        }
+
+        // 省钱级联(实验,仅 Direct):本轮实际要用的模型不是旗舰档、且该 vendor 有旗舰可升时,
+        // 预先算好「裁判 + 旗舰档配置 + 阈值」,初答完成后由 runSend 打分并按需自动升级重答。
+        var cascadePlanForSend: CostRouter.CascadePlan? = nil
+        if costCascadeEnabled, currentMode == .direct, let first = panel.first, !first.kind.isCLI,
+           ModelTier.heuristic(first.model) != .flagship,
+           let flagship = QuestionRouter.routedModel(for: first, difficulty: .hard),
+           flagship != first.model {
+            let judge = chairProvider.flatMap { ($0.enabled && !$0.kind.isCLI) ? $0 : nil }
+                ?? providers.first(where: { $0.enabled && !$0.kind.isCLI })
+            if let judge {
+                var fl = first
+                fl.model = flagship
+                cascadePlanForSend = CostRouter.CascadePlan(
+                    judge: judge, flagship: fl, threshold: CostRouter.defaultCascadeThreshold)
             }
         }
 
@@ -249,7 +270,9 @@ extension AppViewModel {
             recallQuery: recallQueryForSend,
             recallExcludeID: recallExcludeID,
             mcpServers: mcpServersForSend,
-            deepAgent: deepAgentForSend
+            deepAgent: deepAgentForSend,
+            routeNote: routeNoteForSend,
+            cascadePlan: cascadePlanForSend
         )
     }
 
@@ -353,7 +376,11 @@ extension AppViewModel {
         // 本次发送启用的 MCP server(已启用 + 开关开时才非空);连接在后台任务里做。
         mcpServers: [MCPServerConfig] = [],
         // 深入模式(仅 Direct):多步 Agent 长链。
-        deepAgent: Bool = false
+        deepAgent: Bool = false,
+        // 学习型成本路由的中文理由(仅 Direct + 自动选模型且学习决策生效时非 nil),随 Turn 落盘展示。
+        routeNote: String? = nil,
+        // 省钱级联(实验)计划:非 nil 时初答完成后裁判打分,低于阈值自动旗舰档重答(edit/retry 不传)。
+        cascadePlan: CostRouter.CascadePlan? = nil
     ) {
         guard !panel.isEmpty else { return }
         // 别名:让下方异步体与原 send() 逐行一致,降低抽取风险
@@ -610,6 +637,57 @@ extension AppViewModel {
                 primaryToolSteps = s.toolSteps
             }
 
+            // 1.6) 省钱级联(实验,仅 Direct):初答(便宜档)完成后,先让裁判快速打分(复用 Council
+            //      打分的调用方式,见 CostRouter.scoreAnswer);低于阈值 → 同 provider 换旗舰档重答一遍。
+            //      初答原样保留,升级答存进 Turn.autoEscalation,UI 标注「已自动升级」。
+            //      打分失败 / 分数达标 / 取消时不升级,零行为差异。
+            var autoEscalationResult: AutoEscalation? = nil
+            if let plan = cascadePlan, modeAtSend == .direct, !Task.isCancelled,
+               let firstKey = panelOrder.first, errors[firstKey] == nil,
+               let firstAnswer = responses[firstKey]?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !firstAnswer.isEmpty,
+               let score = await CostRouter.scoreAnswer(
+                   question: promptSnapshot, answer: firstAnswer, judge: plan.judge),
+               score < plan.threshold {
+                let fl = plan.flagship
+                var collected = ""
+                var flUsage: TurnTokenUsage? = nil
+                var flFailure: String? = nil
+                do {
+                    let apiKey = fl.kind.isCLI ? "" : ((try? KeychainStore.load(id: fl.id)) ?? "")
+                    let client = ProviderRegistry.client(for: fl.kind)
+                    var opts = self.optionsFor(config: fl, systemPromptOverride: sysSnapshot)
+                    opts.contextSummary = contextSummarySnapshot
+                    opts.priorTurns = priorTurnsSnapshot
+                    // 升级重答同样走出站脱敏(云端 provider + 开关开时),流式还原占位符。
+                    var outboundPrompt = promptSnapshot
+                    let restorer = self.applyPIIRedaction(config: fl, prompt: &outboundPrompt, options: &opts)
+                    for try await chunk in client.stream(prompt: outboundPrompt, options: opts, config: fl, apiKey: apiKey) {
+                        if Task.isCancelled { break }
+                        switch chunk {
+                        case .text(let t):
+                            collected += (restorer?.push(t) ?? t)
+                        case .usage(let i, let o, let cached):
+                            flUsage = TurnTokenUsage(input: i, output: o, cachedInput: cached)
+                            UsageStore.shared.record(providerKind: fl.kind, model: fl.model,
+                                                     inputTokens: i, outputTokens: o, cachedTokens: cached)
+                        default: break
+                        }
+                    }
+                    if let restorer, case let rest = restorer.flush(), !rest.isEmpty { collected += rest }
+                } catch is CancellationError {
+                    flFailure = "已取消"
+                } catch {
+                    flFailure = error.localizedDescription
+                }
+                let fromModel = panelOrder.first.flatMap { snapshot[$0]?.model } ?? ""
+                autoEscalationResult = AutoEscalation(
+                    score: score, threshold: plan.threshold,
+                    fromModel: fromModel, toModel: fl.model,
+                    providerKind: fl.kind.rawValue,
+                    text: collected, error: flFailure, tokenUsage: flUsage)
+            }
+
             // 1.5) Tournament(擂台 / 淘汰赛):panel 已各自回答,现在让裁判用单淘汰赛两两对决,
             //      逐轮裁定胜者晋级,直到决出冠军。逐对裁定(逐 await),用单独的 liveTournamentRounds 直播。
             var tournamentRounds: [TournamentRound]? = nil
@@ -826,8 +904,10 @@ extension AppViewModel {
             }
 
             // 2.8) 自动升级建议(建议式):仅 Direct 单答 + 开关开时,本地启发式扫低置信/回避信号。
+            //      本轮已被省钱级联自动升级过的不再建议(升级答已经在卡片里,重复提示徒增噪音)。
             var escalationSuggestion: EscalationSuggestion? = nil
             if self.escalationSuggestionsEnabled, modeSnapshot == .direct,
+               autoEscalationResult == nil,
                let firstKey = panelOrder.first, errors[firstKey] == nil,
                let primary = responses[firstKey] {
                 escalationSuggestion = EscalationAdvisor.evaluate(answer: primary)
@@ -863,7 +943,9 @@ extension AppViewModel {
                     sourcesByProvider: sourcesByProvider.isEmpty ? nil : sourcesByProvider,
                     knowledgeSources: knowledgeSourcesSnapshot.isEmpty ? nil : knowledgeSourcesSnapshot,
                     escalationSuggestion: escalationSuggestion,
-                    toolSteps: primaryToolSteps
+                    toolSteps: primaryToolSteps,
+                    routeNote: routeNote,
+                    autoEscalation: autoEscalationResult
                 )
                 self.conversations[idx].turns.append(turn)
                 self.conversations[idx].updatedAt = Date()
@@ -949,6 +1031,9 @@ extension AppViewModel {
         conversations[convIdx].turns[turnIdx].panelOrder = [key]   // 单列:替换
         conversations[convIdx].turns[turnIdx].responses[key] = ""
         conversations[convIdx].turns[turnIdx].errors[key] = nil
+        // 换了模型重答 → 旧模型的路由理由 / 级联升级留痕都不再成立,一并清掉避免误导。
+        conversations[convIdx].turns[turnIdx].routeNote = nil
+        conversations[convIdx].turns[turnIdx].autoEscalation = nil
         ConversationStore.save(conversations[convIdx])
         retryProvider(turnID: turnID, configID: newProviderID)
     }
