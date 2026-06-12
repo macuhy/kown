@@ -8,10 +8,16 @@ import MarkdownUI
 /// 句级溯源:`knowledgeSources` 非空时,落在知识库编号集合里的 `[n]` 映射到自定义
 /// scheme `kown-cite://n`,由 `.knowledgeCitationHost(...)` 拦截弹出原文片段(不走浏览器)。
 /// 同一个 `[n]` 优先映射 web 来源(`n <= sources.count`),其余再尝试知识库编号。
+///
+/// 结果按内容记忆(见 `citationMemo`):静态历史卡的 body 会因父级/兄弟卡刷新被反复求值,
+/// 同一段不变正文不必每帧重扫引用正则。
+@MainActor
 func citationLinkified(_ text: String, sources: [SourceRef], knowledgeSources: [KnowledgeSourceRef] = []) -> String {
     guard (!sources.isEmpty || !knowledgeSources.isEmpty), text.contains("[") else { return text }
+    let key = CitationMemoKey(text: text, sources: sources, knowledgeSources: knowledgeSources)
+    if let cached = citationMemo[key] { return cached }
     let knowledgeIndices = Set(knowledgeSources.map(\.index))
-    return text.replacing(/\[(\d{1,3})\]/) { match in
+    let result = text.replacing(/\[(\d{1,3})\]/) { match in
         guard let n = Int(match.1), n >= 1 else { return String(match.0) }
         // 链接文字里的方括号需转义,否则 markdown 解析器会错配嵌套括号。
         if n <= sources.count {
@@ -22,7 +28,23 @@ func citationLinkified(_ text: String, sources: [SourceRef], knowledgeSources: [
         }
         return String(match.0)
     }
+    if citationMemo.count >= 128 { citationMemo.removeAll(keepingCapacity: true) }
+    citationMemo[key] = result
+    return result
 }
+
+/// 引用替换的缓存 key:替换结果同时取决于正文与两组来源(序号映射到哪个 url、是否越界都由它们决定),
+/// 三者一起做 key 才能保证命中即等价。
+private struct CitationMemoKey: Hashable {
+    let text: String
+    let sources: [SourceRef]
+    let knowledgeSources: [KnowledgeSourceRef]
+}
+
+/// citationLinkified 记忆表(模式同 `MD.blockExtrasMemo`):切回长会话时一屏几十张历史卡
+/// 同帧重扫全文正则很卡。结果直接作为正文渲染,哈希碰撞不可接受,故用完整入参做 key
+/// (String / 数组都是 COW,key 只持引用不复制);到 128 条清空封顶,防无限增长。
+@MainActor private var citationMemo: [CitationMemoKey: String] = [:]
 
 /// 模型输出渲染:
 /// - **streaming=true**: 渲染**节流快照**的 markdown(每 ~150ms 取一次 text),把"每 chunk 重 parse
@@ -46,7 +68,8 @@ struct MarkdownText: View {
         } else {
             // 完成态允许系统文本选择:纯文本路径可跨段拖选,块级 Markdown 路径也能选中
             // 代码/表格/标题里的片段;流式分支仍关闭,避免每个 chunk 触发选择层重布局。
-            MD.rendered(for: MD.stylizeMath(text), selectable: true)
+            // stylizeMath 走记忆版:静态历史卡的 body 被反复求值时不再重跑数学正则。
+            MD.rendered(for: MD.stylizeMathCached(text), selectable: true)
         }
     }
 }
@@ -117,7 +140,7 @@ enum MD {
                 .markdownTheme(kownTheme)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
-        } else if let attr = try? AttributedString(markdown: linkify(selectableRichMarkdown(src)), options: .init(
+        } else if let attr = try? AttributedString(markdown: inlineRichCached(src), options: .init(
             allowsExtendedAttributes: true,
             interpretedSyntax: .inlineOnlyPreservingWhitespace,
             failurePolicy: .returnPartiallyParsedIfPossible
@@ -159,6 +182,21 @@ enum MD {
         return result
     }
 
+    /// `linkify(selectableRichMarkdown(:))` 的记忆版,供 `rendered` 的单 Text 路径使用:
+    /// 该路径每次求值都要跑 3 条正则整段扫描,静态历史卡被反复求值时同一段文本被反复扫。
+    /// 结果直接作为正文渲染,哈希碰撞不可接受,故用原文做 key(String 为 COW,key 只持引用);
+    /// 到 128 条清空封顶。流式快照也会进来(每 ~200ms 一条新文本),最坏只是周期性清表后
+    /// 各重算一次,不劣于不缓存,tick 间隔内的重复求值反而能命中。
+    private static var inlineRichMemo: [String: String] = [:]
+
+    private static func inlineRichCached(_ s: String) -> String {
+        if let cached = inlineRichMemo[s] { return cached }
+        let result = linkify(selectableRichMarkdown(s))
+        if inlineRichMemo.count >= 128 { inlineRichMemo.removeAll(keepingCapacity: true) }
+        inlineRichMemo[s] = result
+        return result
+    }
+
     /// 流式中途若有未闭合的 ``` 代码围栏,临时补一个收尾,避免半个围栏把后文都吞成代码。
     static func balancedFences(_ s: String) -> String {
         let fences = s.components(separatedBy: "```").count - 1
@@ -176,6 +214,19 @@ enum MD {
         var out = replaceCapture(s, mathBlockRe) { "\n```\n\($0)\n```\n" }
         out = replaceCapture(out, mathInlineRe) { "`\($0)`" }
         return out
+    }
+
+    /// stylizeMath 记忆表 + 记忆版入口:**仅完成态**走这里(MarkdownText 静态分支),同一段
+    /// 不变的历史回答只跑一次数学正则。流式快照每 tick 都在变,缓存只会冲掉历史卡条目,
+    /// 仍走 `commitSnapshot` 里的即时计算。key 同样用原文本身,命中即等价。
+    private static var stylizeMathMemo: [String: String] = [:]
+
+    static func stylizeMathCached(_ s: String) -> String {
+        if let cached = stylizeMathMemo[s] { return cached }
+        let result = stylizeMath(s)
+        if stylizeMathMemo.count >= 128 { stylizeMathMemo.removeAll(keepingCapacity: true) }
+        stylizeMathMemo[s] = result
+        return result
     }
 
     private static func replaceCapture(_ s: String, _ re: NSRegularExpression?, _ transform: (String) -> String) -> String {
