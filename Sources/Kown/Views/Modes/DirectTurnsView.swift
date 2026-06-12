@@ -87,8 +87,13 @@ struct DirectTurnsView: View {
                         showActions: true,
                         sources: turn.sourcesByProvider?[key] ?? (turn.sources ?? []),
                         knowledgeSources: turn.knowledgeSources ?? [],
-                        onRegenerate: onRegenerate.map { f in { pid in f(turn.id, pid) } }
+                        onRegenerate: onRegenerate.map { f in { pid in f(turn.id, pid) } },
+                        routeNote: turn.routeNote
                     )
+                }
+                // 省钱级联(实验):初答被裁判打了低分、已自动旗舰档重答 → 升级答单独一张卡,标注「已自动升级」。
+                if let esc = turn.autoEscalation {
+                    AutoEscalationCard(escalation: esc)
                 }
                 if let gen = turn.generatedImages, !gen.isEmpty {
                     ConversationImagesRow(images: gen)
@@ -266,7 +271,8 @@ struct DirectTurnsView: View {
                                  reasoning: String? = nil, tokenUsage: TurnTokenUsage? = nil,
                                  showActions: Bool = false, sources: [SourceRef] = [],
                                  knowledgeSources: [KnowledgeSourceRef] = [],
-                                 onRegenerate: ((UUID) -> Void)? = nil) -> some View {
+                                 onRegenerate: ((UUID) -> Void)? = nil,
+                                 routeNote: String? = nil) -> some View {
         HStack(alignment: .top, spacing: assistantSpacing) {
             ZStack {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -290,6 +296,16 @@ struct DirectTurnsView: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 assistantHeader(config: config, streaming: streaming, tokenUsage: tokenUsage)
+                // 学习型成本路由的可解释理由角标(仅自动选模型 + 学习决策生效的轮有)。
+                if let routeNote, !routeNote.isEmpty {
+                    Label(routeNote, systemImage: "arrow.triangle.branch")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(accentColor(config).opacity(0.08), in: Capsule())
+                        .overlay { Capsule().strokeBorder(accentColor(config).opacity(0.16), lineWidth: 1) }
+                }
                 if let reasoning, !reasoning.isEmpty {
                     ReasoningDisclosure(reasoning: reasoning, streaming: streaming, tint: accentColor(config))
                 }
@@ -462,6 +478,77 @@ struct DirectTurnsView: View {
 
     private var directTint: Color {
         mode.kownTint
+    }
+}
+
+/// 省钱级联(实验)的升级答卡:初答(便宜档)被裁判打了低分后,自动用旗舰档重答的结果。
+/// 初答保留在上方原位,本卡标注「已自动升级」+ 评分上下文 + 升级答全文(+ 成本角标)。
+struct AutoEscalationCard: View {
+    let escalation: AutoEscalation
+
+    private var tint: Color { Color(red: 0.55, green: 0.36, blue: 0.92) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Label("已自动升级", systemImage: "arrow.up.circle.fill")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(tint)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(tint.opacity(0.12), in: Capsule())
+                Text(escalation.toModel)
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: 8)
+                if let usage = escalation.tokenUsage, usage.input > 0 || usage.output > 0 {
+                    TokenCostPill(usage: usage, model: escalation.toModel,
+                                  providerKind: ProviderKind(rawValue: escalation.providerKind) ?? .openAICompatible)
+                }
+            }
+            Text("初答(\(escalation.fromModel))评分 \(escalation.score)/10,低于阈值 \(escalation.threshold),已自动用旗舰档重答。")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if let error = escalation.error {
+                Label("升级重答失败:\(error)", systemImage: "exclamationmark.triangle.fill")
+                    .font(.callout)
+                    .foregroundStyle(.red)
+                    .textSelection(.enabled)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.red.opacity(0.07), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            } else if escalation.text.isEmpty {
+                Text("(空响应)")
+                    .font(.body)
+                    .foregroundStyle(.tertiary)
+            } else {
+                MarkdownText(text: escalation.text, streaming: false)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(13)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            ZStack {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color.platformControlBackground.opacity(0.55))
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [tint.opacity(0.10), Color.clear],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(tint.opacity(0.24), lineWidth: 1)
+        }
     }
 }
 

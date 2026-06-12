@@ -99,8 +99,13 @@ final class AppViewModel {
         didSet { UserDefaults.standard.set(councilVotingEnabled, forKey: Self.councilVotingKey) }
     }
     /// Direct 模式:按问题难度在当前 provider 的 vendor 内自动选模型(便宜↔旗舰)。默认关。
+    /// 开启时若本地胜率榜样本足够,还会叠加学习型成本路由(同档位选「胜率相当且更便宜」,见 CostRouter)。
     var autoRouteEnabled: Bool {
         didSet { UserDefaults.standard.set(autoRouteEnabled, forKey: Self.autoRouteKey) }
+    }
+    /// 省钱级联(实验,仅 Direct):初答用便宜档,裁判快速打分低于阈值时自动旗舰档重答,两答都保留。默认关。
+    var costCascadeEnabled: Bool {
+        didSet { UserDefaults.standard.set(costCascadeEnabled, forKey: Self.costCascadeKey) }
     }
     /// 跨会话长期记忆:开启后发送时注入相关长期记忆,并在会话进行中自动抽取。默认关(隐私优先)。
     var memoryInjectionEnabled: Bool {
@@ -259,6 +264,7 @@ final class AppViewModel {
     private static let autoFailoverKey = "kown.autoFailover.v1"
     private static let councilVotingKey = "kown.councilVoting.v1"
     private static let autoRouteKey = "kown.autoRoute.v1"
+    private static let costCascadeKey = "kown.costCascade.v1"
     private static let memoryInjectionKey = "kown.memory.injection.v1"
     private static let recallKey = "kown.recall.enabled"
     /// Translate 全局默认语言 key(非 private:AppViewModel+Send 跨文件读取做发送时回退)。
@@ -300,6 +306,7 @@ final class AppViewModel {
         self.autoFailoverEnabled = UserDefaults.standard.bool(forKey: Self.autoFailoverKey)
         self.councilVotingEnabled = UserDefaults.standard.bool(forKey: Self.councilVotingKey)
         self.autoRouteEnabled = UserDefaults.standard.bool(forKey: Self.autoRouteKey)
+        self.costCascadeEnabled = UserDefaults.standard.bool(forKey: Self.costCascadeKey)
         self.memoryInjectionEnabled = UserDefaults.standard.bool(forKey: Self.memoryInjectionKey)
         self.recallEnabled = UserDefaults.standard.bool(forKey: Self.recallKey)
         self.deviceToolsEnabledForNextSend = UserDefaults.standard.bool(forKey: Self.deviceToolsToggleKey)
@@ -891,10 +898,11 @@ final class AppViewModel {
             self.conversations[liveConvIdx].updatedAt = Date()
             ConversationStore.save(self.conversations[liveConvIdx])
 
-            // 记进胜率榜(模型键 = providerKind::model)。
+            // 记进胜率榜(模型键 = providerKind::model);同时按任务类别细分累计,供学习型成本路由用。
             let winnerKey = ModelLeaderboardStore.key(providerKind: winnerCfg.kind, model: winnerCfg.model)
             let loserKey  = ModelLeaderboardStore.key(providerKind: loserCfg.kind, model: loserCfg.model)
-            ModelLeaderboardStore.shared.record(winnerKey: winnerKey, loserKey: loserKey)
+            ModelLeaderboardStore.shared.record(winnerKey: winnerKey, loserKey: loserKey,
+                                                category: TaskCategory.classify(q))
         }
     }
 

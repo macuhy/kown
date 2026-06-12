@@ -16,8 +16,13 @@ final class ModelLeaderboardStore {
     /// 模型键(`providerKind::model`)→ 战绩
     private(set) var records: [String: Record]
 
+    /// 分类别战绩:任务类别 rawValue → (模型键 → 战绩)。学习型成本路由(`CostRouter`)的数据源,
+    /// 与总榜并行累计、单独落盘(`leaderboard-categories.json`);旧版本没有该文件时为空,互不影响。
+    private(set) var categoryRecords: [String: [String: Record]]
+
     private init() {
         self.records = Self.load()
+        self.categoryRecords = Self.loadCategories()
     }
 
     /// 拼模型键:`providerKind::model`。与 `UsageStore` 保持一致。
@@ -34,7 +39,8 @@ final class ModelLeaderboardStore {
 
     /// 记一场胜负。winner / loser 用模型键(`providerKind::model`)。
     /// winner == loser(同一模型对自己)时忽略,避免脏数据。
-    func record(winnerKey: String, loserKey: String) {
+    /// 带 `category` 时同步累计分类别战绩(学习型成本路由的数据源);nil 则只记总榜(行为同旧版)。
+    func record(winnerKey: String, loserKey: String, category: TaskCategory? = nil) {
         guard winnerKey != loserKey else { return }
         var w = records[winnerKey] ?? Record()
         w.wins += 1
@@ -43,6 +49,22 @@ final class ModelLeaderboardStore {
         l.losses += 1
         records[loserKey] = l
         persist()
+        if let category {
+            var bucket = categoryRecords[category.rawValue] ?? [:]
+            var cw = bucket[winnerKey] ?? Record()
+            cw.wins += 1
+            bucket[winnerKey] = cw
+            var cl = bucket[loserKey] ?? Record()
+            cl.losses += 1
+            bucket[loserKey] = cl
+            categoryRecords[category.rawValue] = bucket
+            persistCategories()
+        }
+    }
+
+    /// 查某 (模型, 类别) 对的战绩;没打过返回 nil。
+    func categoryRecord(forModelKey key: String, category: TaskCategory) -> Record? {
+        categoryRecords[category.rawValue]?[key]
     }
 
     /// 记一场平局(两家都 +1 draw)。
@@ -57,15 +79,18 @@ final class ModelLeaderboardStore {
         persist()
     }
 
-    /// 抹掉全部战绩。
+    /// 抹掉全部战绩(总榜 + 分类别)。
     func reset() {
         records = [:]
+        categoryRecords = [:]
         persist()
+        persistCategories()
     }
 
     /// 重新扫盘加载(iCloud 同步刷新时调用)。
     func reload() {
         records = Self.load()
+        categoryRecords = Self.loadCategories()
     }
 
     // MARK: - 聚合查询(给 UI 用)
@@ -106,14 +131,32 @@ final class ModelLeaderboardStore {
         Platform.syncedDataDir.appendingPathComponent("leaderboard.json")
     }
 
+    /// 分类别战绩单独一个文件 — 总榜 JSON 结构不动,旧版本 app 读不到新文件也不受影响。
+    private static var categoriesFileURL: URL {
+        Platform.syncedDataDir.appendingPathComponent("leaderboard-categories.json")
+    }
+
     private func persist() {
         guard let data = try? JSONEncoder().encode(records) else { return }
         try? data.write(to: Self.fileURL, options: .atomic)
     }
 
+    private func persistCategories() {
+        guard let data = try? JSONEncoder().encode(categoryRecords) else { return }
+        try? data.write(to: Self.categoriesFileURL, options: .atomic)
+    }
+
     private static func load() -> [String: Record] {
         guard let data = try? Data(contentsOf: fileURL),
               let decoded = try? JSONDecoder().decode([String: Record].self, from: data) else {
+            return [:]
+        }
+        return decoded
+    }
+
+    private static func loadCategories() -> [String: [String: Record]] {
+        guard let data = try? Data(contentsOf: categoriesFileURL),
+              let decoded = try? JSONDecoder().decode([String: [String: Record]].self, from: data) else {
             return [:]
         }
         return decoded
