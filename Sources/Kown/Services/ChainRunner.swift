@@ -155,7 +155,7 @@ final class ChainRunner {
     private func runStep(config: ProviderConfig, prompt: String, into runState: ChainStepRun) async -> StepResult {
         var collected = ""
         do {
-            let apiKey = config.kind.isCLI ? "" : (try KeychainStore.load(id: config.id))
+            let apiKey = config.kind.needsAPIKey ? (try KeychainStore.load(id: config.id)) : ""
             let client = ProviderRegistry.client(for: config.kind)
             let options = ChatOptions(systemPrompt: nil,
                                       temperature: config.temperature,

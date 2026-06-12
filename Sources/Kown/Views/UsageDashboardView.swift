@@ -528,6 +528,7 @@ struct UsageDashboardView: View {
         case ProviderKind.anthropic.rawValue:        return Color(red: 0.83, green: 0.38, blue: 0.18)
         case ProviderKind.gemini.rawValue:           return Color(red: 0.26, green: 0.52, blue: 0.96)
         case ProviderKind.cliCommand.rawValue:       return Color(red: 0.55, green: 0.45, blue: 0.78)
+        case ProviderKind.appleFM.rawValue:          return Color(red: 0.78, green: 0.40, blue: 0.86)
         default:                                     return tint
         }
     }

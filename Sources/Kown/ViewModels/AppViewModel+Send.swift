@@ -1434,7 +1434,7 @@ extension AppViewModel {
             var usage: TurnTokenUsage? = nil
             var failure: String? = nil
             do {
-                let apiKey = cfg.kind.isCLI ? "" : (try KeychainStore.load(id: cfg.id))
+                let apiKey = cfg.kind.needsAPIKey ? (try KeychainStore.load(id: cfg.id)) : ""
                 let client = ProviderRegistry.client(for: cfg.kind)
                 var options = self.optionsFor(config: cfg, systemPromptOverride: sysPrompt)
                 options.contextSummary = contextSummary
@@ -1639,7 +1639,7 @@ extension AppViewModel {
             var usage: TurnTokenUsage? = nil
             var failure: String? = nil
             do {
-                let apiKey = cfg.kind.isCLI ? "" : (try KeychainStore.load(id: cfg.id))
+                let apiKey = cfg.kind.needsAPIKey ? (try KeychainStore.load(id: cfg.id)) : ""
                 let client = ProviderRegistry.client(for: cfg.kind)
                 var options = self.optionsFor(config: cfg, systemPromptOverride: sysPrompt)
                 options.contextSummary = contextSummary
@@ -2028,7 +2028,7 @@ extension AppViewModel {
         }
         var failure: String? = nil
         do {
-            let key = config.kind.isCLI ? "" : (try KeychainStore.load(id: config.id))
+            let key = config.kind.needsAPIKey ? (try KeychainStore.load(id: config.id)) : ""
             let client = ProviderRegistry.client(for: config.kind)
             var options = optionsFor(config: config, systemPromptOverride: systemPrompt)
             options.images = images

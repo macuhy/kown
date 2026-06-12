@@ -5,6 +5,7 @@ enum ProviderKind: String, Codable, CaseIterable, Identifiable, Sendable {
     case anthropic
     case gemini
     case cliCommand          // 通过子进程调用本地 CLI 工具
+    case appleFM             // Apple FoundationModels 端侧模型(macOS 26 / iOS 26)
 
     var id: String { rawValue }
 
@@ -14,6 +15,7 @@ enum ProviderKind: String, Codable, CaseIterable, Identifiable, Sendable {
         case .anthropic:        return "Anthropic"
         case .gemini:           return "Google Gemini"
         case .cliCommand:       return "命令行 CLI"
+        case .appleFM:          return "Apple 本地模型"
         }
     }
 
@@ -23,6 +25,7 @@ enum ProviderKind: String, Codable, CaseIterable, Identifiable, Sendable {
         case .anthropic:        return "https://api.anthropic.com/v1"
         case .gemini:           return "https://generativelanguage.googleapis.com/v1beta"
         case .cliCommand:       return ""   // CLI 不用 URL
+        case .appleFM:          return ""   // 端侧推理,不走网络
         }
     }
 
@@ -32,6 +35,7 @@ enum ProviderKind: String, Codable, CaseIterable, Identifiable, Sendable {
         case .anthropic:        return "claude-sonnet-4-6"
         case .gemini:           return "gemini-2.5-pro"
         case .cliCommand:       return "(由 CLI 决定)"
+        case .appleFM:          return "apple-on-device"
         }
     }
 
@@ -50,6 +54,17 @@ enum ProviderKind: String, Codable, CaseIterable, Identifiable, Sendable {
     }
 
     var isCLI: Bool { self == .cliCommand }
+
+    /// Apple 端侧模型(FoundationModels)。
+    var isAppleFM: Bool { self == .appleFM }
+
+    /// 是否需要 API Key:CLI(本机子进程)与 Apple 本地模型(端侧推理)免 Key。
+    var needsAPIKey: Bool {
+        switch self {
+        case .cliCommand, .appleFM: return false
+        default:                    return true
+        }
+    }
 }
 
 struct ProviderConfig: Identifiable, Codable, Hashable, Sendable {
@@ -135,6 +150,7 @@ struct ProviderConfig: Identifiable, Codable, Hashable, Sendable {
             ProviderConfig(displayName: "OpenAI GPT-4o",     kind: .openAICompatible, vendor: "openai"),
             ProviderConfig(displayName: "Anthropic Claude",  kind: .anthropic),
             ProviderConfig(displayName: "Google Gemini",     kind: .gemini),
+            ProviderConfig(displayName: "Apple 本地模型",      kind: .appleFM),
             ProviderPreset.deepseekV4Flash.makeConfig(),
             ProviderPreset.glm45.makeConfig(),
             ProviderPreset.kimi.makeConfig(),

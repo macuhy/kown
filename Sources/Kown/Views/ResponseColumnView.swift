@@ -93,11 +93,11 @@ struct ResponseColumnView: View {
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 6) {
                         metadataPill(config.model, icon: "cpu", emphasized: true)
-                        metadataPill(endpointDisplay, icon: config.kind.isCLI ? "terminal" : "network", prefix: config.kind.isCLI ? "EXEC" : "POST")
+                        metadataPill(endpointDisplay, icon: endpointIcon, prefix: endpointPrefix)
                     }
                     VStack(alignment: .leading, spacing: 5) {
                         metadataPill(config.model, icon: "cpu", emphasized: true)
-                        metadataPill(endpointDisplay, icon: config.kind.isCLI ? "terminal" : "network", prefix: config.kind.isCLI ? "EXEC" : "POST")
+                        metadataPill(endpointDisplay, icon: endpointIcon, prefix: endpointPrefix)
                     }
                 }
             }
@@ -125,11 +125,27 @@ struct ResponseColumnView: View {
             let args = config.cliArgs ?? ""
             return [cmd, args].filter { !$0.isEmpty }.joined(separator: " ")
         }
+        if config.kind.isAppleFM {
+            return "端侧推理 · 不走网络"
+        }
         let base = config.baseURL
         guard let comps = URLComponents(string: base),
               let host = comps.host else { return base }
         let path = comps.path.isEmpty ? "" : comps.path
         return host + path
+    }
+
+    /// 端点 pill 的图标 / 前缀:CLI 是本机命令,Apple 本地模型是端侧推理,其余走 HTTP。
+    private var endpointIcon: String {
+        if config.kind.isCLI { return "terminal" }
+        if config.kind.isAppleFM { return "apple.logo" }
+        return "network"
+    }
+
+    private var endpointPrefix: String {
+        if config.kind.isCLI { return "EXEC" }
+        if config.kind.isAppleFM { return "本地" }
+        return "POST"
     }
 
     @ViewBuilder

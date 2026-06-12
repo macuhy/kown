@@ -6,6 +6,7 @@ enum ProviderRegistry {
         case .openAICompatible: return OpenAICompatibleClient()
         case .anthropic:        return AnthropicClient()
         case .gemini:           return GeminiClient()
+        case .appleFM:          return AppleFMClient()
         case .cliCommand:
             #if os(macOS)
             return CLICommandClient()
