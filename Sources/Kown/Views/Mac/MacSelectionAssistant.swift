@@ -125,7 +125,7 @@ final class MacSelectionAssistant {
         closePanel()
         guard let vm = viewModel else { return }
 
-        let state = SelectionAssistantState(sourceText: text)
+        let state = SelectionAssistantState(sourceText: text, sourceApp: sourceApp)
         self.state = state
 
         let root = SelectionAssistantView(
@@ -214,6 +214,8 @@ final class MacSelectionAssistant {
 final class SelectionAssistantState {
     /// 唤起面板那一刻抓到的选中文本(可能为空 —— 没选中也没剪贴板)。
     let sourceText: String
+    /// 唤起面板时的前台 app(「回复聊天」要截它的窗口做 OCR)。
+    private let sourceApp: NSRunningApplication?
     /// 是否已授权辅助功能(决定能否「原地替换」)。
     let axTrusted: Bool
     /// 提示词库里无变量的自定义模板(变量模板需要填参,迷你面板放不下,不收)。
@@ -229,8 +231,9 @@ final class SelectionAssistantState {
 
     private var task: Task<Void, Never>?
 
-    init(sourceText: String) {
+    init(sourceText: String, sourceApp: NSRunningApplication? = nil) {
         self.sourceText = sourceText
+        self.sourceApp = sourceApp
         self.axTrusted = AXIsProcessTrusted()
         self.customTemplates = Array(
             PromptLibraryStore().templates
@@ -272,6 +275,42 @@ final class SelectionAssistantState {
                 }
             }
             self.runningTitle = nil
+        }
+    }
+
+    /// 「回复聊天」:截取唤起面板时的前台窗口 → 系统 OCR 识别聊天记录
+    /// (右侧气泡=我,左侧=对方)→ 以「我」的身份拟回复。不依赖选中文本。
+    func runChatReply(viewModel: AppViewModel) {
+        guard let app = sourceApp else {
+            errorText = "没记到来源窗口 —— 切到聊天 app 再按一次 ⌃⌥L。"
+            return
+        }
+        task?.cancel()
+        runningTitle = "回复聊天"
+        result = ""
+        errorText = nil
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let messages = try await ChatWindowReader.readChat(of: app)
+                // 只带最近 30 条,聊天截图一屏也就这个量级,防超长。
+                let transcript = ChatWindowReader.transcript(Array(messages.suffix(30)))
+                let prompt = """
+                下面是从聊天窗口识别出的最近对话(「我」是用户本人,气泡在右侧;\
+                「对方」是聊天对象,气泡在左侧),按时间从早到晚排列。OCR 可能有少量错字,按语境理解:
+
+                \(transcript)
+
+                以「我」的身份,针对对方最新的发言拟一条自然、得体的回复;\
+                延续我此前的语气与称呼习惯,长度贴合对话节奏(日常闲聊就短,正事可以长)。\
+                只输出回复正文,不要解释、不要加引号或前后缀。
+                """
+                self.runningTitle = nil
+                self.run(title: "回复聊天", prompt: prompt, viewModel: viewModel)
+            } catch {
+                self.runningTitle = nil
+                self.errorText = error.localizedDescription
+            }
         }
     }
 
@@ -345,7 +384,7 @@ struct SelectionAssistantView: View {
             header
 
             if state.sourceText.isEmpty {
-                Text("没有读到选中文本。先在别的 app 里选中一段文字再按 ⌃⌥L;部分 app 需要辅助功能权限才能读取选区。")
+                Text("没有读到选中文本。选中一段文字再按 ⌃⌥L 可用 纠错/润色/翻译;「回复聊天」不需要选中,直接识别当前窗口。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -401,6 +440,17 @@ struct SelectionAssistantView: View {
                     actionButton(action)
                 }
             }
+            // 回复聊天:截当前窗口 OCR 识别对话(右=我,左=对方),不依赖选中文本。
+            Button {
+                state.runChatReply(viewModel: viewModel)
+            } label: {
+                Label("回复聊天(识别当前窗口)", systemImage: "bubble.left.and.bubble.right")
+                    .font(.caption)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .disabled(state.isRunning)
+            .help("截取聊天窗口截图,用系统 OCR 识别最近对话后以你的口吻拟回复;需要「屏幕录制」权限")
             if !customActions.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {

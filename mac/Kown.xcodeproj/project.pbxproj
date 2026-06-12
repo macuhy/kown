@@ -36,6 +36,7 @@
 		1D2F258436D3A95D0C941FF2 /* Attachment.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED3B4692DB0791298A87B40E /* Attachment.swift */; };
 		1D401FF4AC8DB5FE24672944 /* Platform.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC18A3107707274492A4E4E3 /* Platform.swift */; };
 		1DBC37746FCA3749A27AE462 /* NotesService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F7B923F73F349AB7977FA59 /* NotesService.swift */; };
+		1EF085CA165FA4D69C5E8504 /* ChatWindowReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 608B618072498D4C693B65D3 /* ChatWindowReader.swift */; };
 		1F47FFDFD07EBB60A3637C0D /* MarkdownText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88D780422A7B7696C677A8B2 /* MarkdownText.swift */; };
 		1F666F780CD2FC25F78B2245 /* CLIPendingPrompt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1579F4433E6315F8F389A769 /* CLIPendingPrompt.swift */; };
 		1FC04A0FE48B84F150A528F8 /* ProviderRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D76436AAFFE48E40E499C438 /* ProviderRowView.swift */; };
@@ -276,6 +277,7 @@
 		5CD51FC887E0A626E6D2C083 /* PersonaSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonaSettingsView.swift; sourceTree = "<group>"; };
 		5E078A60A74F157B421B7AF9 /* Kown.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Kown.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5E8B537708352E5EA070D4FE /* PromptChain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptChain.swift; sourceTree = "<group>"; };
+		608B618072498D4C693B65D3 /* ChatWindowReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatWindowReader.swift; sourceTree = "<group>"; };
 		65394DA4837A9F6D9FC6E9A1 /* ProjectSettingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectSettingsSheet.swift; sourceTree = "<group>"; };
 		655919E5276A12E37E387D95 /* PersonaPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonaPicker.swift; sourceTree = "<group>"; };
 		659CE456B599235C3F87F724 /* StructuredTurnsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StructuredTurnsView.swift; sourceTree = "<group>"; };
@@ -517,6 +519,7 @@
 		5DFC0ABA6C11D5872102C8AF /* Mac */ = {
 			isa = PBXGroup;
 			children = (
+				608B618072498D4C693B65D3 /* ChatWindowReader.swift */,
 				0BB288DCD6F24E1A079F84CD /* MacClipboardActions.swift */,
 				A248FDD45EDA5637FD9DD508 /* MacQuickAsk.swift */,
 				DC51E5C1C8DEA41C1533DC25 /* MacSelectionAssistant.swift */,
@@ -839,6 +842,7 @@
 				A3CA5D38C447DB10DF15BCEB /* ChainView.swift in Sources */,
 				308FCC8017B037FE8825B9B3 /* ChangelogService.swift in Sources */,
 				7A2E1775C20817A909AAE3EB /* ChangelogView.swift in Sources */,
+				1EF085CA165FA4D69C5E8504 /* ChatWindowReader.swift in Sources */,
 				A4286AD296532B8694866E4B /* CitationSourceSheet.swift in Sources */,
 				E4267F2E961E70EA0EFE57A7 /* CodeSandboxService.swift in Sources */,
 				142F973AE60AB8BC7115274C /* CommandPaletteView.swift in Sources */,
