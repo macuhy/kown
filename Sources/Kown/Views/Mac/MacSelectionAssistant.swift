@@ -226,6 +226,13 @@ final class SelectionAssistantState {
     private(set) var errorText: String?
     private(set) var providerName = ""
 
+    /// 用户指定的生成模型(nil = 自动:主席优先)。跨次唤起持久化。
+    private(set) var chosenProviderID: UUID?
+    private(set) var chosenModel: String?
+
+    private static let providerKey = "kown.selectionAssistant.provider.v1"
+    private static let modelKey = "kown.selectionAssistant.model.v1"
+
     var isRunning: Bool { runningTitle != nil }
     var hasOutput: Bool { !result.isEmpty || errorText != nil }
 
@@ -235,6 +242,9 @@ final class SelectionAssistantState {
         self.sourceText = sourceText
         self.sourceApp = sourceApp
         self.axTrusted = AXIsProcessTrusted()
+        let d = UserDefaults.standard
+        self.chosenProviderID = d.string(forKey: Self.providerKey).flatMap(UUID.init(uuidString:))
+        self.chosenModel = d.string(forKey: Self.modelKey).flatMap { $0.isEmpty ? nil : $0 }
         self.customTemplates = Array(
             PromptLibraryStore().templates
                 .filter { $0.variableNames.isEmpty }
@@ -242,10 +252,10 @@ final class SelectionAssistantState {
         )
     }
 
-    /// 跑一个动作:把拼好的指令丢给小模型流式生成。
+    /// 跑一个动作:把拼好的指令丢给所选模型流式生成。
     func run(title: String, prompt: String, viewModel: AppViewModel) {
         task?.cancel()
-        guard let cfg = smallModel(from: viewModel) else {
+        guard let cfg = resolvedConfig(from: viewModel) else {
             errorText = "没有可用的模型,先到设置里启用一个(CLI 除外)。"
             return
         }
@@ -318,6 +328,30 @@ final class SelectionAssistantState {
         task?.cancel()
         task = nil
         runningTitle = nil
+    }
+
+    /// 记住用户指定的模型(providerID = nil 表示回到自动)。
+    func setChoice(providerID: UUID?, model: String?) {
+        chosenProviderID = providerID
+        chosenModel = model
+        let d = UserDefaults.standard
+        if let providerID {
+            d.set(providerID.uuidString, forKey: Self.providerKey)
+            d.set(model ?? "", forKey: Self.modelKey)
+        } else {
+            d.removeObject(forKey: Self.providerKey)
+            d.removeObject(forKey: Self.modelKey)
+        }
+    }
+
+    /// 本次生成实际会用的配置:用户指定优先(provider 失效则自动回退),否则 主席 > 第一家。
+    func resolvedConfig(from viewModel: AppViewModel) -> ProviderConfig? {
+        if let id = chosenProviderID,
+           var cfg = viewModel.providers.first(where: { $0.id == id && $0.enabled && !$0.kind.isCLI }) {
+            if let model = chosenModel, !model.isEmpty { cfg.model = model }
+            return cfg
+        }
+        return smallModel(from: viewModel)
     }
 
     private func smallModel(from viewModel: AppViewModel) -> ProviderConfig? {
@@ -419,6 +453,7 @@ struct SelectionAssistantView: View {
             Text("划词助手")
                 .font(.subheadline.weight(.bold))
             Spacer()
+            modelMenu
             if !state.axTrusted {
                 Button {
                     MacSelectionAssistant.requestAccessibilityPermission()
@@ -431,6 +466,75 @@ struct SelectionAssistantView: View {
                 .help("授权后才能读取任意 app 的选区,并支持「替换原文」")
             }
         }
+    }
+
+    // MARK: - 模型选择
+
+    /// 生成模型菜单:自动(主席优先)/ 各启用厂商 → 模型列表。选择持久化,下次唤起还在。
+    private var modelMenu: some View {
+        Menu {
+            Button {
+                state.setChoice(providerID: nil, model: nil)
+            } label: {
+                if state.chosenProviderID == nil { Label("自动(主席优先)", systemImage: "checkmark") }
+                else { Text("自动(主席优先)") }
+            }
+            Divider()
+            ForEach(candidateProviders) { cfg in
+                let union = uniqueOrdered([cfg.model] + ProviderModelCatalog.knownModels(for: cfg))
+                if union.count <= 1 {
+                    modelChoiceButton(cfg: cfg, model: cfg.model, fullLabel: true)
+                } else {
+                    Menu(cfg.displayName) {
+                        ForEach(union, id: \.self) { model in
+                            modelChoiceButton(cfg: cfg, model: model, fullLabel: false)
+                        }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 3) {
+                Image(systemName: "cpu")
+                    .font(.caption2.weight(.bold))
+                Text(currentModelLabel)
+                    .font(.caption)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .frame(maxWidth: 140)
+            }
+            .foregroundStyle(.secondary)
+        }
+        .menuIndicator(.hidden)
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("选择划词助手用哪个模型生成;「自动」= 主席优先,其次第一家启用的")
+    }
+
+    private func modelChoiceButton(cfg: ProviderConfig, model: String, fullLabel: Bool) -> some View {
+        let selected = state.chosenProviderID == cfg.id
+            && (state.chosenModel ?? cfg.model) == model
+        let title = fullLabel ? "\(cfg.displayName)(\(model))" : model
+        return Button {
+            // 选的是 provider 当前模型时不存 model 覆盖,跟随 provider 设置变化。
+            state.setChoice(providerID: cfg.id, model: model == cfg.model ? nil : model)
+        } label: {
+            if selected { Label(title, systemImage: "checkmark") }
+            else { Text(title) }
+        }
+    }
+
+    private var candidateProviders: [ProviderConfig] {
+        viewModel.providers.filter { $0.enabled && !$0.kind.isCLI }
+    }
+
+    private var currentModelLabel: String {
+        guard let cfg = state.resolvedConfig(from: viewModel) else { return "无可用模型" }
+        return state.chosenProviderID == nil ? "自动 · \(cfg.displayName)" : cfg.model
+    }
+
+    private func uniqueOrdered(_ items: [String]) -> [String] {
+        var seen = Set<String>()
+        return items.filter { !$0.isEmpty && seen.insert($0).inserted }
     }
 
     private var actionButtons: some View {
