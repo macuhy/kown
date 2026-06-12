@@ -169,6 +169,7 @@ struct ArtifactPreviewPanel: View {
     @State private var showFocusField = false
     @State private var isRevising = false
     @State private var reviseError: String?
+    @State private var publishPayload: ArtifactPublishPayload?   // 非 nil 时弹「发布到 GitHub Pages」sheet
 
     private let tick = Timer.publish(every: 0.30, on: .main, in: .common).autoconnect()
 
@@ -198,6 +199,9 @@ struct ArtifactPreviewPanel: View {
         .onReceive(tick) { _ in refresh(force: false) }
         .onChange(of: viewModel.selectedConversationID) { _, _ in refresh(force: true) }
         .onDisappear { renderDebounce?.cancel() }
+        .sheet(item: $publishPayload) { payload in
+            ArtifactPublishSheet(payload: payload)
+        }
     }
 
     private var header: some View {
@@ -272,9 +276,39 @@ struct ArtifactPreviewPanel: View {
                 .buttonStyle(.borderless)
                 .help("放弃未保存的修改")
             }
+
+            // 仅连接了 GitHub 才显示发布入口。
+            if viewModel.gitHubConnected {
+                Button {
+                    preparePublish()
+                } label: {
+                    Label("发布", systemImage: "globe")
+                        .font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.borderless)
+                .disabled(currentBlock == nil)
+                .help("发布到 GitHub Pages…")
+            }
         }
         .padding(.horizontal, 14)
         .padding(.bottom, 8)
+    }
+
+    /// 组装发布 sheet 的输入:当前展示的源码 → 自包含 HTML(浅色,公开页面),
+    /// 默认 slug 优先沿用上次发布的(覆盖更新),否则取会话标题拼音化 / 短 hash。
+    private func preparePublish() {
+        guard let block = currentBlock else { return }
+        let src = draftDirty ? draft : (baseSource ?? block.source)
+        let effective = ArtifactBlock(id: block.id, kind: block.kind, source: src, isClosed: block.isClosed)
+        let html = ArtifactHTMLBuilder.document(for: effective, dark: false)
+        let key = persistenceKey
+        let previous = key.flatMap { ArtifactPublishMemory.slug(for: $0) }
+        let slug = previous ?? GitHubPagesPublisher.defaultSlug(
+            title: viewModel.selectedConversation?.title,
+            fallbackSeed: key ?? src
+        )
+        publishPayload = ArtifactPublishPayload(
+            html: html, defaultSlug: slug, artifactKey: key, previousSlug: previous)
     }
 
     /// 版本历史菜单:v1 原始 → vN 最新,可切换回看任意版本。
@@ -606,6 +640,204 @@ struct ArtifactPreviewPanel: View {
                 rebuildHTML()
             } catch {
                 reviseError = error.localizedDescription
+            }
+        }
+    }
+}
+
+// MARK: - 发布到 GitHub Pages
+
+/// 发布 sheet 的输入快照(按下按钮那一刻的 HTML / slug,不随面板继续流式变化)。
+struct ArtifactPublishPayload: Identifiable {
+    let id = UUID()
+    /// 自包含 HTML(发布产物)。
+    let html: String
+    /// 默认文件名 slug(上次发布的 slug 或标题拼音化)。
+    let defaultSlug: String
+    /// artifact 持久化键(用于记忆 slug;流式中 / 无会话时为 nil,不记忆)。
+    let artifactKey: String?
+    /// 该 artifact 上次发布用的 slug(nil = 首次发布)。
+    let previousSlug: String?
+}
+
+/// 轻量确认 sheet:展示目标仓库(自动建/复用公开仓库 `kown-pages`)+ 可改的文件名 slug,
+/// 发布成功后给出页面链接(复制 / 浏览器打开),并按需提示 Pages 首次启用要等几分钟。
+struct ArtifactPublishSheet: View {
+    let payload: ArtifactPublishPayload
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var slug: String
+    @State private var isPublishing = false
+    @State private var errorMessage: String?
+    @State private var result: GitHubPagesPublisher.Result?
+    @State private var copied = false
+
+    init(payload: ArtifactPublishPayload) {
+        self.payload = payload
+        _slug = State(initialValue: payload.defaultSlug)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                Image(systemName: "globe")
+                    .foregroundStyle(ConversationMode.direct.kownTint)
+                Text("发布到 GitHub Pages")
+                    .font(.headline)
+                Spacer()
+            }
+
+            if let result {
+                successView(result)
+            } else {
+                formView
+            }
+        }
+        .padding(18)
+        #if os(macOS)
+        .frame(width: 440)
+        #endif
+    }
+
+    // MARK: 表单
+
+    private var formView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // 目标仓库说明(自动建/复用,公开)。
+            VStack(alignment: .leading, spacing: 4) {
+                Label("目标仓库:你账号下的 \(GitHubPagesPublisher.repoName)(不存在会自动创建)", systemImage: "tray.full")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Label("该仓库及页面是公开的,任何人拿到链接都能访问", systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+
+            // 文件名 slug
+            VStack(alignment: .leading, spacing: 4) {
+                Text("文件名")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                HStack(spacing: 4) {
+                    TextField("文件名", text: $slug)
+                        .textFieldStyle(.roundedBorder)
+                        .autocorrectionDisabled()
+                        #if os(iOS)
+                        .textInputAutocapitalization(.never)
+                        #endif
+                    Text(".html")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                Text("发布路径:pages/\(GitHubPagesPublisher.sanitizeSlug(slug)).html")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+
+            if let prev = payload.previousSlug, GitHubPagesPublisher.sanitizeSlug(slug) == prev {
+                Label("此内容之前发布过,本次将覆盖更新同一页面", systemImage: "arrow.triangle.2.circlepath")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .lineLimit(3)
+            }
+
+            HStack {
+                Spacer()
+                Button("取消") { dismiss() }
+                    .disabled(isPublishing)
+                if isPublishing {
+                    ProgressView()
+                        .controlSize(.small)
+                        .padding(.horizontal, 12)
+                } else {
+                    Button("发布") { publish() }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(GitHubPagesPublisher.sanitizeSlug(slug).isEmpty)
+                }
+            }
+        }
+    }
+
+    // MARK: 成功
+
+    private func successView(_ result: GitHubPagesPublisher.Result) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label(result.isUpdate ? "已更新页面" : "已发布页面", systemImage: "checkmark.circle.fill")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.green)
+
+            Text(result.pageURL)
+                .font(.system(.caption, design: .monospaced))
+                .textSelection(.enabled)
+                .lineLimit(3)
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.platformControlBackground, in: RoundedRectangle(cornerRadius: 6))
+
+            if result.pagesJustEnabled {
+                Label("Pages 站点刚开启,页面可能要等几分钟才能访问", systemImage: "clock")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if result.needsManualPagesSetup {
+                Label("未能自动开启 Pages:请到该仓库的 Settings → Pages 选择默认分支开启一次(只需一次)", systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            } else if result.isUpdate {
+                Label("内容已覆盖更新,链接不变(CDN 缓存可能延迟几分钟)", systemImage: "info.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack {
+                Button {
+                    Platform.copyText(result.pageURL)
+                    copied = true
+                } label: {
+                    Label(copied ? "已复制" : "复制链接", systemImage: copied ? "checkmark" : "doc.on.doc")
+                }
+                Button {
+                    if let url = URL(string: result.pageURL) { Platform.open(url) }
+                } label: {
+                    Label("在浏览器打开", systemImage: "safari")
+                }
+                Spacer()
+                Button("完成") { dismiss() }
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+    }
+
+    // MARK: 动作
+
+    private func publish() {
+        let cleaned = GitHubPagesPublisher.sanitizeSlug(slug)
+        guard !cleaned.isEmpty else {
+            errorMessage = "文件名不能为空(只能用字母、数字、连字符)"
+            return
+        }
+        slug = cleaned
+        guard let token = GitHubAuth.token() else {
+            errorMessage = GitHubError.notConnected.localizedDescription
+            return
+        }
+        isPublishing = true
+        errorMessage = nil
+        Task { @MainActor in
+            defer { isPublishing = false }
+            do {
+                let r = try await GitHubPagesPublisher(token: token).publish(slug: cleaned, html: payload.html)
+                result = r
+                if let key = payload.artifactKey {
+                    ArtifactPublishMemory.remember(slug: cleaned, for: key)
+                }
+            } catch {
+                errorMessage = GitHubPagesPublisher.friendlyMessage(for: error)
             }
         }
     }
