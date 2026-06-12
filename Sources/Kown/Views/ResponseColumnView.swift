@@ -14,6 +14,11 @@ struct ResponseColumnView: View {
 
     /// 超过该字符数的已完成回答默认折叠。
     private let collapseThreshold = 1_400
+    /// 内容超过该字符数后,渲染高度必然远超 textBody 的 minHeight(即使被折叠成
+    /// `collapsedLineLimit` 行也够),此时省略 minHeight 约束。
+    /// 否则 minHeight 会逼着布局系统同步测量整列内容(含 MarkdownText)再与最小值
+    /// 比较,Council/Compare 多列并发时切回会话瞬间主线程被 N 列测量卡住。
+    private let minHeightSkipThreshold = 2_000
     /// 折叠态最多显示的行数。
     private let collapsedLineLimit = 14
 
@@ -299,10 +304,19 @@ struct ResponseColumnView: View {
                     )
                 }
             )
-            .frame(minHeight: isCompact ? 220 : 280)
+            // minHeight 只为空态/短内容撑住列卡高度;内容够长时必然超过最小值,
+            // 传 nil 跳过约束,避免无谓的多列同步内容测高(见 minHeightSkipThreshold)。
+            .frame(minHeight: bodyMinHeight)
             .onChange(of: state.text) { _, _ in scheduleScrollToBottom(proxy) }
             .onChange(of: state.events.count) { _, _ in scheduleScrollToBottom(proxy) }
         }
+    }
+
+    /// textBody 的最小高度:仅空态/短内容需要(空态、连接中、失败、短回答时列卡
+    /// 不至于太矮);长内容直接返回 nil 不加约束。始终经同一个 `.frame` 修饰符传入
+    /// (nil = 不约束),保证跨越阈值时 ScrollView 视图身份稳定、滚动位置不丢。
+    private var bodyMinHeight: CGFloat? {
+        state.charCount > minHeightSkipThreshold ? nil : (isCompact ? 220 : 280)
     }
 
     /// 节流自动滚底:首次变更后 ~120ms 内的连续 flush 合并为一次 scrollTo(尾沿取当前底部)。
