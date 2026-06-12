@@ -1733,3 +1733,47 @@ private struct PanelGridWidthKey: PreferenceKey {
         value = max(value, nextValue())
     }
 }
+
+// MARK: - 「全新上下文」截断分隔线
+
+/// 显示在截断点 turn 之后的分隔线:以上轮次不再随请求发送(原文仍可见,只是不进上下文)。
+/// 点「撤销」恢复携带完整上下文。各模式的 TurnsView 在 `conversation.contextCutoffTurnID`
+/// 对应的轮后面插入本视图。
+struct ContextCutoffDivider: View {
+    var onUndo: (() -> Void)? = nil
+
+    var body: some View {
+        HStack(spacing: 10) {
+            line
+            HStack(spacing: 6) {
+                Image(systemName: "scissors")
+                    .font(.caption2.weight(.bold))
+                Text("以上内容不再随请求发送")
+                    .font(.caption.weight(.semibold))
+                if let onUndo {
+                    Button("撤销", action: onUndo)
+                        .buttonStyle(.plain)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.orange)
+                        #if os(macOS)
+                        .help("撤销截断,恢复携带完整上下文")
+                        #endif
+                }
+            }
+            .foregroundStyle(.secondary)
+            .fixedSize()
+            line
+        }
+        .padding(.vertical, 2)
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("上下文截断:以上内容不再随请求发送")
+    }
+
+    private var line: some View {
+        Rectangle()
+            .fill(Color.secondary.opacity(0.25))
+            .frame(height: 1)
+            .frame(maxWidth: .infinity)
+    }
+}

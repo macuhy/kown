@@ -741,7 +741,8 @@ struct MainContentView: View {
                                 onRegenerate: { viewModel.regenerateDirectWithModel(turnID: $0, newProviderID: $1) },
                                 onUndoWrite: { viewModel.undoWrite(turnID: $0, write: $1) },
                                 onEscalateStronger: { viewModel.escalateToStrongerModel(turnID: $0) },
-                                onEscalateCouncil: { viewModel.escalateToCouncil(turnID: $0) }
+                                onEscalateCouncil: { viewModel.escalateToCouncil(turnID: $0) },
+                                onClearContextCutoff: { viewModel.clearContextCutoff() }
                             )
                         case .compare:
                             CompareTurnsView(
@@ -816,7 +817,8 @@ struct MainContentView: View {
                                 onEditTurn: { requestEdit($0) },
                                 onFollowUpTurn: { requestFollowUp($0) },
                                 onExportTurn: { exportTurnReport($0) },
-                                onShareTurn: { shareTurnImage($0) }
+                                onShareTurn: { shareTurnImage($0) },
+                                onClearContextCutoff: { viewModel.clearContextCutoff() }
                             )
                         }
                         if hasTurns, !(viewModel.runningConvID == conv?.id && viewModel.isRunning) {

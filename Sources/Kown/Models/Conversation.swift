@@ -622,6 +622,16 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
     var parentConversationID: UUID?
     /// 分支血缘:从父会话的哪一轮分叉(配合 parentConversationID)。
     var forkedFromTurnID: UUID?
+    /// 手动「压缩早期历史」产出的摘要 — 用户在上下文用量菜单触发,把早期轮总结成一段;
+    /// 发送时早期轮替换为该摘要(原文在 UI 里仍可见)。旧会话没有,保持 optional 兼容旧 JSON。
+    var compressedContextSummary: String?
+    /// 手动压缩已覆盖的 turn 数量(turns[0..<compressedThroughTurnCount] 已并入 compressedContextSummary,
+    /// 发送时不再带原文)。与 `summarizedThroughTurnCount`(滚动摘要)是两套独立水位。旧会话默认 0。
+    var compressedThroughTurnCount: Int = 0
+    /// 「从下一轮开始全新上下文」的截断点 turn id:发送时只携带该轮**之后**的轮,
+    /// 之前的轮(含覆盖它们的摘要)都不再随请求发送。UI 在截断处显示分隔线,可撤销。
+    /// 旧会话没有,保持 optional 兼容旧 JSON;指向的轮被删除后自动失效。
+    var contextCutoffTurnID: UUID?
 
     init(id: UUID = UUID(),
          title: String = "New Conversation",
@@ -653,7 +663,10 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
          translateTargetLanguage: String? = nil,
          translateRewrite: Bool = false,
          parentConversationID: UUID? = nil,
-         forkedFromTurnID: UUID? = nil) {
+         forkedFromTurnID: UUID? = nil,
+         compressedContextSummary: String? = nil,
+         compressedThroughTurnCount: Int = 0,
+         contextCutoffTurnID: UUID? = nil) {
         self.id = id
         self.title = title
         self.mode = mode
@@ -685,6 +698,9 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
         self.translateRewrite = translateRewrite
         self.parentConversationID = parentConversationID
         self.forkedFromTurnID = forkedFromTurnID
+        self.compressedContextSummary = compressedContextSummary
+        self.compressedThroughTurnCount = compressedThroughTurnCount
+        self.contextCutoffTurnID = contextCutoffTurnID
     }
 
     // 兼容旧 JSON(缺新字段)
@@ -721,6 +737,9 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
         self.translateRewrite = try c.decodeIfPresent(Bool.self, forKey: .translateRewrite) ?? false
         self.parentConversationID = try c.decodeIfPresent(UUID.self, forKey: .parentConversationID)
         self.forkedFromTurnID = try c.decodeIfPresent(UUID.self, forKey: .forkedFromTurnID)
+        self.compressedContextSummary = try c.decodeIfPresent(String.self, forKey: .compressedContextSummary)
+        self.compressedThroughTurnCount = try c.decodeIfPresent(Int.self, forKey: .compressedThroughTurnCount) ?? 0
+        self.contextCutoffTurnID = try c.decodeIfPresent(UUID.self, forKey: .contextCutoffTurnID)
     }
 
     var lastPromptPreview: String {

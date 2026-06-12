@@ -45,6 +45,10 @@ final class AppViewModel {
     var followUpError: String?
     /// Structured 模式:JSON Schema 发送前校验失败的原因(给用户看;校验通过或重置时清空)。
     var structuredSchemaError: String?
+    /// 正在「压缩早期历史」(上下文用量菜单触发的小模型调用)。
+    var isCompressingContext = false
+    /// 压缩早期历史失败原因(给用户看;成功或重试时清空)。
+    var contextCompressionError: String?
     /// Compare 模式:正在裁判评判的 turnID 集合(独立于 follow-up state,互不影响)。
     var judgingCompareTurnIDs: Set<UUID> = []
     /// Compare 裁判评判失败时的错误信息,key = turnID。
