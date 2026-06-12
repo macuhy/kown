@@ -345,46 +345,62 @@ enum MD {
     }
 }
 
-/// 代码块渲染:等宽字体 + 横向滚动(长行不换行)+ 右上角「复制」按钮。
+/// 代码块渲染:等宽字体 + 横向滚动(长行不换行)+ 右上角「复制」按钮;
+/// 可运行语言(CodeSandboxService 支持的)再加「运行」按钮,结果内嵌在代码块下方。
 /// macOS 上指针悬停时按钮高亮,iOS 上常驻可点。复制走 `Platform.copyText`。
 private struct CodeBlockView: View {
     let configuration: CodeBlockConfiguration
 
     @State private var copied = false
+    /// 运行状态自持在本代码块的 @State 上(独立 @Observable):状态变化只重渲当前块,
+    /// 不触发历史列表整列重渲;不落盘,卡片销毁即消失。
+    @State private var runner = CodeRunController()
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
-            // 横向滚动:代码长行保持不换行,溢出可左右滑
-            ScrollView(.horizontal, showsIndicators: true) {
-                // 自绘语法高亮(按围栏语言着色),替代 MarkdownUI 的纯色 label。
-                Text(SyntaxHighlighter.highlight(configuration.content, language: configuration.language))
-                    .font(.system(size: 12.5, design: .monospaced))
-                    .padding(.horizontal, 12)
-                    .padding(.top, languageTag == nil ? 10 : 24)
-                    .padding(.bottom, 10)
-                    // 让短代码块也能撑满宽度,文字左对齐
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .fixedSize(horizontal: true, vertical: false)
-            }
-            .background(Self.blockBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(Color.primary.opacity(0.10), lineWidth: 1)
-            )
+        VStack(alignment: .leading, spacing: 6) {
+            ZStack(alignment: .topTrailing) {
+                // 横向滚动:代码长行保持不换行,溢出可左右滑
+                ScrollView(.horizontal, showsIndicators: true) {
+                    // 自绘语法高亮(按围栏语言着色),替代 MarkdownUI 的纯色 label。
+                    Text(SyntaxHighlighter.highlight(configuration.content, language: configuration.language))
+                        .font(.system(size: 12.5, design: .monospaced))
+                        .padding(.horizontal, 12)
+                        .padding(.top, languageTag == nil ? 10 : 24)
+                        .padding(.bottom, 10)
+                        // 让短代码块也能撑满宽度,文字左对齐
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+                .background(Self.blockBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .strokeBorder(Color.primary.opacity(0.10), lineWidth: 1)
+                )
 
-            if let lang = languageTag {
-                Text(lang)
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 7).padding(.vertical, 3)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.leading, 4)
-                    .padding(.top, 4)
-            }
+                if let lang = languageTag {
+                    Text(lang)
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 7).padding(.vertical, 3)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.leading, 4)
+                        .padding(.top, 4)
+                }
 
-            copyButton
+                HStack(spacing: 6) {
+                    if let lang = runLanguage {
+                        runButton(lang)
+                    }
+                    copyButton
+                }
                 .padding(8)
+            }
+
+            // 内嵌运行结果区(运行中转圈 / stdout / stderr / 超时,可折叠)。
+            if runner.phase != .idle, let lang = runLanguage {
+                CodeRunResultPanel(controller: runner, language: lang, code: configuration.content)
+            }
         }
         .markdownMargin(top: .em(0.6), bottom: .em(0.6))
     }
@@ -393,6 +409,31 @@ private struct CodeBlockView: View {
     private var languageTag: String? {
         guard let l = configuration.language?.trimmingCharacters(in: .whitespaces), !l.isEmpty else { return nil }
         return l.lowercased()
+    }
+
+    /// 归一后的可运行语言;nil = 当前平台不支持,不显示运行按钮。
+    private var runLanguage: String? {
+        runnableLanguage(forFence: configuration.language)
+    }
+
+    /// 「运行」按钮:点击执行;运行中变为停止图标,再点取消(重复点运行也会先取消上一次)。
+    private func runButton(_ lang: String) -> some View {
+        Button {
+            if runner.phase == .running {
+                runner.cancel()
+            } else {
+                runner.run(language: lang, code: configuration.content)
+            }
+        } label: {
+            Image(systemName: runner.phase == .running ? "stop.fill" : "play.fill")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(runner.phase == .running ? Color.orange : Color.secondary)
+                .padding(6)
+                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 6))
+        }
+        .buttonStyle(.plain)
+        .help(runner.phase == .running ? "停止运行" : "运行代码")
+        .accessibilityLabel(runner.phase == .running ? "停止运行" : "运行代码")
     }
 
     private var copyButton: some View {
