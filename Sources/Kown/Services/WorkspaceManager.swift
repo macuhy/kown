@@ -35,10 +35,24 @@ enum WorkspaceManager {
     /// 单文件读写大小上限。nonisolated:供后台 buildContext 读取。
     nonisolated static let perFileMaxSize = 1024 * 1024  // 1MB
 
+    /// 扫描时整目录跳过的「依赖 / 产物」目录名(命中即不下钻,见 buildContext / DocumentIngestor)。
+    /// 隐藏目录(.git / .build / .next 等)由 `.skipsHiddenFiles` 兜底,这里主要挡非隐藏的大目录。
+    nonisolated static let excludedDirNames: Set<String> = [
+        "node_modules", "build", "dist", "out", "target", "vendor",
+        "__pycache__", "Pods", "DerivedData", "venv", "Carthage"
+    ]
+
+    /// 进入文件树 / 上下文的文件数上限 — 超过即停扫并在树里标注截断,防巨型仓库无界扫描。
+    nonisolated static let maxContextFiles = 2000
+
+    /// 枚举条目总数上限(含目录与被过滤的文件)— 病态目录树(海量小文件)的硬保险丝。
+    nonisolated static let maxScanEntries = 50_000
+
     // MARK: - Bookmark
 
-    /// 从 NSOpenPanel 拿到 URL 后,创建 security-scoped bookmark 持久化到 Conversation
-    static func makeBookmark(for url: URL) throws -> Data {
+    /// 从 NSOpenPanel 拿到 URL 后,创建 security-scoped bookmark 持久化到 Conversation。
+    /// nonisolated:纯 Foundation 调用,允许后台线程(如工具循环)使用。
+    nonisolated static func makeBookmark(for url: URL) throws -> Data {
         #if os(macOS)
         return try url.bookmarkData(
             options: [.withSecurityScope],
@@ -53,7 +67,8 @@ enum WorkspaceManager {
 
     /// 解析 bookmark 回 URL。`isStale=true` 时建议提示用户重新选择文件夹。
     /// 调用方拿到 URL 后必须 `startAccessingSecurityScopedResource()`,用完 stop。
-    static func resolveBookmark(_ data: Data) throws -> (url: URL, isStale: Bool) {
+    /// nonisolated:纯 Foundation 调用,允许后台线程(本地文件工具批量读时不再挤主线程)。
+    nonisolated static func resolveBookmark(_ data: Data) throws -> (url: URL, isStale: Bool) {
         var isStale = false
         #if os(macOS)
         let url = try URL(
@@ -79,14 +94,17 @@ enum WorkspaceManager {
     /// 路径相对 workspace 根。超过 `contextSizeBudget` 时按文件 byte size 升序排,先小后大。
     /// 当前实现:即便 budget 用完,文件树仍然完整列出(只是不带内容)。
     /// `nonisolated`:纯文件 I/O,无主线程状态依赖 —— 发送时由后台线程调用,避免扫树卡主线程。
-    nonisolated static func buildContext(workspaceURL: URL) -> String? {
+    /// 硬限制:依赖 / 产物目录整棵跳过、文件数上限 `maxFiles`、枚举条目上限 `maxScanEntries`、
+    /// 单文件 ≤ `perFileMaxSize`;循环内响应 `Task` 取消(取消即返回 nil)。
+    /// `maxFiles` 参数默认 `maxContextFiles`,暴露出来便于单测用小目录树覆盖截断逻辑。
+    nonisolated static func buildContext(workspaceURL: URL, maxFiles: Int = maxContextFiles) -> String? {
         let fm = FileManager.default
         let scoped = workspaceURL.startAccessingSecurityScopedResource()
         defer { if scoped { workspaceURL.stopAccessingSecurityScopedResource() } }
 
         guard let enumerator = fm.enumerator(
             at: workspaceURL,
-            includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey],
+            includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey, .isDirectoryKey],
             options: [.skipsHiddenFiles, .skipsPackageDescendants]
         ) else { return nil }
 
@@ -97,20 +115,29 @@ enum WorkspaceManager {
         }
 
         var entries: [Entry] = []
+        var scanned = 0
+        var truncated = false
         for case let url as URL in enumerator {
-            let v = try? url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey])
-            guard v?.isRegularFile == true else { continue }
-            let size = v?.fileSize ?? 0
-            // 显式跳过 .DS_Store / node_modules / .git 等噪音
-            let lastComp = url.lastPathComponent
-            if lastComp == ".DS_Store" || lastComp.hasPrefix(".git") { continue }
-            // 跳过 node_modules / build / .build 等大目录(看路径里有没有)
-            let pathStr = url.path
-            if pathStr.contains("/node_modules/") || pathStr.contains("/.build/") ||
-               pathStr.contains("/build/") || pathStr.contains("/dist/") ||
-               pathStr.contains("/.next/") || pathStr.contains("/__pycache__/") {
+            // 可取消:用户停止本次发送后,扫描立刻退出,不再空烧 CPU。
+            if Task.isCancelled { return nil }
+            scanned += 1
+            if scanned > maxScanEntries || entries.count >= maxFiles {
+                truncated = true
+                break
+            }
+            let v = try? url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey, .isDirectoryKey])
+            // 依赖 / 产物目录整棵跳过(不下钻)— 旧实现逐文件看路径,node_modules 仍会被枚举到底。
+            if v?.isDirectory == true {
+                if excludedDirNames.contains(url.lastPathComponent) {
+                    enumerator.skipDescendants()
+                }
                 continue
             }
+            guard v?.isRegularFile == true else { continue }
+            let size = v?.fileSize ?? 0
+            // 显式跳过 .DS_Store / .git* 等噪音文件
+            let lastComp = url.lastPathComponent
+            if lastComp == ".DS_Store" || lastComp.hasPrefix(".git") { continue }
             guard isTextExtensionAllowed(url) else { continue }
             guard size <= perFileMaxSize else { continue }
             let rel = relativePath(of: url, from: workspaceURL)
@@ -124,6 +151,7 @@ enum WorkspaceManager {
         var fileBlocks: [String] = []
         var used = 0
         for e in entries {
+            if Task.isCancelled { return nil }
             treeLines.append("- \(e.relativePath)  (\(formatBytes(e.size)))")
             if used + e.size <= contextSizeBudget {
                 if let data = try? Data(contentsOf: e.url),
@@ -135,6 +163,9 @@ enum WorkspaceManager {
                     used += e.size
                 }
             }
+        }
+        if truncated {
+            treeLines.append("- …(目录过大,文件树已按上限截断,仅列出前 \(entries.count) 个文件)")
         }
 
         var out: [String] = []
