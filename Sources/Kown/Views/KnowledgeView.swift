@@ -431,6 +431,8 @@ private struct KnowledgeFolderDetail: View {
     @State private var ingestStatus = ""
     @State private var ingestProgress = 0.0
     @State private var ingestSummary: String?
+    /// 后台入库任务句柄 — 供「取消」按钮终止批量导入(取消后已抽好的部分照常入库)。
+    @State private var ingestTask: Task<Void, Never>?
 
     private var folder: KnowledgeFolder? {
         viewModel.knowledgeFolders.first(where: { $0.id == folderID })
@@ -488,8 +490,14 @@ private struct KnowledgeFolderDetail: View {
                 if ingesting {
                     VStack(alignment: .leading, spacing: 6) {
                         ProgressView(value: ingestProgress)
-                        Text(ingestStatus.isEmpty ? "正在分块入库…" : ingestStatus)
-                            .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                        HStack {
+                            Text(ingestStatus.isEmpty ? "正在分块入库…" : ingestStatus)
+                                .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                            Spacer()
+                            Button("取消") { ingestTask?.cancel() }
+                                .font(.caption2)
+                                .buttonStyle(.borderless)
+                        }
                     }
                     .padding(.vertical, 2)
                 }
@@ -588,7 +596,7 @@ private struct KnowledgeFolderDetail: View {
         ingestStatus = ""
         ingestProgress = 0
 
-        Task.detached(priority: .userInitiated) {
+        ingestTask = Task.detached(priority: .userInitiated) {
             // 安全作用域:沙盒下需在读取期间持有访问权。
             let scoped = urls.map { ($0, $0.startAccessingSecurityScopedResource()) }
             defer { for (u, ok) in scoped where ok { u.stopAccessingSecurityScopedResource() } }
@@ -611,6 +619,7 @@ private struct KnowledgeFolderDetail: View {
             case .files:
                 let total = urls.count
                 for (i, url) in urls.enumerated() {
+                    if Task.isCancelled { break }
                     let nm = url.lastPathComponent
                     await MainActor.run {
                         ingestProgress = total > 0 ? Double(i) / Double(total) : 0
@@ -628,12 +637,16 @@ private struct KnowledgeFolderDetail: View {
 
             let insertedDocs = docs
             let fails = failures
+            let cancelled = Task.isCancelled
             await MainActor.run {
                 viewModel.addKnowledgeDocs(folderID: folderID, docs: insertedDocs)
                 ingesting = false
                 ingestProgress = 1
                 ingestStatus = ""
-                var msg = "已入库 \(insertedDocs.count) 份文档"
+                ingestTask = nil
+                var msg = cancelled
+                    ? "已取消,已入库 \(insertedDocs.count) 份文档"
+                    : "已入库 \(insertedDocs.count) 份文档"
                 if !fails.isEmpty {
                     let head = fails.prefix(3).map { "\($0.name)(\($0.reason))" }.joined(separator: "、")
                     msg += ";跳过 \(fails.count) 个:\(head)\(fails.count > 3 ? "…" : "")"

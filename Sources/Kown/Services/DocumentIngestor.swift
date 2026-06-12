@@ -114,16 +114,26 @@ enum DocumentIngestor {
     /// 递归枚举文件夹下所有支持的文件(PDF + 文本扩展名),逐个入库。
     /// `displayPrefix` 用相对路径做文档名(如 `子目录/文件.md`),来源文件名保留纯名。
     /// 进度回调按文件粒度上报。整段在后台跑。
+    /// node_modules / build 等依赖、产物目录整棵跳过;循环内响应 `Task` 取消(取消即返回已完成部分)。
     nonisolated static func ingestFolder(at folderURL: URL, progress: Progress? = nil) -> Result {
         let fm = FileManager.default
         var files: [URL] = []
         if let en = fm.enumerator(at: folderURL,
-                                  includingPropertiesForKeys: [.isRegularFileKey],
+                                  includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey],
                                   options: [.skipsHiddenFiles, .skipsPackageDescendants]) {
             for case let u as URL in en {
+                if Task.isCancelled { break }
+                let v = try? u.resourceValues(forKeys: [.isRegularFileKey, .isDirectoryKey])
+                // 依赖 / 产物目录不下钻(误选了工程根目录时不再枚举几十万个文件)。
+                if v?.isDirectory == true {
+                    if WorkspaceManager.excludedDirNames.contains(u.lastPathComponent) {
+                        en.skipDescendants()
+                    }
+                    continue
+                }
                 let ext = u.pathExtension.lowercased()
                 guard ext == "pdf" || textExtensions.contains(ext) else { continue }
-                if (try? u.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true {
+                if v?.isRegularFile == true {
                     files.append(u)
                     if files.count >= maxFilesPerFolder { break }
                 }
@@ -135,6 +145,8 @@ enum DocumentIngestor {
         let total = files.count
         let basePath = folderURL.path
         for (i, file) in files.enumerated() {
+            // 用户点了「取消」:立即收手,返回已抽好的部分(由调用方决定是否入库)。
+            if Task.isCancelled { break }
             // 用相对路径作展示名,保留目录层级信息。
             var rel = file.path
             if rel.hasPrefix(basePath) {

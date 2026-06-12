@@ -612,21 +612,21 @@ struct ToolRouter: Sendable {
         }
         let args = (try? JSONSerialization.jsonObject(with: Data(call.argumentsJSON.utf8)) as? [String: Any]) ?? [:]
         let path = (args["path"] as? String) ?? ""
-        return await MainActor.run {
-            do {
-                let (root, _) = try WorkspaceManager.resolveBookmark(data)
-                let scoped = root.startAccessingSecurityScopedResource()
-                defer { if scoped { root.stopAccessingSecurityScopedResource() } }
-                let url = try LocalFilesystem.resolved(root: root, rel: path)
-                let content = try LocalFilesystem.read(at: url)
-                let payload: [String: Any] = ["path": path, "content": content]
-                return ToolResult(callID: call.id, name: call.name,
-                                  content: Self.jsonString(payload),
-                                  summary: "✓ 已读取 \(path)(\(content.count) 字)", isError: false)
-            } catch {
-                let msg = error.localizedDescription
-                return Self.errorResult(call, summary: "⚠ 读取失败: \(msg)", message: msg)
-            }
+        // 文件 I/O 留在当前后台执行上下文(工具循环本就在后台跑)。
+        // 旧实现包在 MainActor.run 里同步读盘 —— 模型批量读文件时每次都钉死主线程,UI 直接卡死。
+        do {
+            let (root, _) = try WorkspaceManager.resolveBookmark(data)
+            let scoped = root.startAccessingSecurityScopedResource()
+            defer { if scoped { root.stopAccessingSecurityScopedResource() } }
+            let url = try LocalFilesystem.resolved(root: root, rel: path)
+            let content = try LocalFilesystem.read(at: url)
+            let payload: [String: Any] = ["path": path, "content": content]
+            return ToolResult(callID: call.id, name: call.name,
+                              content: Self.jsonString(payload),
+                              summary: "✓ 已读取 \(path)(\(content.count) 字)", isError: false)
+        } catch {
+            let msg = error.localizedDescription
+            return Self.errorResult(call, summary: "⚠ 读取失败: \(msg)", message: msg)
         }
         #else
         return Self.errorResult(call, summary: "⚠ 本地文件工具仅 macOS 支持", message: "local file tools are macOS only")
@@ -640,21 +640,20 @@ struct ToolRouter: Sendable {
         }
         let args = (try? JSONSerialization.jsonObject(with: Data(call.argumentsJSON.utf8)) as? [String: Any]) ?? [:]
         let path = (args["path"] as? String) ?? ""
-        return await MainActor.run {
-            do {
-                let (root, _) = try WorkspaceManager.resolveBookmark(data)
-                let scoped = root.startAccessingSecurityScopedResource()
-                defer { if scoped { root.stopAccessingSecurityScopedResource() } }
-                let url = try LocalFilesystem.resolved(root: root, rel: path)
-                let entries = try LocalFilesystem.list(at: url)
-                let payload: [String: Any] = ["path": path.isEmpty ? "." : path, "entries": entries]
-                return ToolResult(callID: call.id, name: call.name,
-                                  content: Self.jsonString(payload),
-                                  summary: "✓ 列出 \(entries.count) 个条目", isError: false)
-            } catch {
-                let msg = error.localizedDescription
-                return Self.errorResult(call, summary: "⚠ 列目录失败: \(msg)", message: msg)
-            }
+        // 列目录同样在后台执行,不再借道主线程(见 runLocalReadFile 的说明)。
+        do {
+            let (root, _) = try WorkspaceManager.resolveBookmark(data)
+            let scoped = root.startAccessingSecurityScopedResource()
+            defer { if scoped { root.stopAccessingSecurityScopedResource() } }
+            let url = try LocalFilesystem.resolved(root: root, rel: path)
+            let entries = try LocalFilesystem.list(at: url)
+            let payload: [String: Any] = ["path": path.isEmpty ? "." : path, "entries": entries]
+            return ToolResult(callID: call.id, name: call.name,
+                              content: Self.jsonString(payload),
+                              summary: "✓ 列出 \(entries.count) 个条目", isError: false)
+        } catch {
+            let msg = error.localizedDescription
+            return Self.errorResult(call, summary: "⚠ 列目录失败: \(msg)", message: msg)
         }
         #else
         return Self.errorResult(call, summary: "⚠ 本地文件工具仅 macOS 支持", message: "local file tools are macOS only")
@@ -669,25 +668,26 @@ struct ToolRouter: Sendable {
         let args = (try? JSONSerialization.jsonObject(with: Data(call.argumentsJSON.utf8)) as? [String: Any]) ?? [:]
         let path = ((args["path"] as? String) ?? "").trimmingCharacters(in: CharacterSet(charactersIn: "/ \t\n"))
         let newContent = (args["content"] as? String) ?? ""
-        return await MainActor.run {
-            do {
-                let (root, _) = try WorkspaceManager.resolveBookmark(data)
-                let scoped = root.startAccessingSecurityScopedResource()
-                defer { if scoped { root.stopAccessingSecurityScopedResource() } }
-                // 校验路径 / 后缀(forWrite),不通过直接报错,不暂存。
-                let url = try LocalFilesystem.resolved(root: root, rel: path, forWrite: true)
-                let old = LocalFilesystem.tryRead(at: url)
+        do {
+            // 路径校验 + 读现状(磁盘 I/O)在后台做;只有「暂存到 UI 状态」这一步回主线程。
+            let (root, _) = try WorkspaceManager.resolveBookmark(data)
+            let scoped = root.startAccessingSecurityScopedResource()
+            defer { if scoped { root.stopAccessingSecurityScopedResource() } }
+            // 校验路径 / 后缀(forWrite),不通过直接报错,不暂存。
+            let url = try LocalFilesystem.resolved(root: root, rel: path, forWrite: true)
+            let old = LocalFilesystem.tryRead(at: url)
+            await MainActor.run {
                 LocalFileToolState.shared.stage(PendingFileWrite(
                     relativePath: path, oldContent: old, newContent: newContent))
-                let payload: [String: Any] = ["staged": true, "path": path,
-                    "note": "改动已暂存,需用户在界面看 diff 后点「应用」才会写入磁盘。"]
-                return ToolResult(callID: call.id, name: call.name,
-                                  content: Self.jsonString(payload),
-                                  summary: "✓ 已暂存改动 \(path),待确认", isError: false)
-            } catch {
-                let msg = error.localizedDescription
-                return Self.errorResult(call, summary: "⚠ 暂存写入失败: \(msg)", message: msg)
             }
+            let payload: [String: Any] = ["staged": true, "path": path,
+                "note": "改动已暂存,需用户在界面看 diff 后点「应用」才会写入磁盘。"]
+            return ToolResult(callID: call.id, name: call.name,
+                              content: Self.jsonString(payload),
+                              summary: "✓ 已暂存改动 \(path),待确认", isError: false)
+        } catch {
+            let msg = error.localizedDescription
+            return Self.errorResult(call, summary: "⚠ 暂存写入失败: \(msg)", message: msg)
         }
         #else
         return Self.errorResult(call, summary: "⚠ 本地文件工具仅 macOS 支持", message: "local file tools are macOS only")
