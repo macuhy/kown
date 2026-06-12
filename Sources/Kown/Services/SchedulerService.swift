@@ -559,7 +559,8 @@ final class SchedulerService {
     func ensureNotificationPermission() {
         guard !permissionAsked else { return }
         permissionAsked = true
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        // @Sendable:本类是 @MainActor,裸闭包会继承隔离,通知中心在后台队列回调时会执行器断言崩溃。
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { @Sendable _, _ in }
     }
 
     /// 发一条本地通知,告知该定时任务已触发。

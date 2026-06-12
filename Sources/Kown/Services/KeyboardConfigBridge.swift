@@ -146,7 +146,8 @@ struct KeyboardBridgeSettingsCard: View {
             }
         default:   // .notDetermined
             Button {
-                PHPhotoLibrary.requestAuthorization(for: .readWrite) { status in
+                // @Sendable:View 上下文的裸闭包会继承 MainActor 隔离,PhotoKit 在后台队列回调时会执行器断言崩溃。
+                PHPhotoLibrary.requestAuthorization(for: .readWrite) { @Sendable status in
                     Task { @MainActor in photoStatus = status }
                 }
             } label: {

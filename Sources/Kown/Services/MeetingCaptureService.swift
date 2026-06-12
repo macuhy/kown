@@ -223,7 +223,9 @@ final class MeetingCaptureService: ObservableObject {
             throw StartError.micUnavailable
         }
         // tap 在音频线程:只把 buffer 转交识别器(其内部串行队列安全),不碰 MainActor 的 self。
-        input.installTap(onBus: 0, bufferSize: 2048, format: format) { buffer, _ in
+        // 必须显式 @Sendable:本类是 @MainActor,不标的话闭包会继承 MainActor 隔离,
+        // Swift 6 在 tap 回调队列(RealtimeMessenger.mServiceQueue)做执行器断言 → SIGTRAP 崩溃。
+        input.installTap(onBus: 0, bufferSize: 2048, format: format) { @Sendable buffer, _ in
             track.append(buffer)
         }
         micEngine.prepare()
@@ -266,12 +268,16 @@ final class MeetingCaptureService: ObservableObject {
     }
 
     /// 申请语音识别 + 麦克风权限(都在后台回调,收口成 async)。
+    /// 回调闭包必须显式 @Sendable:本类是 @MainActor,不标的话闭包继承 MainActor 隔离,
+    /// TCC 在后台队列回调时执行器断言 → SIGTRAP 崩溃(和 installTap 同款坑)。
     private func requestSpeechAndMic() async -> Bool {
         let speechOK: Bool = await withCheckedContinuation { cont in
             if SFSpeechRecognizer.authorizationStatus() == .authorized {
                 cont.resume(returning: true)
             } else {
-                SFSpeechRecognizer.requestAuthorization { cont.resume(returning: $0 == .authorized) }
+                SFSpeechRecognizer.requestAuthorization { @Sendable in
+                    cont.resume(returning: $0 == .authorized)
+                }
             }
         }
         guard speechOK else { return false }
@@ -280,7 +286,9 @@ final class MeetingCaptureService: ObservableObject {
             switch AVCaptureDevice.authorizationStatus(for: .audio) {
             case .authorized: cont.resume(returning: true)
             case .notDetermined:
-                AVCaptureDevice.requestAccess(for: .audio) { cont.resume(returning: $0) }
+                AVCaptureDevice.requestAccess(for: .audio) { @Sendable in
+                    cont.resume(returning: $0)
+                }
             default: cont.resume(returning: false)
             }
         }
