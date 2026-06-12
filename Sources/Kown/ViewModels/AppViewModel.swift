@@ -90,6 +90,18 @@ final class AppViewModel {
     var showFind = false
     /// 全局热键 / 菜单栏唤起后请求聚焦输入框 —— 每次自增,InputBarView 监听变化即聚焦。
     var focusInputRequest = 0
+    /// 语音对话直达请求(深链 `kown://voice` / App Intent / 控制中心控件)—— 每次自增,
+    /// InputBarView 监听变化即打开语音对话界面。
+    var voiceConversationRequest = 0
+    /// 冷启动时深链可能先于 InputBarView 挂载到达,onChange 收不到 ——
+    /// 仿 MacServicesProvider 的 pending 模式暂存一份,InputBarView onAppear 时消费。
+    var pendingVoiceConversation = false
+
+    /// 请求直达语音对话界面(深链 / App Intent 共用入口)。
+    func requestVoiceConversation() {
+        pendingVoiceConversation = true
+        voiceConversationRequest &+= 1
+    }
     /// 自动容错:某 panel provider 失败时自动换另一家 enabled provider 重试一次。默认关。
     var autoFailoverEnabled: Bool {
         didSet { UserDefaults.standard.set(autoFailoverEnabled, forKey: Self.autoFailoverKey) }
@@ -659,6 +671,7 @@ final class AppViewModel {
     /// - `kown://ask?q=问题&mode=direct&send=1`:新建/复用空会话,填入问题(send=1 直接发)。
     /// - `kown://new?mode=council`:新建该模式会话。
     /// - `kown://open?id=<UUID>`:打开指定会话。
+    /// - `kown://voice`:直达语音对话界面(控制中心控件 / Action Button)。
     func handleDeepLink(_ url: URL) {
         guard url.scheme?.lowercased() == "kown" else { return }
         let comps = URLComponents(url: url, resolvingAgainstBaseURL: false)
@@ -697,6 +710,8 @@ final class AppViewModel {
                conversations.contains(where: { $0.id == uuid && $0.deletedAt == nil }) {
                 selectConversation(uuid)
             }
+        case "voice":
+            requestVoiceConversation()
         default:
             break
         }

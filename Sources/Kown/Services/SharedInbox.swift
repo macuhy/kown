@@ -37,5 +37,20 @@ enum SharedInbox {
         d?.removeObject(forKey: pendingModeKey)
         return m
     }
+
+    static let pendingVoiceKey = "kown.share.pendingVoice.v1"
+
+    /// 标记「打开后直达语音对话」(StartVoiceChatIntent 用)。
+    static func depositVoiceRequest() {
+        UserDefaults(suiteName: appGroup)?.set(true, forKey: pendingVoiceKey)
+    }
+
+    /// 取出并清空语音对话直达标记。
+    static func takePendingVoice() -> Bool {
+        let d = UserDefaults(suiteName: appGroup)
+        let v = d?.bool(forKey: pendingVoiceKey) ?? false
+        d?.removeObject(forKey: pendingVoiceKey)
+        return v
+    }
 }
 #endif
