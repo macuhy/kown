@@ -18,6 +18,11 @@ struct BackupSettingsView: View {
     @State private var resultMessage: String?
     @State private var errorMessage: String?
 
+    // 导入聊天记录(ChatGPT / Claude / Kown)
+    @State private var chatImportSource: ConversationImporter.Source = .chatGPT
+    @State private var showChatImporter = false
+    @State private var chatImporting = false
+
     // 自动备份状态(镜像 BackupStore 的持久化偏好,binding 改动即写回)。
     @State private var autoFrequency: BackupFrequency = .off
     @State private var keepCount: Int = BackupStore.defaultKeepCount
@@ -51,6 +56,16 @@ struct BackupSettingsView: View {
             ) { result in
                 handleImportResult(result.map { [$0] })
             }
+            .background {
+                // 第二个 fileImporter 不能挂在同一个节点上(会相互覆盖),挂到 background 的空视图。
+                Color.clear
+                    .fileImporter(
+                        isPresented: $showChatImporter,
+                        allowedContentTypes: chatImportContentTypes
+                    ) { result in
+                        handleChatImportResult(result)
+                    }
+            }
             .confirmationDialog(
                 "如何导入?",
                 isPresented: $showImportModeDialog,
@@ -79,6 +94,7 @@ struct BackupSettingsView: View {
                 autoBackupCard
                 exportCard
                 importCard
+                chatImportCard
                 if resultMessage != nil || errorMessage != nil {
                     statusCard
                 }
@@ -96,6 +112,7 @@ struct BackupSettingsView: View {
                 autoBackupCard
                 exportCard
                 importCard
+                chatImportCard
                 if resultMessage != nil || errorMessage != nil {
                     statusCard
                 }
@@ -361,6 +378,77 @@ struct BackupSettingsView: View {
         }
     }
 
+    /// 「导入聊天记录」的三个入口 + 说明。
+    private var chatImportControls: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            #if os(macOS)
+            Text("把在别处的聊天搬进来:支持 ChatGPT / Claude 官方导出包(.zip 或解压后的 conversations.json)和 Kown 导出的单会话 JSON。全部本地解析,导入的会话归入「已导入」项目。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            #else
+            Text("把在别处的聊天搬进来:请先解压 ChatGPT / Claude 官方导出包,选择其中的 conversations.json;也支持 Kown 导出的单会话 JSON。全部本地解析,导入的会话归入「已导入」项目。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            #endif
+
+            VStack(alignment: .leading, spacing: 8) {
+                chatImportButton(.chatGPT,
+                                 title: chatImportTitle("ChatGPT 导出包"),
+                                 icon: "bubble.left.and.text.bubble.right")
+                chatImportButton(.claude,
+                                 title: chatImportTitle("Claude 导出包"),
+                                 icon: "sparkles")
+                chatImportButton(.kown,
+                                 title: "Kown 会话 JSON…",
+                                 icon: "doc.text")
+            }
+
+            if chatImporting {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("解析中,大文件可能需要一会儿…")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    /// 入口标题:macOS 支持 zip,iOS 只收解压后的 json。
+    private func chatImportTitle(_ name: String) -> String {
+        #if os(macOS)
+        return "\(name)(.zip / .json)…"
+        #else
+        return "\(name)(conversations.json)…"
+        #endif
+    }
+
+    private func chatImportButton(_ source: ConversationImporter.Source,
+                                  title: String,
+                                  icon: String) -> some View {
+        Button {
+            chatImportSource = source
+            showChatImporter = true
+        } label: {
+            Label(title, systemImage: icon)
+                .font(.body.weight(.semibold))
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.bordered)
+        .disabled(chatImporting)
+    }
+
+    /// 文件类型:macOS 收 zip + json;iOS 没法解压,只收 json。
+    private var chatImportContentTypes: [UTType] {
+        #if os(macOS)
+        return [.zip, .json, .data]
+        #else
+        return [.json, .data]
+        #endif
+    }
+
     @ViewBuilder
     private var statusContent: some View {
         if let errorMessage {
@@ -438,6 +526,17 @@ struct BackupSettingsView: View {
             VStack(alignment: .leading, spacing: 14) {
                 sectionHeader("导入", subtitle: "选择备份文件后,再决定覆盖或只合并新增项。", icon: "square.and.arrow.down.fill", color: secondaryTint)
                 importControls
+            }
+        }
+    }
+    private var chatImportCard: some View {
+        cardShell(tint: tint) {
+            VStack(alignment: .leading, spacing: 14) {
+                sectionHeader("导入聊天记录",
+                              subtitle: "从 ChatGPT / Claude 官方导出包或 Kown 会话 JSON 搬家,导入后归入「已导入」项目。",
+                              icon: "tray.and.arrow.down.fill",
+                              color: tint)
+                chatImportControls
             }
         }
     }
@@ -741,6 +840,58 @@ struct BackupSettingsView: View {
             } catch {
                 errorMessage = "读取文件失败: \(error.localizedDescription)"
                 resultMessage = nil
+            }
+        }
+    }
+
+    // MARK: - 导入聊天记录
+
+    /// 选中文件后:先在安全作用域内把文件拷到临时目录(选完作用域就会失效),
+    /// 再丢后台解析(大导出包几十 MB,不能卡 UI),完成回主线程入库 + 提示。
+    private func handleChatImportResult(_ result: Result<URL, Error>) {
+        switch result {
+        case .failure(let err):
+            errorMessage = "选择文件失败: \(err.localizedDescription)"
+            resultMessage = nil
+        case .success(let url):
+            let tempURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent("kown-chat-import-\(UUID().uuidString)")
+                .appendingPathExtension(url.pathExtension.isEmpty ? "json" : url.pathExtension)
+            do {
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                try FileManager.default.copyItem(at: url, to: tempURL)
+            } catch {
+                errorMessage = "读取文件失败: \(error.localizedDescription)"
+                resultMessage = nil
+                return
+            }
+            performChatImport(tempURL: tempURL, source: chatImportSource)
+        }
+    }
+
+    /// 后台解析 + 主线程入库。临时文件用完即删。
+    private func performChatImport(tempURL: URL, source: ConversationImporter.Source) {
+        chatImporting = true
+        errorMessage = nil
+        resultMessage = nil
+        let vm = viewModel
+        Task {
+            defer { try? FileManager.default.removeItem(at: tempURL) }
+            do {
+                let parsed = try await Task.detached(priority: .userInitiated) {
+                    try ConversationImporter.importFile(at: tempURL, source: source)
+                }.value
+                let added = vm.importChatConversations(parsed.conversations)
+                chatImporting = false
+                if added == 0 && parsed.skipped == 0 {
+                    errorMessage = "文件里没有可导入的会话。"
+                } else {
+                    resultMessage = "导入完成:成功 \(added) 条,跳过 \(parsed.skipped) 条。已归入「已导入」项目。"
+                }
+            } catch {
+                chatImporting = false
+                errorMessage = "导入失败: \(error.localizedDescription)"
             }
         }
     }

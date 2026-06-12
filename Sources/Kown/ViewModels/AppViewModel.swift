@@ -1142,6 +1142,36 @@ final class AppViewModel {
         ConversationFolderStore.save(conversationFolders)
     }
 
+    // MARK: - 导入聊天记录
+
+    /// 把 `ConversationImporter` 解析出的会话收编进本机:统一归入名为「已导入」的项目空间
+    /// (没有则自动建),逐条插入侧栏顶部并落盘。返回实际入库条数。
+    @discardableResult
+    func importChatConversations(_ convs: [Conversation]) -> Int {
+        guard !convs.isEmpty else { return 0 }
+        let folderID: UUID
+        if let existing = conversationFolders.first(where: { $0.name == "已导入" }) {
+            folderID = existing.id
+        } else {
+            let folder = ConversationFolder(name: "已导入", icon: "square.and.arrow.down.fill")
+            conversationFolders.append(folder)
+            ConversationFolderStore.save(conversationFolders)
+            folderID = folder.id
+        }
+        var added = 0
+        for var conv in convs {
+            // 防御:外部解析结果不应撞上现有 id(Kown 导入已重生成),撞上则直接换新。
+            if conversations.contains(where: { $0.id == conv.id }) {
+                conv = ConversationImporter.regenerateIDs(conv)
+            }
+            conv.folderID = folderID
+            conversations.insert(conv, at: 0)
+            ConversationStore.save(conv)
+            added += 1
+        }
+        return added
+    }
+
     // MARK: - 项目空间(文件夹的上下文配置)
 
     /// 更新项目空间配置:名称 / 项目级系统提示 / 知识库 / 默认模型 / 图标颜色。
