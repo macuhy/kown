@@ -49,6 +49,31 @@ targets:
         SUScheduledCheckInterval: 86400
         # 更新弹窗不显示 release notes 网页（GitHub 页面），只留按钮
         SUShowReleaseNotes: false
+        # ── 系统级划词 AI（NSServices）──
+        # 任意 app 选中文字 → 右键「服务」菜单。NSMessage 对应 MacServicesProvider 的
+        # @objc handler（selector = NSMessage + ":userData:error:"）；NSPortName = 可执行名。
+        # 首次安装后服务菜单可能要等 pbs 重扫（注销/重登或 NSUpdateDynamicServices）才出现。
+        NSServices:
+          - NSMenuItem:
+              default: 用 Kown 翻译
+            NSMessage: kownServiceTranslate
+            NSPortName: Kown
+            NSSendTypes: [NSStringPboardType]
+          - NSMenuItem:
+              default: 用 Kown 总结
+            NSMessage: kownServiceSummarize
+            NSPortName: Kown
+            NSSendTypes: [NSStringPboardType]
+          - NSMenuItem:
+              default: 问 Kown
+            NSMessage: kownServiceAsk
+            NSPortName: Kown
+            NSSendTypes: [NSStringPboardType]
+          - NSMenuItem:
+              default: 存入 Kown 知识库
+            NSMessage: kownServiceSaveToKnowledge
+            NSPortName: Kown
+            NSSendTypes: [NSStringPboardType]
         NSUbiquitousContainers:
           iCloud.com.xiaobo.kown:
             NSUbiquitousContainerIsDocumentScopePublic: false
