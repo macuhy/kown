@@ -95,6 +95,19 @@ struct InputBarView: View {
         .onChange(of: viewModel.focusInputRequest) { _, _ in
             inputFocused = true
         }
+        // 划词引用追问:答卡的「引用」动作把格式化好的引用块发到 QuoteReplyCenter,
+        // 这里写入输入框(已有草稿则接在其后)并聚焦,等用户补完问题手动发送。
+        .onReceive(QuoteReplyCenter.shared.$pendingPrompt) { pending in
+            guard let pending, !pending.isEmpty else { return }
+            if viewModel.promptIsBlank {
+                viewModel.prompt = pending
+            } else {
+                let existing = viewModel.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+                viewModel.prompt = existing + "\n\n" + pending
+            }
+            inputFocused = true
+            QuoteReplyCenter.shared.pendingPrompt = nil
+        }
         .alert("抓取网页", isPresented: $showURLScrape) {
             TextField("https://…", text: $urlDraft)
                 #if os(iOS)
