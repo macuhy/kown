@@ -122,25 +122,41 @@ enum MacQuickAsk {
 }
 
 /// Carbon 全局热键的轻封装。
+/// 同一 app 可注册多个实例(`id` 必须互不相同):handler 里按事件携带的
+/// EventHotKeyID 过滤,不是自己的热键就返回 eventNotHandledErr 让下一个 handler 接手。
 final class GlobalHotKey {
     private var ref: EventHotKeyRef?
     private var handlerRef: EventHandlerRef?
     private let callback: () -> Void
+    private let hotKeyID: EventHotKeyID
 
-    init(keyCode: UInt32, modifiers: UInt32, callback: @escaping () -> Void) {
+    init(keyCode: UInt32, modifiers: UInt32, id: UInt32 = 1, callback: @escaping () -> Void) {
         self.callback = callback
+        self.hotKeyID = EventHotKeyID(signature: OSType(0x4B574E31), id: id) // 'KWN1'
 
         var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard),
                                       eventKind: UInt32(kEventHotKeyPressed))
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
-        InstallEventHandler(GetApplicationEventTarget(), { _, _, userData in
-            guard let userData else { return noErr }
+        InstallEventHandler(GetApplicationEventTarget(), { _, event, userData in
+            guard let userData, let event else { return noErr }
+            // 取出事件里的 EventHotKeyID,只响应自己注册的那一个。
+            var pressedID = EventHotKeyID()
+            GetEventParameter(event,
+                              EventParamName(kEventParamDirectObject),
+                              EventParamType(typeEventHotKeyID),
+                              nil,
+                              MemoryLayout<EventHotKeyID>.size,
+                              nil,
+                              &pressedID)
             let me = Unmanaged<GlobalHotKey>.fromOpaque(userData).takeUnretainedValue()
+            guard pressedID.signature == me.hotKeyID.signature,
+                  pressedID.id == me.hotKeyID.id else {
+                return OSStatus(eventNotHandledErr)
+            }
             me.callback()
             return noErr
         }, 1, &eventType, selfPtr, &handlerRef)
 
-        let hotKeyID = EventHotKeyID(signature: OSType(0x4B574E31), id: 1) // 'KWN1'
         RegisterEventHotKey(keyCode, modifiers, hotKeyID, GetApplicationEventTarget(), 0, &ref)
     }
 

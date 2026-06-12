@@ -25,6 +25,7 @@ struct DeviceToolsSettingsView: View {
                     notesCard
                     #if os(macOS)
                     localFilesCard
+                    selectionAICard
                     #endif
                     codeExecCard
                 }
@@ -241,6 +242,36 @@ struct DeviceToolsSettingsView: View {
                 }
             }
         }
+    }
+
+    // MARK: - 划词 AI(macOS)
+
+    /// 是否已授权辅助功能(划词助手读取任意 app 选区 / 原地替换需要)。
+    @State private var axTrusted = false
+
+    private var selectionAICard: some View {
+        card(icon: "cursorarrow.and.square.on.square.dashed", title: "划词 AI(macOS)") {
+            statusChip(
+                title: axTrusted ? "辅助功能已授权" : "辅助功能未授权",
+                icon: axTrusted ? "checkmark.circle.fill" : "exclamationmark.circle.fill",
+                color: axTrusted ? .green : .orange
+            )
+            Text("在任意 app 选中文字:右键「服务」菜单可「用 Kown 翻译 / 总结、问 Kown、存入知识库」;按 ⌃⌥L 弹出划词助手,一键纠错 / 润色 / 翻译并替换原文。服务菜单首次安装后若未出现,注销重登一次即可。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if !axTrusted {
+                Button {
+                    MacSelectionAssistant.requestAccessibilityPermission()
+                } label: {
+                    Label("授权辅助功能", systemImage: "lock.shield")
+                        .font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.bordered)
+                .help("授权后划词助手才能读取任意 app 的选区并支持「替换原文」;不授权也能用服务菜单与剪贴板降级模式")
+            }
+        }
+        .onAppear { axTrusted = AXIsProcessTrusted() }
     }
 
     private func pickLocalFolder() {

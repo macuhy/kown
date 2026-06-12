@@ -8,6 +8,8 @@ private class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
+        // 系统级划词 AI(NSServices):尽早注册,冷启动被服务唤起时也能收到回调。
+        MacServicesProvider.shared.register()
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -69,6 +71,10 @@ struct KownApp: App {
                 #if os(macOS)
                 // 注册全局热键 ⌃⌥K(唤起主窗口 + 聚焦输入框)。
                 MacQuickAsk.registerHotKey(viewModel: viewModel)
+                // 系统级划词 AI:注入 viewModel(补发冷启动积压的服务请求)。
+                MacServicesProvider.shared.attach(viewModel: viewModel)
+                // 划词助手:全局热键 ⌃⌥L 弹迷你面板(纠错/润色/翻译 + 提示词库)。
+                MacSelectionAssistant.shared.registerHotKey(viewModel: viewModel)
                 // 启动即拉起 Sparkle 更新器(按 SUScheduledCheckInterval 定时检查)。
                 _ = UpdaterService.shared
                 // 再额外强制一次后台静默检查 —— Sparkle 定时器要等满间隔才查,
