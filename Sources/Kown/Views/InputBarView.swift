@@ -95,6 +95,18 @@ struct InputBarView: View {
         .onChange(of: viewModel.focusInputRequest) { _, _ in
             inputFocused = true
         }
+        // 语音对话直达(深链 kown://voice / App Intent / 控制中心控件):
+        // 监听计数变化打开语音界面;冷启动时深链先于本视图挂载 → onAppear 消费 pending 兜底。
+        .onChange(of: viewModel.voiceConversationRequest) { _, _ in
+            viewModel.pendingVoiceConversation = false
+            showVoice = true
+        }
+        .onAppear {
+            if viewModel.pendingVoiceConversation {
+                viewModel.pendingVoiceConversation = false
+                showVoice = true
+            }
+        }
         // 划词引用追问:答卡的「引用」动作把格式化好的引用块发到 QuoteReplyCenter,
         // 这里写入输入框(已有草稿则接在其后)并聚焦,等用户补完问题手动发送。
         .onReceive(QuoteReplyCenter.shared.$pendingPrompt) { pending in

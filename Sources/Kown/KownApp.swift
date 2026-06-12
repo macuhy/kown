@@ -127,6 +127,11 @@ struct KownApp: App {
                 }
                 viewModel.focusInputRequest &+= 1
             }
+            // 「开始语音对话」App Intent(快捷指令 / Siri / Action Button)送来的直达标记:
+            // 取出后请求打开语音对话界面(冷启动由 pending 暂存兜底)。
+            if SharedInbox.takePendingVoice() {
+                viewModel.requestVoiceConversation()
+            }
             #endif
             // 启动第一次 .active 不 refresh — AppViewModel.init 里的延迟 2s task 已经会兜底。
             // 否则两条 refresh 路径同时跑,卡住 MainActor,UI 启动几秒不响应。

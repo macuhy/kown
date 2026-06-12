@@ -64,6 +64,15 @@ struct KownShortcuts: AppShortcutsProvider {
             systemImageName: "bubble.left.and.bubble.right.fill"
         )
         AppShortcut(
+            intent: StartVoiceChatIntent(),
+            phrases: [
+                "用 \(.applicationName) 语音对话",
+                "和 \(.applicationName) 语音聊天"
+            ],
+            shortTitle: "开始语音对话",
+            systemImageName: "waveform.circle.fill"
+        )
+        AppShortcut(
             intent: AskKownInModeIntent(),
             phrases: [
                 "用 \(.applicationName) 指定模式提问",
