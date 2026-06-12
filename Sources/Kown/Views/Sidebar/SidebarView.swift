@@ -27,6 +27,8 @@ struct SidebarView: View {
     @State private var newFolderName = ""
     @State private var folderRenameTarget: IdentifiedID?
     @State private var folderRenameDraft = ""
+    /// 正在配置「项目设置」的项目(文件夹)。nil = 未打开。
+    @State private var projectSettingsTarget: IdentifiedID?
 
     /// 当前是否处于搜索态
     private var isSearching: Bool {
@@ -100,6 +102,9 @@ struct SidebarView: View {
         }
         .sheet(item: $promptEditTarget) { target in
             ConversationPromptSheet(viewModel: viewModel, conversationID: target.id)
+        }
+        .sheet(item: $projectSettingsTarget) { target in
+            ProjectSettingsSheet(viewModel: viewModel, folderID: target.id)
         }
         .alert("编辑标签", isPresented: Binding(
             get: { tagEditTarget != nil },
@@ -580,9 +585,11 @@ struct SidebarView: View {
                 Button {
                     if collapsed { collapsedFolders.remove(folder.id) } else { collapsedFolders.insert(folder.id) }
                 } label: {
-                    groupHeaderLabel(icon: collapsed ? "folder.fill" : "folder.fill",
+                    // 项目空间:用项目自己的图标与标识色;未配置时回退 folder.fill + 模式色。
+                    groupHeaderLabel(icon: folder.icon ?? "folder.fill",
                                      chevron: collapsed ? "chevron.right" : "chevron.down",
-                                     name: folder.name, count: convs.count, tint: currentModeTint)
+                                     name: folder.name, count: convs.count,
+                                     tint: folder.color?.swiftUIColor ?? currentModeTint)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("\(collapsed ? "展开" : "折叠")文件夹 \(folder.name)")
@@ -601,6 +608,16 @@ struct SidebarView: View {
 
     @ViewBuilder
     private func folderActionItems(_ folder: ConversationFolder) -> some View {
+        Button {
+            viewModel.newConversation(mode: viewModel.currentMode, inFolder: folder.id)
+            onSelectConversation()
+        } label: {
+            Label("在项目中新建会话", systemImage: "square.and.pencil")
+        }
+        Button { projectSettingsTarget = IdentifiedID(id: folder.id) } label: {
+            Label("项目设置…", systemImage: "gearshape")
+        }
+        Divider()
         Button { folderRenameDraft = folder.name; folderRenameTarget = IdentifiedID(id: folder.id) } label: {
             Label("重命名文件夹", systemImage: "pencil")
         }

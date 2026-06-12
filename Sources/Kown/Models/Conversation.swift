@@ -728,16 +728,47 @@ struct Conversation: Identifiable, Codable, Hashable, Sendable {
     }
 }
 
-/// 侧栏会话分组「文件夹」。会话通过 `Conversation.folderID` 归属。
+/// 项目空间的标识色。存 rawValue(字符串),渲染时映射到系统色(见 `ProjectSettingsSheet`)。
+enum ProjectColor: String, Codable, CaseIterable, Hashable, Sendable {
+    case blue, purple, pink, red, orange, yellow, green, teal, gray
+}
+
+/// 侧栏会话分组「文件夹」,升级为「项目空间」:除分组外还可绑定项目级系统提示 /
+/// 知识库资料夹 / 默认模型,项目内新建会话自动继承(会话级显式设置 > 项目级 > 全局默认)。
+/// 会话通过 `Conversation.folderID` 归属。新字段全部 optional —— 旧 JSON 缺键解码不受影响,
+/// 老文件夹自动以「无项目配置」的项目存在,升级无损。
 struct ConversationFolder: Identifiable, Codable, Hashable, Sendable {
     let id: UUID
     var name: String
     var createdAt: Date
+    /// 项目级系统提示:项目内会话未设会话级提示时生效;nil/空回退全局系统提示。
+    var projectSystemPrompt: String?
+    /// 项目绑定的知识库资料夹(`KnowledgeFolder.id`)— 项目内会话未自行绑定时回退到它。
+    var knowledgeFolderID: UUID?
+    /// 项目默认模型(provider + model)— 项目内新建会话自动锁定;单模型路径(Direct/Translate)
+    /// 发送时也作为兜底(会话内手动换模型优先)。
+    var defaultModelChoice: ProviderModelChoice?
+    /// 侧栏图标(SF Symbol 名)。nil = 默认 "folder.fill"。
+    var icon: String?
+    /// 侧栏标识色。nil = 跟随当前模式色。
+    var color: ProjectColor?
 
-    init(id: UUID = UUID(), name: String, createdAt: Date = Date()) {
+    init(id: UUID = UUID(),
+         name: String,
+         createdAt: Date = Date(),
+         projectSystemPrompt: String? = nil,
+         knowledgeFolderID: UUID? = nil,
+         defaultModelChoice: ProviderModelChoice? = nil,
+         icon: String? = nil,
+         color: ProjectColor? = nil) {
         self.id = id
         self.name = name
         self.createdAt = createdAt
+        self.projectSystemPrompt = projectSystemPrompt
+        self.knowledgeFolderID = knowledgeFolderID
+        self.defaultModelChoice = defaultModelChoice
+        self.icon = icon
+        self.color = color
     }
 }
 

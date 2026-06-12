@@ -31,6 +31,13 @@ extension AppViewModel {
             conversations[i].knowledgeFolderID = nil
             ConversationStore.save(conversations[i])
         }
+        // 解绑所有引用该资料夹的项目空间
+        var foldersChanged = false
+        for i in conversationFolders.indices where conversationFolders[i].knowledgeFolderID == id {
+            conversationFolders[i].knowledgeFolderID = nil
+            foldersChanged = true
+        }
+        if foldersChanged { ConversationFolderStore.save(conversationFolders) }
     }
 
     func addKnowledgeDoc(folderID: UUID, name: String, text: String) {

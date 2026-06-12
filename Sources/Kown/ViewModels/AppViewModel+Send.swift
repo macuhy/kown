@@ -142,8 +142,9 @@ extension AppViewModel {
                 branch: conversations[convIdx].gitHubBranch,
                 token: GitHubAuth.token())
             : nil
-        // 知识库:会话自己绑定的优先;否则用 Persona 绑定的资料夹。
+        // 知识库:会话自己绑定的优先;其次 Persona 绑定的资料夹;最后回退所属项目空间绑定的资料夹。
         let knowledgeFolderForSend = currentKnowledgeFolder ?? personaFx.knowledgeFolder
+            ?? projectKnowledgeFolder(of: conversations[convIdx])
         // memory items 取一份快照(O(1) COW),供后台 BM25 打分,避免触碰 @MainActor 的 MemoryStore。
         let memoryItemsForSend: [MemoryItem] = memoryInjectionEnabled ? MemoryStore.shared.items : []
         let memoryQueryForSend: String? = memoryInjectionEnabled ? trimmed : nil
@@ -167,11 +168,20 @@ extension AppViewModel {
                     ?? UserDefaults.standard.string(forKey: Self.translateLangKey),
                 rewrite: conversations[convIdx].translateRewrite)
             : ""
-        // 基础系统提示(翻译指令 → Persona(提示词+绑定技能) → 技能 → 会话级 / 全局);
-        // 上下文片段在后台前置到它前面。
+        // 基础系统提示(翻译指令 → Persona(提示词+绑定技能) → 技能 → 会话级 / 项目级 / 全局);
+        // 优先级:会话级显式设置 > 项目空间的项目级提示 > 全局默认。上下文片段在后台前置到它前面。
         let baseSystemPrompt: String = {
             let convPrompt = conversations[convIdx].systemPrompt?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let base = (convPrompt?.isEmpty == false) ? convPrompt! : systemPrompt
+            let projectPrompt = projectFolder(of: conversations[convIdx])?
+                .projectSystemPrompt?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let base: String
+            if let convPrompt, !convPrompt.isEmpty {
+                base = convPrompt
+            } else if let projectPrompt, !projectPrompt.isEmpty {
+                base = projectPrompt
+            } else {
+                base = systemPrompt
+            }
             return [translateInstruction, personaFx.systemPromptPrefix, skillInstructions, base]
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }

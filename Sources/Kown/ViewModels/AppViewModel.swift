@@ -372,11 +372,22 @@ final class AppViewModel {
         selectedConversation?.mode ?? activeMode
     }
 
-    func newConversation(mode: ConversationMode) {
+    func newConversation(mode: ConversationMode, inFolder folderID: UUID? = nil) {
         // 不再取消 isRunning 的任务 — task 继续跑在原 conv 上,只是当前 UI 不再展示其直播。
         // 直播 UI 是否显示由 `runningConvID == selectedConversationID` 决定(MainContentView)。
         stashDraft()
-        let conv = Conversation(mode: mode)
+        var conv = Conversation(mode: mode)
+        // 项目空间继承:落进项目 + 自动锁定项目默认模型。
+        // 系统提示 / 知识库不在这里拷贝 —— 发送时按「会话级显式 > 项目级 > 全局」回退
+        // (见 AppViewModel+Send / providersForCurrentSend),项目配置改了,项目内旧会话也即时生效。
+        if let folderID, let project = conversationFolders.first(where: { $0.id == folderID }) {
+            conv.folderID = project.id
+            if let choice = project.defaultModelChoice,
+               providers.contains(where: { $0.id == choice.providerID && $0.enabled }) {
+                conv.activeModelChoices = [choice]
+                conv.activeProviderIDs = [choice.providerID]
+            }
+        }
         conversations.insert(conv, at: 0)
         selectedConversationID = conv.id
         prompt = ""
@@ -1112,6 +1123,41 @@ final class AppViewModel {
         ConversationFolderStore.save(conversationFolders)
     }
 
+    // MARK: - 项目空间(文件夹的上下文配置)
+
+    /// 更新项目空间配置:名称 / 项目级系统提示 / 知识库 / 默认模型 / 图标颜色。
+    /// 各字段传 nil 即清除对应项目级设置(name 留空不改名)。
+    func updateProjectSettings(_ id: UUID,
+                               name: String,
+                               systemPrompt: String?,
+                               knowledgeFolderID: UUID?,
+                               defaultModelChoice: ProviderModelChoice?,
+                               icon: String?,
+                               color: ProjectColor?) {
+        guard let idx = conversationFolders.firstIndex(where: { $0.id == id }) else { return }
+        let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !n.isEmpty { conversationFolders[idx].name = n }
+        let prompt = systemPrompt?.trimmingCharacters(in: .whitespacesAndNewlines)
+        conversationFolders[idx].projectSystemPrompt = (prompt?.isEmpty == false) ? prompt : nil
+        conversationFolders[idx].knowledgeFolderID = knowledgeFolderID
+        conversationFolders[idx].defaultModelChoice = defaultModelChoice
+        conversationFolders[idx].icon = icon
+        conversationFolders[idx].color = color
+        ConversationFolderStore.save(conversationFolders)
+    }
+
+    /// 会话所属的项目空间(文件夹);未分组返回 nil。
+    func projectFolder(of conv: Conversation) -> ConversationFolder? {
+        guard let fid = conv.folderID else { return nil }
+        return conversationFolders.first { $0.id == fid }
+    }
+
+    /// 项目绑定的知识库资料夹 —— 项目内会话未自行绑定时的回退(发送时消费)。
+    func projectKnowledgeFolder(of conv: Conversation) -> KnowledgeFolder? {
+        guard let fid = projectFolder(of: conv)?.knowledgeFolderID else { return nil }
+        return knowledgeFolders.first { $0.id == fid }
+    }
+
     /// 把会话移动到某文件夹(nil = 移出到未分组)。
     func setFolder(_ convID: UUID, folderID: UUID?) {
         guard let idx = conversations.firstIndex(where: { $0.id == convID }) else { return }
@@ -1712,10 +1758,14 @@ final class AppViewModel {
             return (players, judge)
         case .direct, .translate:
             // Translate 与 Direct 同样是单模型路径:选一个 provider,无 chair。
+            // 优先级:会话显式选择(modelChoices / activeProviderIDs)> 项目默认模型 > 第一个 enabled。
             if let chosen = resolvedFromModelChoices(maxCount: 1), !chosen.isEmpty {
                 return (chosen, nil)
             }
             if let chosen = chosenFromActive(maxCount: 1), !chosen.isEmpty {
+                return (chosen, nil)
+            }
+            if let chosen = resolvedFromProjectDefault() {
                 return (chosen, nil)
             }
             return (Array(enabled.prefix(1)), nil)
@@ -1763,6 +1813,17 @@ final class AppViewModel {
         let byID = Dictionary(uniqueKeysWithValues: providers.map { ($0.id, $0) })
         let resolved = conv.activeProviderIDs.compactMap { byID[$0] }.filter(\.enabled)
         return Array(resolved.prefix(maxCount))
+    }
+
+    /// 项目空间的默认模型兜底:当前会话没有任何显式模型选择、且所属项目配了默认模型时,
+    /// 用项目默认 (provider, model) 发送。会话级显式设置永远优先于它(调用方先试前两者)。
+    private func resolvedFromProjectDefault() -> [ProviderConfig]? {
+        guard let conv = selectedConversation,
+              conv.activeModelChoices.isEmpty, conv.activeProviderIDs.isEmpty,
+              let choice = projectFolder(of: conv)?.defaultModelChoice,
+              var p = providers.first(where: { $0.id == choice.providerID }), p.enabled else { return nil }
+        p.model = choice.model
+        return [p]
     }
 
     /// 从 `activeModelChoices` 解析,会把 provider 的 model 字段临时替换成 choice 里指定的 model。
