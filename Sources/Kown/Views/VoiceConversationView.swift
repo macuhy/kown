@@ -434,6 +434,8 @@ struct VoiceConversationView: View {
     @StateObject private var controller: VoiceLoopController
     @ObservedObject private var speech = SpeechService.shared
     @Environment(\.dismiss) private var dismiss
+    /// 切到「实时双工(Beta)」全屏:进入前停掉经典轮询循环(共用麦克风,不能并存),退出后恢复。
+    @State private var showRealtime = false
 
     init(viewModel: AppViewModel) {
         self.viewModel = viewModel
@@ -443,6 +445,18 @@ struct VoiceConversationView: View {
     private var turns: [Turn] { viewModel.selectedConversation?.turns ?? [] }
 
     var body: some View {
+        if showRealtime {
+            RealtimeVoiceView(viewModel: viewModel) {
+                // 退出实时模式 → 回到经典语音循环。
+                showRealtime = false
+                controller.start()
+            }
+        } else {
+            classicBody
+        }
+    }
+
+    private var classicBody: some View {
         let mode = viewModel.currentMode
         return ZStack {
             LinearGradient(
@@ -535,10 +549,31 @@ struct VoiceConversationView: View {
                 }
             }
             Spacer(minLength: 0)
+            realtimeEntry
             continuousToggle
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 14)
+    }
+
+    /// 进入「实时双工(Beta)」:真双工低延迟语音(Gemini Live),与经典轮询模式并存。
+    /// 点击前先停掉经典循环(释放麦克风/STT/TTS),再切到 RealtimeVoiceView。
+    private var realtimeEntry: some View {
+        Button {
+            controller.stop()
+            showRealtime = true
+        } label: {
+            VStack(spacing: 2) {
+                Image(systemName: "bolt.horizontal.circle.fill")
+                    .font(.system(size: 20, weight: .semibold))
+                Text("实时")
+                    .font(.system(size: 9, weight: .bold))
+            }
+            .foregroundStyle(.purple)
+        }
+        .buttonStyle(.plain)
+        .help("实时双工(Beta):基于 Gemini Live 的真双工低延迟语音,说话时可随时打断")
+        .accessibilityLabel("进入实时双工模式")
     }
 
     /// 连续对话(duplex)开关:开启后自动发送 + 朗读时可被打断,体感接近实时语音助手。
