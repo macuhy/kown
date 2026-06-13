@@ -232,12 +232,28 @@ struct ConsensusSection: View {
     let error: String?
     let onAnalyze: () -> Void
 
+    /// 结构化分歧点存在时,在「共識与分歧」面板与「分歧雷达」之间切换的视图模式。
+    private enum ViewKind { case panel, radar }
+    @State private var viewKind: ViewKind = .panel
+
     private var tint: Color { Color(red: 0.45, green: 0.4, blue: 0.85) }
+
+    /// 分析含结构化分歧点时才提供「分歧雷达」切换(雷达靠 disagreementPoints 渲染)。
+    private var hasRadar: Bool {
+        !(analysis?.disagreementPoints?.isEmpty ?? true)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if let analysis {
-                ConsensusPanel(analysis: analysis)
+                if hasRadar {
+                    radarToggle
+                }
+                if hasRadar && viewKind == .radar {
+                    DisagreementRadarView(analysis: analysis)
+                } else {
+                    ConsensusPanel(analysis: analysis)
+                }
             }
             if let error {
                 Text(error)
@@ -264,5 +280,32 @@ struct ConsensusSection: View {
             .disabled(isAnalyzing)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// 「共識与分歧 / 分歧雷达」分段切换 —— 仅结构化分歧点存在时出现。
+    private var radarToggle: some View {
+        HStack(spacing: 0) {
+            segButton("共識与分歧", systemImage: "square.split.2x1.fill", kind: .panel)
+            segButton("分歧雷达", systemImage: "dot.radiowaves.left.and.right", kind: .radar)
+        }
+        .padding(3)
+        .background(Color.secondary.opacity(0.10), in: Capsule())
+    }
+
+    private func segButton(_ title: String, systemImage: String, kind: ViewKind) -> some View {
+        let selected = viewKind == kind
+        return Button {
+            withAnimation(.easeInOut(duration: 0.16)) { viewKind = kind }
+        } label: {
+            Label(title, systemImage: systemImage)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(selected ? Color.white : .secondary)
+                .padding(.horizontal, 11).padding(.vertical, 5)
+                .background {
+                    if selected { Capsule().fill(tint) }
+                }
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 }

@@ -70,6 +70,14 @@ final class AppViewModel {
     var synthesizingTurns: Set<UUID> = []
     /// 合成失败原因,key = turnID。
     var synthesisErrors: [UUID: String] = [:]
+    /// 正在做红队压测的 turn 集合。
+    var redTeamingTurns: Set<UUID> = []
+    /// 红队压测失败原因,key = turnID。
+    var redTeamErrors: [UUID: String] = [:]
+    /// 正在跑接力流水线(MoA)的 turn 集合。
+    var relayingTurns: Set<UUID> = []
+    /// 接力流水线失败原因,key = turnID。
+    var relayErrors: [UUID: String] = [:]
     /// GitHub 集成:是否已连接(token 存在)。连接 / 断开后刷新,驱动 UI 显示。
     var gitHubConnected: Bool = GitHubAuth.isConnected()
     /// 当前用户的 GitHub 仓库列表(选仓库菜单用,首次打开时按需拉取后缓存)。
@@ -118,6 +126,11 @@ final class AppViewModel {
     /// 省钱级联(实验,仅 Direct):初答用便宜档,裁判快速打分低于阈值时自动旗舰档重答,两答都保留。默认关。
     var costCascadeEnabled: Bool {
         didSet { UserDefaults.standard.set(costCascadeEnabled, forKey: Self.costCascadeKey) }
+    }
+    /// 个人偏好路由(仅 Direct):按本人盲测画像(PreferenceProfileStore)+ 任务类别选模型。
+    /// 开启时优先于「按难度自动选模型」;样本不足时回退当前模型。默认关。
+    var preferenceRouteEnabled: Bool {
+        didSet { UserDefaults.standard.set(preferenceRouteEnabled, forKey: Self.preferenceRouteKey) }
     }
     /// 跨会话长期记忆:开启后发送时注入相关长期记忆,并在会话进行中自动抽取。默认关(隐私优先)。
     var memoryInjectionEnabled: Bool {
@@ -277,6 +290,7 @@ final class AppViewModel {
     private static let councilVotingKey = "kown.councilVoting.v1"
     private static let autoRouteKey = "kown.autoRoute.v1"
     private static let costCascadeKey = "kown.costCascade.v1"
+    static let preferenceRouteKey = "kown.preferenceRoute.v1"
     private static let memoryInjectionKey = "kown.memory.injection.v1"
     private static let recallKey = "kown.recall.enabled"
     /// Translate 全局默认语言 key(非 private:AppViewModel+Send 跨文件读取做发送时回退)。
@@ -319,6 +333,7 @@ final class AppViewModel {
         self.councilVotingEnabled = UserDefaults.standard.bool(forKey: Self.councilVotingKey)
         self.autoRouteEnabled = UserDefaults.standard.bool(forKey: Self.autoRouteKey)
         self.costCascadeEnabled = UserDefaults.standard.bool(forKey: Self.costCascadeKey)
+        self.preferenceRouteEnabled = UserDefaults.standard.bool(forKey: Self.preferenceRouteKey)
         self.memoryInjectionEnabled = UserDefaults.standard.bool(forKey: Self.memoryInjectionKey)
         self.recallEnabled = UserDefaults.standard.bool(forKey: Self.recallKey)
         self.deviceToolsEnabledForNextSend = UserDefaults.standard.bool(forKey: Self.deviceToolsToggleKey)

@@ -25,6 +25,7 @@ struct SettingsView: View {
         case memory
         case favorites
         case leaderboard
+        case routing
         case eval
         case scheduler
         case performance
@@ -55,6 +56,7 @@ struct SettingsView: View {
             case .memory:      return "记忆"
             case .favorites:   return "收藏"
             case .leaderboard: return "排行榜"
+            case .routing:     return "模型路由"
             case .eval:        return "评测台"
             case .scheduler:   return "定时任务"
             case .performance: return "性能"
@@ -85,6 +87,7 @@ struct SettingsView: View {
             case .memory:      return "brain"
             case .favorites:   return "star"
             case .leaderboard: return "trophy.fill"
+            case .routing:     return "arrow.triangle.branch"
             case .eval:        return "checklist"
             case .scheduler:   return "clock.badge"
             case .performance: return "speedometer"
@@ -115,6 +118,7 @@ struct SettingsView: View {
             case .memory:      return Color(red: 0.56, green: 0.40, blue: 0.86)
             case .favorites:   return Color(red: 0.92, green: 0.70, blue: 0.18)
             case .leaderboard: return Color(red: 0.85, green: 0.60, blue: 0.14)
+            case .routing:     return Color(red: 0.46, green: 0.40, blue: 0.90)
             case .eval:        return Color(red: 0.40, green: 0.52, blue: 0.92)
             case .scheduler:   return Color(red: 0.20, green: 0.56, blue: 0.78)
             case .performance: return Color(red: 0.88, green: 0.35, blue: 0.22)
@@ -224,6 +228,8 @@ struct SettingsView: View {
                         FavoritesSettingsView()
                     case .leaderboard:
                         LeaderboardView(viewModel: viewModel)
+                    case .routing:
+                        ModelRoutingSettingsView(viewModel: viewModel)
                     case .eval:
                         EvalView(viewModel: viewModel)
                     case .scheduler:
@@ -824,6 +830,8 @@ struct SettingsView: View {
                 FavoritesSettingsView()
             case .leaderboard:
                 LeaderboardView(viewModel: viewModel)
+            case .routing:
+                ModelRoutingSettingsView(viewModel: viewModel)
             case .eval:
                 EvalView(viewModel: viewModel)
             case .scheduler:
@@ -1216,6 +1224,7 @@ struct SettingsView: View {
         case .memory:      return "管理跨会话长期记忆:开关注入、查看与删除已抽取的记忆条目。默认关闭(隐私优先)。"
         case .favorites:   return "收藏过的回答片段,点星可在回答卡上收藏 / 取消。"
         case .leaderboard: return "Compare 模式裁判判定累计出的模型胜率榜:按胜率排名,看哪家模型更常赢。"
+        case .routing:     return "个人口味盲测 + Direct 模式的模型路由开关:盲选攒出你的偏好画像,让「用我的偏好」按类别替你选模型。"
         case .eval:        return "保存「问题 + 期望关键词」评测集,在多个模型上重跑比对,检测版本更新后的回归漂移。"
         case .scheduler:   return "让指定提问在每天固定时刻自动发送、结果存成新会话并发通知。仅在 app 运行期间触发。"
         case .performance: return "流式响应的渲染节奏。机器卡可以拉长刷新间隔降 CPU。"

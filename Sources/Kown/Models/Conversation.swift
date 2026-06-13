@@ -328,6 +328,95 @@ struct FactCheckResult: Codable, Hashable, Sendable {
     }
 }
 
+/// 红队压测结果:指定一个「对手模型」专门猎杀某条答案的幻觉 / 最弱论断 / 没引用的数据,
+/// 原模型必须逐条辩护或改口。opt-in「红队压测」按钮触发,结果写回 `Turn.redTeamResult`。
+struct RedTeamResult: Codable, Hashable, Sendable {
+    /// 一条攻击 + 原模型的回应。
+    struct Attack: Codable, Hashable, Sendable, Identifiable {
+        /// 攻击点的稳定标识(用攻击原文,够唯一)。
+        var id: String { claim }
+        /// 被攻击的论断 / 数据(从答案里点名)。
+        var claim: String
+        /// 攻击类型:`hallucination`(疑似幻觉)/ `weak`(论证薄弱)/ `unsourced`(数据无出处)。
+        var kind: String
+        /// 对手模型给出的攻击理由(为什么这条站不住)。
+        var attack: String
+        /// 原模型的回应:是辩护还是改口。
+        var defense: String
+        /// 回应取向:`defended`(成功辩护,维持原结论)/ `conceded`(承认问题,改口/修正)。
+        var resolution: String
+
+        init(claim: String, kind: String, attack: String, defense: String = "", resolution: String = "") {
+            self.claim = claim
+            self.kind = kind
+            self.attack = attack
+            self.defense = defense
+            self.resolution = resolution
+        }
+    }
+    /// 逐条攻防记录。
+    var attacks: [Attack]
+    /// 对手模型(红队)整体结论一句话(答案整体可信度如何)。
+    var verdict: String
+    /// 担任红队的 provider providerID(uuidString)。
+    var redProviderID: String
+    /// 担任辩护方(原答案归属)的 provider providerID(uuidString),展示「谁在辩护」。
+    var defenderProviderID: String
+
+    init(attacks: [Attack], verdict: String, redProviderID: String, defenderProviderID: String) {
+        self.attacks = attacks
+        self.verdict = verdict
+        self.redProviderID = redProviderID
+        self.defenderProviderID = defenderProviderID
+    }
+}
+
+/// 接力流水线(Mixture-of-Agents)结果:跨厂商串行精炼 —— 模型 A 起草 → 模型 B 批判改写 →
+/// 模型 C 润色定稿。每站可指定不同模型。Direct 模式的子动作触发,结果写回 `Turn.relayResult`。
+struct RelayResult: Codable, Hashable, Sendable {
+    /// 一站的产出。
+    struct Stage: Codable, Hashable, Sendable, Identifiable {
+        let id: UUID
+        /// 阶段类型:`draft`(起草)/ `critique`(批判改写)/ `polish`(润色定稿)。
+        var kind: String
+        /// 阶段标题(展示用,如「起草」)。
+        var title: String
+        /// 执行该站的 provider providerID(uuidString)。
+        var providerID: String
+        /// 执行该站的模型展示标签(provider 名 · model),即使 provider 后被删也能显示。
+        var modelLabel: String
+        /// 该站产出全文(Markdown)。
+        var text: String
+        /// 该站失败时的错误(此时 text 可能为空)。
+        var error: String?
+
+        init(id: UUID = UUID(), kind: String, title: String, providerID: String,
+             modelLabel: String, text: String, error: String? = nil) {
+            self.id = id
+            self.kind = kind
+            self.title = title
+            self.providerID = providerID
+            self.modelLabel = modelLabel
+            self.text = text
+            self.error = error
+        }
+    }
+    /// 各站记录(按 draft → critique → polish 顺序)。
+    var stages: [Stage]
+
+    /// 最终定稿 = 最后一个有内容的阶段产出(便于消费方直接取终稿)。
+    var finalText: String {
+        for stage in stages.reversed() where !stage.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return stage.text
+        }
+        return ""
+    }
+
+    init(stages: [Stage]) {
+        self.stages = stages
+    }
+}
+
 /// 一轮问答：用户的 prompt + 各模型最终文本 + 可选的 Chair 综合
 struct Turn: Identifiable, Codable, Hashable, Sendable {
     let id: UUID
@@ -411,6 +500,10 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
     /// 省钱级联(实验)的自动升级结果:初答评分低于阈值后旗舰档重答的留痕,
     /// UI 在初答下方再放一张「已自动升级」卡。旧会话没有,保持 optional。
     var autoEscalation: AutoEscalation?
+    /// 红队压测结果(opt-in「红队压测」按钮触发)。旧会话没有,保持 optional。
+    var redTeamResult: RedTeamResult?
+    /// 接力流水线(Mixture-of-Agents)结果(Direct 子动作触发)。旧会话没有,保持 optional。
+    var relayResult: RelayResult?
 
     init(id: UUID = UUID(),
          timestamp: Date = Date(),
@@ -447,7 +540,9 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
          toolSteps: [ToolStep]? = nil,
          synthesizedConclusion: SynthesizedConclusion? = nil,
          routeNote: String? = nil,
-         autoEscalation: AutoEscalation? = nil) {
+         autoEscalation: AutoEscalation? = nil,
+         redTeamResult: RedTeamResult? = nil,
+         relayResult: RelayResult? = nil) {
         self.id = id
         self.timestamp = timestamp
         self.prompt = prompt
@@ -484,6 +579,8 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
         self.synthesizedConclusion = synthesizedConclusion
         self.routeNote = routeNote
         self.autoEscalation = autoEscalation
+        self.redTeamResult = redTeamResult
+        self.relayResult = relayResult
     }
 
     // 兼容旧 JSON(缺新字段时 sources 等以 decodeIfPresent 解码,默认 nil),不破坏现有存档/同步。
@@ -497,6 +594,7 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
         case selfRevision, factCheck, knowledgeSources, escalationSuggestion
         case toolSteps, synthesizedConclusion
         case routeNote, autoEscalation
+        case redTeamResult, relayResult
     }
 
     init(from decoder: Decoder) throws {
@@ -537,6 +635,8 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
         self.synthesizedConclusion = try c.decodeIfPresent(SynthesizedConclusion.self, forKey: .synthesizedConclusion)
         self.routeNote = try c.decodeIfPresent(String.self, forKey: .routeNote)
         self.autoEscalation = try c.decodeIfPresent(AutoEscalation.self, forKey: .autoEscalation)
+        self.redTeamResult = try c.decodeIfPresent(RedTeamResult.self, forKey: .redTeamResult)
+        self.relayResult = try c.decodeIfPresent(RelayResult.self, forKey: .relayResult)
     }
 
     /// 取顺序化的 panel 配置（按发送顺序，Chair 不在内）

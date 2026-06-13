@@ -562,6 +562,23 @@ struct MainContentView: View {
                 viewModel.factCheckTurn(turnID: turn.id)
             }
         }
+        if turn.redTeamResult == nil {
+            let redTeaming = viewModel.isRedTeaming(turnID: turn.id)
+            postActionChip(redTeaming ? "压测中…" : "红队压测",
+                           systemImage: "shield.lefthalf.filled.badge.checkmark",
+                           disabled: redTeaming) {
+                viewModel.redTeamTurn(turnID: turn.id)
+            }
+        }
+        // 接力流水线(MoA)仅 Direct 模式作为子动作出现,避免新增 ConversationMode。
+        if viewModel.currentMode == .direct, turn.relayResult == nil {
+            let relaying = viewModel.isRelaying(turnID: turn.id)
+            postActionChip(relaying ? "接力中…" : "接力精炼",
+                           systemImage: "arrow.triangle.turn.up.right.diamond",
+                           disabled: relaying) {
+                viewModel.relayTurn(turnID: turn.id)
+            }
+        }
         if viewModel.followUpSuggestions.isEmpty {
             postActionChip(viewModel.suggestingFollowUps ? "生成中…" : "追问建议",
                            systemImage: "sparkles",
@@ -603,6 +620,12 @@ struct MainContentView: View {
         if let err = viewModel.factCheckErrors[turn.id] {
             Text(err).font(.caption2).foregroundStyle(.red)
         }
+        if let err = viewModel.redTeamErrors[turn.id] {
+            Text(err).font(.caption2).foregroundStyle(.red)
+        }
+        if let err = viewModel.relayErrors[turn.id] {
+            Text(err).font(.caption2).foregroundStyle(.red)
+        }
         if let err = viewModel.followUpError {
             Text(err)
                 .font(.caption)
@@ -616,6 +639,16 @@ struct MainContentView: View {
         if let factCheck = turn.factCheck {
             FactCheckCard(result: factCheck,
                           providerName: turn.providerSnapshot[factCheck.providerID]?.displayName)
+        }
+        if let redTeam = turn.redTeamResult {
+            RedTeamCard(result: redTeam,
+                        redName: turn.providerSnapshot[redTeam.redProviderID]?.displayName
+                            ?? viewModel.providers.first(where: { $0.id.uuidString == redTeam.redProviderID })?.displayName,
+                        defenderName: turn.providerSnapshot[redTeam.defenderProviderID]?.displayName
+                            ?? viewModel.providers.first(where: { $0.id.uuidString == redTeam.defenderProviderID })?.displayName)
+        }
+        if let relay = turn.relayResult {
+            RelayStagesView(result: relay)
         }
         if !viewModel.followUpSuggestions.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
