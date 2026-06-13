@@ -76,6 +76,13 @@ struct RootView: View {
         .sheet(isPresented: $showMeetingNotes) {
             MeetingNotesView(viewModel: viewModel)
         }
+        // [生成式 UI] AI 现做交互工具面板(macOS sheet,与 Artifacts inspector 互不抢位)。
+        .sheet(isPresented: $viewModel.showGenerativeToolPanel) {
+            GenerativeToolPanel(viewModel: viewModel)
+                #if os(macOS)
+                .frame(width: 540, height: 640)
+                #endif
+        }
     }
 
     #if os(iOS)
@@ -143,6 +150,13 @@ struct RootView: View {
         }
         .sheet(isPresented: $viewModel.showArtifactPanel) {
             ArtifactPreviewPanel(viewModel: viewModel)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .presentationCornerRadius(28)
+        }
+        // [生成式 UI] AI 现做交互工具面板(iOS sheet)。
+        .sheet(isPresented: $viewModel.showGenerativeToolPanel) {
+            GenerativeToolPanel(viewModel: viewModel)
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
                 .presentationCornerRadius(28)

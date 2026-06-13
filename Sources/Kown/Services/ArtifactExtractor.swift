@@ -143,4 +143,51 @@ enum ArtifactExtractor {
         default: return nil
         }
     }
+
+    // MARK: - 交互工具(生成式 UI)块识别 —— 加性,不动上面的 ArtifactKind / extract 路径
+
+    /// 模型偶尔会在普通回答里直接吐一个「交互工具」围栏块(```kowntool / ```generative-ui),
+    /// 内容是 `GenerativeToolSpec` 的 JSON。这里把它**抽出来**(与 html/svg/mermaid 并列识别,
+    /// 但走独立返回值,绝不混进 `ArtifactKind` 的三态枚举与其 switch,避免改散预览面板)。
+    /// 取第一个匹配的闭合围栏内容;没有返回 nil。
+    static func generativeToolSource(in text: String) -> String? {
+        guard text.contains("```") else { return nil }
+        var inFence = false
+        var isToolFence = false
+        var buffer: [String] = []
+        for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init) {
+            let trimmed = rawLine.trimmingCharacters(in: .whitespaces)
+            if !inFence {
+                if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
+                    let info = String(trimmed.dropFirst(3)).trimmingCharacters(in: .whitespaces)
+                    inFence = true
+                    isToolFence = isGenerativeToolInfo(info)
+                    buffer = []
+                }
+            } else {
+                if trimmed == "```" || trimmed == "~~~" || trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
+                    if isToolFence {
+                        let src = buffer.joined(separator: "\n").trimmingCharacters(in: .newlines)
+                        if !src.isEmpty { return src }
+                    }
+                    inFence = false
+                    isToolFence = false
+                    buffer = []
+                } else {
+                    buffer.append(rawLine)
+                }
+            }
+        }
+        return nil
+    }
+
+    /// 围栏 info-string 是不是「交互工具」块。
+    private static func isGenerativeToolInfo(_ info: String) -> Bool {
+        let lang = info
+            .split(whereSeparator: { $0 == " " || $0 == "\t" || $0 == "," })
+            .first
+            .map(String.init)?
+            .lowercased() ?? ""
+        return lang == "kowntool" || lang == "generative-ui" || lang == "generativeui" || lang == "kown-tool"
+    }
 }

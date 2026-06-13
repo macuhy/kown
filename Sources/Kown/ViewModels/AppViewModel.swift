@@ -86,6 +86,17 @@ final class AppViewModel {
     var showCommandPalette = false
     /// Artifacts 实时预览面板开关(macOS 用 .inspector,iOS 用 sheet)。
     var showArtifactPanel = false
+
+    // MARK: - 生成式 UI(AI 现做交互小工具)
+    /// 「AI 现做交互工具」面板开关(macOS 用 .inspector / iOS 用 sheet,与 Artifacts 面板独立)。
+    var showGenerativeToolPanel = false
+    /// 当前在面板里展示的工具(nil = 还没生成 / 已关闭)。动作分发见 `AppViewModel+GenerativeTool`。
+    var activeGenerativeTool: StoredGenerativeTool?
+    /// 正在生成 / 修改交互工具(供按钮 loading 态)。
+    var generatingTool = false
+    /// 生成 / 回调失败原因(给用户看;成功或重置时清空)。
+    var generativeToolError: String?
+
     /// 会话内查找条是否显示(⌘F)。
     var showFind = false
     /// 全局热键 / 菜单栏唤起后请求聚焦输入框 —— 每次自增,InputBarView 监听变化即聚焦。
