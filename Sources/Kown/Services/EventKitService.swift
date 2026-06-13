@@ -181,5 +181,128 @@ actor EventKitService {
             .map { EventItem(title: $0.title ?? "", start: $0.startDate,
                              end: $0.endDate, location: $0.location) }
     }
+
+    // MARK: - 会议事件(给「日历到点自动开会捕获」用)
+
+    /// 一个「像会议」的日历事件(带稳定标识符 + 探测到的视频会议链接)。
+    /// `eventIdentifier` 用于稍后把纪要写回**这条**事件(EKEvent 非 Sendable,只带标识符出来)。
+    struct UpcomingMeeting: Sendable, Identifiable {
+        var id: String { eventIdentifier }
+        let eventIdentifier: String
+        let title: String
+        let start: Date
+        let end: Date?
+        /// 探测到的视频会议链接(Zoom/Teams/Meet/腾讯会议等);可能为 nil(靠「有与会者」判定的会议)。
+        let videoURL: String?
+
+        var startsWithin: TimeInterval { start.timeIntervalSinceNow }
+    }
+
+    /// 列出从现在起 `withinMinutes` 分钟内**即将开始**的「会议型」事件。
+    /// 判定「会议」:含视频会议链接(URL / notes / location 里出现 zoom/meet/teams/腾讯会议等),
+    /// 或有一名以上与会者(`hasAttendees`)。全天事件、已结束的、已开始很久的排除。
+    /// 无权限或出错返回空数组,不抛。
+    func upcomingMeetings(withinMinutes: Int) async -> [UpcomingMeeting] {
+        guard await requestEventAccess() else { return [] }
+        let now = Date()
+        let window = TimeInterval(max(1, withinMinutes) * 60)
+        // 往前留 1 分钟容差(刚到点的也算),往后看 window。
+        let predicate = store.predicateForEvents(
+            withStart: now.addingTimeInterval(-60),
+            end: now.addingTimeInterval(window),
+            calendars: nil)
+        return store.events(matching: predicate)
+            .filter { ev in
+                guard !ev.isAllDay, let start = ev.startDate else { return false }
+                // 还没结束(或没结束时间);开始时间不早于「1 分钟前」。
+                if let end = ev.endDate, end < now { return false }
+                if start < now.addingTimeInterval(-60) { return false }
+                return Self.looksLikeMeeting(ev)
+            }
+            .sorted { ($0.startDate ?? .distantFuture) < ($1.startDate ?? .distantFuture) }
+            .compactMap { ev in
+                guard let id = ev.eventIdentifier, let start = ev.startDate else { return nil }
+                return UpcomingMeeting(
+                    eventIdentifier: id,
+                    title: ev.title ?? "(无标题会议)",
+                    start: start,
+                    end: ev.endDate,
+                    videoURL: Self.detectVideoURL(ev))
+            }
+    }
+
+    /// 把一段纪要文本**追加**到指定事件的备注(notes)里(原有备注保留,空行分隔)。
+    /// 找不到事件 / 无权限 / 保存失败时抛可读错误。
+    @discardableResult
+    func appendNotes(toEventIdentifier id: String, append text: String) async throws -> EventItem {
+        guard await requestEventAccess() else { throw EventKitError.calendarDenied }
+        guard let event = store.event(withIdentifier: id) else {
+            throw EventKitError.underlying("找不到对应的日历事件(可能已被删除或修改)。")
+        }
+        let addition = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !addition.isEmpty else {
+            throw EventKitError.underlying("纪要内容为空,未写入。")
+        }
+        let existing = (event.notes ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        event.notes = existing.isEmpty ? addition : (existing + "\n\n" + addition)
+        do {
+            try store.save(event, span: .thisEvent, commit: true)
+        } catch {
+            throw EventKitError.underlying(error.localizedDescription)
+        }
+        return EventItem(title: event.title ?? "", start: event.startDate,
+                         end: event.endDate, location: event.location)
+    }
+
+    // MARK: - 会议判定(纯函数,不依赖 store 实例外的状态)
+
+    /// 常见视频会议域名/关键字(小写)。
+    private static let meetingKeywords = [
+        "zoom.us", "zoom.com", "meet.google.com", "teams.microsoft.com", "teams.live.com",
+        "webex.com", "meeting.tencent.com", "voovmeeting.com", "腾讯会议", "tencent meeting",
+        "feishu.cn/j", "larksuite.com", "whereby.com", "gotomeeting.com"
+    ]
+
+    /// 事件是否「像会议」:有视频链接,或有与会者。
+    private static func looksLikeMeeting(_ ev: EKEvent) -> Bool {
+        if detectVideoURL(ev) != nil { return true }
+        if ev.hasAttendees, (ev.attendees?.count ?? 0) >= 1 { return true }
+        return false
+    }
+
+    /// 从事件的 url / notes / location 里探测一个视频会议链接。命中关键字优先,
+    /// 否则退回 `ev.url`(纯 http(s) 链接也算)。找不到返回 nil。
+    private static func detectVideoURL(_ ev: EKEvent) -> String? {
+        // 1) 结构化 URL 字段。
+        if let u = ev.url?.absoluteString, !u.isEmpty {
+            let lower = u.lowercased()
+            if meetingKeywords.contains(where: { lower.contains($0) }) { return u }
+        }
+        // 2) notes / location 里抓第一个含会议关键字的 http(s) 链接。
+        let haystacks = [ev.notes, ev.location].compactMap { $0 }
+        for text in haystacks {
+            if let url = firstMeetingURL(in: text) { return url }
+        }
+        // 3) 退回结构化 URL(即便不含关键字,日历事件的 url 多半就是会议入口)。
+        if let u = ev.url?.absoluteString, u.lowercased().hasPrefix("http") { return u }
+        return nil
+    }
+
+    /// 在文本里找第一个「含会议关键字」的 http(s) 链接。
+    private static func firstMeetingURL(in text: String) -> String? {
+        let lower = text.lowercased()
+        guard meetingKeywords.contains(where: { lower.contains($0) }) else { return nil }
+        // 用 NSDataDetector 抽 http(s) 链接,挑第一个命中关键字的。
+        guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else {
+            return nil
+        }
+        let range = NSRange(text.startIndex..., in: text)
+        for match in detector.matches(in: text, range: range) {
+            guard let url = match.url?.absoluteString else { continue }
+            let l = url.lowercased()
+            if meetingKeywords.contains(where: { l.contains($0) }) { return url }
+        }
+        return nil
+    }
 }
 #endif

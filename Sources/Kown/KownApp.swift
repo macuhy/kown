@@ -75,6 +75,8 @@ struct KownApp: App {
                 MacServicesProvider.shared.attach(viewModel: viewModel)
                 // 划词助手:全局热键 ⌃⌥L 弹迷你面板(纠错/润色/翻译 + 提示词库)。
                 MacSelectionAssistant.shared.registerHotKey(viewModel: viewModel)
+                // 日历到点自动开会捕获:注入 viewModel,按持久化开关起轮询(关则 no-op)。
+                CalendarMeetingWatcher.shared.start(viewModel: viewModel)
                 // 启动即拉起 Sparkle 更新器(按 SUScheduledCheckInterval 定时检查)。
                 _ = UpdaterService.shared
                 // 再额外强制一次后台静默检查 —— Sparkle 定时器要等满间隔才查,
