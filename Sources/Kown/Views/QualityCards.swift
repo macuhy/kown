@@ -235,6 +235,132 @@ struct SynthesisSection: View {
     }
 }
 
+/// 红队压测结果卡:逐条「攻击 → 辩护/改口」+ 类型徽章 + 红队整体结论。视觉对齐 `FactCheckCard`(红色调=对抗)。
+struct RedTeamCard: View {
+    let result: RedTeamResult
+    /// 红队(对手模型)展示名。
+    let redName: String?
+    /// 辩护方展示名。
+    let defenderName: String?
+
+    private var tint: Color { Color(red: 0.82, green: 0.30, blue: 0.26) }
+
+    /// 改口(承认问题)的攻击数 —— 头部摘要用。
+    private var concededCount: Int {
+        result.attacks.filter { $0.resolution == "conceded" }.count
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "shield.lefthalf.filled.badge.checkmark")
+                    .font(.caption.weight(.bold)).foregroundStyle(tint)
+                Text("红队压测(\(result.attacks.count))").font(.caption.weight(.bold)).foregroundStyle(tint)
+                if concededCount > 0 {
+                    Text("\(concededCount) 处改口")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(Color(red: 0.86, green: 0.45, blue: 0.16))
+                        .padding(.horizontal, 7).padding(.vertical, 3)
+                        .background(Color(red: 0.86, green: 0.45, blue: 0.16).opacity(0.14), in: Capsule())
+                }
+                Spacer()
+                if let red = redName {
+                    Label(red, systemImage: "burst.fill")
+                        .font(.caption2.weight(.bold)).foregroundStyle(tint)
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .background(tint.opacity(0.11), in: Capsule())
+                }
+            }
+
+            if !result.verdict.isEmpty {
+                Text(result.verdict)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            ForEach(result.attacks) { attack in
+                attackRow(attack)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardBackground(tint))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(tint.opacity(0.24), lineWidth: 1)
+        }
+    }
+
+    private func attackRow(_ attack: RedTeamResult.Attack) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top, spacing: 8) {
+                kindBadge(attack.kind)
+                if !attack.claim.isEmpty {
+                    Text(attack.claim)
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                }
+            }
+            if !attack.attack.isEmpty {
+                Label(attack.attack, systemImage: "exclamationmark.bubble")
+                    .font(.caption)
+                    .foregroundStyle(tint)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if !attack.defense.isEmpty {
+                HStack(alignment: .top, spacing: 6) {
+                    resolutionBadge(attack.resolution)
+                    Text(attack.defense)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                }
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func kindBadge(_ kind: String) -> some View {
+        let (color, icon): (Color, String) = {
+            switch kind {
+            case "hallucination": return (Color(red: 0.82, green: 0.30, blue: 0.26), "wand.and.stars.inverse")
+            case "unsourced":     return (Color(red: 0.55, green: 0.36, blue: 0.86), "link.badge.plus")
+            default:               return (Color(red: 0.86, green: 0.55, blue: 0.16), "questionmark.diamond.fill")
+            }
+        }()
+        return Label(RedTeamService.kindLabel(kind), systemImage: icon)
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(color)
+            .padding(.horizontal, 7).padding(.vertical, 3)
+            .background(color.opacity(0.12), in: Capsule())
+            .fixedSize()
+    }
+
+    private func resolutionBadge(_ resolution: String) -> some View {
+        let (label, color, icon): (String, Color, String) = {
+            if resolution == "conceded" {
+                return ("改口", Color(red: 0.86, green: 0.45, blue: 0.16), "arrow.uturn.left")
+            }
+            return ("辩护", Color(red: 0.18, green: 0.60, blue: 0.42), "checkmark.shield.fill")
+        }()
+        return Label(label, systemImage: icon)
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(color)
+            .padding(.horizontal, 7).padding(.vertical, 3)
+            .background(color.opacity(0.12), in: Capsule())
+            .fixedSize()
+    }
+}
+
 /// 两张卡共用的 material + 渐变背景。
 private func cardBackground(_ tint: Color) -> some View {
     ZStack {

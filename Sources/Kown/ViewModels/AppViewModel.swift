@@ -70,6 +70,10 @@ final class AppViewModel {
     var synthesizingTurns: Set<UUID> = []
     /// 合成失败原因,key = turnID。
     var synthesisErrors: [UUID: String] = [:]
+    /// 正在做红队压测的 turn 集合。
+    var redTeamingTurns: Set<UUID> = []
+    /// 红队压测失败原因,key = turnID。
+    var redTeamErrors: [UUID: String] = [:]
     /// GitHub 集成:是否已连接(token 存在)。连接 / 断开后刷新,驱动 UI 显示。
     var gitHubConnected: Bool = GitHubAuth.isConnected()
     /// 当前用户的 GitHub 仓库列表(选仓库菜单用,首次打开时按需拉取后缓存)。
