@@ -586,6 +586,14 @@ struct MainContentView: View {
                 viewModel.suggestFollowUps()
             }
         }
+        // [生成式 UI] 一键为本轮问答现做交互工具(可回调模型)。改动局部、放在末尾,便于合并。
+        if viewModel.canGenerateTool {
+            postActionChip(viewModel.generatingTool ? "现做工具中…" : "生成交互工具",
+                           systemImage: "wand.and.stars",
+                           disabled: viewModel.generatingTool) {
+                viewModel.generateTool(fromTurnID: turn.id)
+            }
+        }
     }
 
     private func postActionChip(
