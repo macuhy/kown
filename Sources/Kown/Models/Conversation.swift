@@ -371,6 +371,52 @@ struct RedTeamResult: Codable, Hashable, Sendable {
     }
 }
 
+/// 接力流水线(Mixture-of-Agents)结果:跨厂商串行精炼 —— 模型 A 起草 → 模型 B 批判改写 →
+/// 模型 C 润色定稿。每站可指定不同模型。Direct 模式的子动作触发,结果写回 `Turn.relayResult`。
+struct RelayResult: Codable, Hashable, Sendable {
+    /// 一站的产出。
+    struct Stage: Codable, Hashable, Sendable, Identifiable {
+        let id: UUID
+        /// 阶段类型:`draft`(起草)/ `critique`(批判改写)/ `polish`(润色定稿)。
+        var kind: String
+        /// 阶段标题(展示用,如「起草」)。
+        var title: String
+        /// 执行该站的 provider providerID(uuidString)。
+        var providerID: String
+        /// 执行该站的模型展示标签(provider 名 · model),即使 provider 后被删也能显示。
+        var modelLabel: String
+        /// 该站产出全文(Markdown)。
+        var text: String
+        /// 该站失败时的错误(此时 text 可能为空)。
+        var error: String?
+
+        init(id: UUID = UUID(), kind: String, title: String, providerID: String,
+             modelLabel: String, text: String, error: String? = nil) {
+            self.id = id
+            self.kind = kind
+            self.title = title
+            self.providerID = providerID
+            self.modelLabel = modelLabel
+            self.text = text
+            self.error = error
+        }
+    }
+    /// 各站记录(按 draft → critique → polish 顺序)。
+    var stages: [Stage]
+
+    /// 最终定稿 = 最后一个有内容的阶段产出(便于消费方直接取终稿)。
+    var finalText: String {
+        for stage in stages.reversed() where !stage.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return stage.text
+        }
+        return ""
+    }
+
+    init(stages: [Stage]) {
+        self.stages = stages
+    }
+}
+
 /// 一轮问答：用户的 prompt + 各模型最终文本 + 可选的 Chair 综合
 struct Turn: Identifiable, Codable, Hashable, Sendable {
     let id: UUID
@@ -456,6 +502,8 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
     var autoEscalation: AutoEscalation?
     /// 红队压测结果(opt-in「红队压测」按钮触发)。旧会话没有,保持 optional。
     var redTeamResult: RedTeamResult?
+    /// 接力流水线(Mixture-of-Agents)结果(Direct 子动作触发)。旧会话没有,保持 optional。
+    var relayResult: RelayResult?
 
     init(id: UUID = UUID(),
          timestamp: Date = Date(),
@@ -493,7 +541,8 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
          synthesizedConclusion: SynthesizedConclusion? = nil,
          routeNote: String? = nil,
          autoEscalation: AutoEscalation? = nil,
-         redTeamResult: RedTeamResult? = nil) {
+         redTeamResult: RedTeamResult? = nil,
+         relayResult: RelayResult? = nil) {
         self.id = id
         self.timestamp = timestamp
         self.prompt = prompt
@@ -531,6 +580,7 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
         self.routeNote = routeNote
         self.autoEscalation = autoEscalation
         self.redTeamResult = redTeamResult
+        self.relayResult = relayResult
     }
 
     // 兼容旧 JSON(缺新字段时 sources 等以 decodeIfPresent 解码,默认 nil),不破坏现有存档/同步。
@@ -544,7 +594,7 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
         case selfRevision, factCheck, knowledgeSources, escalationSuggestion
         case toolSteps, synthesizedConclusion
         case routeNote, autoEscalation
-        case redTeamResult
+        case redTeamResult, relayResult
     }
 
     init(from decoder: Decoder) throws {
@@ -586,6 +636,7 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
         self.routeNote = try c.decodeIfPresent(String.self, forKey: .routeNote)
         self.autoEscalation = try c.decodeIfPresent(AutoEscalation.self, forKey: .autoEscalation)
         self.redTeamResult = try c.decodeIfPresent(RedTeamResult.self, forKey: .redTeamResult)
+        self.relayResult = try c.decodeIfPresent(RelayResult.self, forKey: .relayResult)
     }
 
     /// 取顺序化的 panel 配置（按发送顺序，Chair 不在内）
