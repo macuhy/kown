@@ -1,5 +1,23 @@
 import Foundation
 
+/// 一次运行结果摘要 + 它实际发生的时间,构成订阅任务的**历史序列**(走势分析的原料)。
+/// 与 `ScheduledTask.lastRunDigest`(只存最近一次)是两套:本结构按时间累积成一串,
+/// 供 `TrendDigestService` 喂给 LLM 产出「盯了几周的趋势」而非每日快照。Codable + 加性。
+struct DatedDigest: Codable, Hashable, Sendable, Identifiable {
+    /// 该次运行的实际发生时间(用任务真正跑完采到结果的时间,不是发火时间)。
+    var date: Date
+    /// 该次运行结果的摘要(与 lastRunDigest 同口径,~800 字截断)。
+    var digest: String
+
+    /// 以时间戳 + 摘要前缀派生稳定 id(SwiftUI ForEach 用;同一条目恒定)。
+    var id: String { "\(date.timeIntervalSince1970)-\(digest.prefix(24))" }
+
+    init(date: Date, digest: String) {
+        self.date = date
+        self.digest = digest
+    }
+}
+
 /// 一条「定时 / 周期任务」:把一段固定的 prompt 在每天指定时刻自动发出,
 /// 结果落成一个新会话,并发一条本地通知提醒用户。
 ///
@@ -73,6 +91,14 @@ struct ScheduledTask: Identifiable, Codable, Hashable, Sendable {
     /// 增量模式(默认开):下次运行自动带上上次摘要。关掉则每次都从零开始回答。
     var incrementalMode: Bool
 
+    /// [趋势洞察] 历史运行摘要序列(最新在前),封顶 `maxRunDigestHistory` 条。
+    /// SchedulerService 每次采到有效结果时追加一条;`TrendDigestService` 把整串喂 LLM
+    /// 产出走势报告。加性 optional —— 旧 JSON 缺该键解出 nil,完全兼容。
+    var runDigestHistory: [DatedDigest]?
+
+    /// 历史序列封顶条数(超出从最旧丢弃)。盯一件事几周的体量足够,又不让 JSON 膨胀。
+    static let maxRunDigestHistory = 30
+
     init(
         id: UUID = UUID(),
         title: String = "",
@@ -94,7 +120,8 @@ struct ScheduledTask: Identifiable, Codable, Hashable, Sendable {
         lastRunSummary: String? = nil,
         lastRunDate: Date? = nil,
         lastRunDigest: String? = nil,
-        incrementalMode: Bool = true
+        incrementalMode: Bool = true,
+        runDigestHistory: [DatedDigest]? = nil
     ) {
         self.id = id
         self.title = title
@@ -117,13 +144,14 @@ struct ScheduledTask: Identifiable, Codable, Hashable, Sendable {
         self.lastRunDate = lastRunDate
         self.lastRunDigest = lastRunDigest
         self.incrementalMode = incrementalMode
+        self.runDigestHistory = runDigestHistory
     }
 
     // 兼容旧 JSON(缺字段容错,避免整份解码失败丢任务)。
     enum CodingKeys: String, CodingKey {
         case id, title, prompt, kind, briefingTopics, mode, hour, minute, repeatsDaily, weekday, enabled, lastRun
         case agentWebSearch, agentMCP, agentDeviceTools, agentDeepMode, lastRunStatus, lastRunSummary
-        case lastRunDate, lastRunDigest, incrementalMode
+        case lastRunDate, lastRunDigest, incrementalMode, runDigestHistory
     }
 
     init(from decoder: Decoder) throws {
@@ -149,6 +177,17 @@ struct ScheduledTask: Identifiable, Codable, Hashable, Sendable {
         self.lastRunDate = try c.decodeIfPresent(Date.self, forKey: .lastRunDate)
         self.lastRunDigest = try c.decodeIfPresent(String.self, forKey: .lastRunDigest)
         self.incrementalMode = try c.decodeIfPresent(Bool.self, forKey: .incrementalMode) ?? true
+        self.runDigestHistory = try c.decodeIfPresent([DatedDigest].self, forKey: .runDigestHistory)
+    }
+
+    /// [趋势洞察] 历史序列(最旧→最新),供趋势分析/图表用。存储里最新在前,这里翻转成时间正序。
+    var chronologicalDigestHistory: [DatedDigest] {
+        (runDigestHistory ?? []).sorted { $0.date < $1.date }
+    }
+
+    /// 是否已有足够样本做趋势分析(至少 2 次运行才能谈「走势」)。
+    var hasTrendData: Bool {
+        (runDigestHistory?.count ?? 0) >= 2
     }
 
     /// 是否为简报任务。

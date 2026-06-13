@@ -470,10 +470,21 @@ final class SchedulerService {
     // MARK: - 增量记忆(结果摘要写回 + 采收)
 
     /// 写回一次运行的「完成时间 + 结果摘要」(增量模式下注入下次运行)并落盘。
+    /// [趋势洞察] 同时把 (时间, 摘要) 追到历史序列(最新在前,封顶 `maxRunDigestHistory` 条),
+    /// 供 `TrendDigestService` 产出走势报告。空摘要不入历史(失败轮已在上游被挡)。
     private func setLastRunDigest(_ id: UUID, digest: String, date: Date) {
         guard let idx = tasks.firstIndex(where: { $0.id == id }) else { return }
         tasks[idx].lastRunDate = date
         tasks[idx].lastRunDigest = digest
+        let trimmed = digest.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            var history = tasks[idx].runDigestHistory ?? []
+            history.insert(DatedDigest(date: date, digest: digest), at: 0)
+            if history.count > ScheduledTask.maxRunDigestHistory {
+                history.removeLast(history.count - ScheduledTask.maxRunDigestHistory)
+            }
+            tasks[idx].runDigestHistory = history
+        }
         persist()
     }
 
