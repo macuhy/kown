@@ -9,6 +9,8 @@ struct SchedulerView: View {
     @State private var editing: ScheduledTask?
     @State private var isNew = false
     @State private var confirmDeleteID: UUID?
+    /// [趋势洞察] 正在查看走势的任务(nil = 未打开)。
+    @State private var trendTask: ScheduledTask?
 
     private var schedulerTint: Color { Color(red: 0.20, green: 0.56, blue: 0.78) }
     private var schedulerWarmTint: Color { Color(red: 0.92, green: 0.55, blue: 0.22) }
@@ -66,6 +68,9 @@ struct SchedulerView: View {
                 },
                 onCancel: { editing = nil }
             )
+        }
+        .sheet(item: $trendTask) { task in
+            TrendDigestView(task: task, viewModel: viewModel)
         }
         .confirmationDialog(
             "删除这个定时任务?",
@@ -472,6 +477,7 @@ struct SchedulerView: View {
                 lastRunPill(task)
                 runStatusPill(task)
                 Spacer(minLength: 8)
+                trendIconButton(task, tint: tint)
                 editIconButton(task, tint: tint)
                 deleteIconButton(task)
             }
@@ -484,6 +490,7 @@ struct SchedulerView: View {
                     Spacer(minLength: 0)
                 }
                 HStack(spacing: 8) {
+                    trendIconButton(task, tint: tint)
                     editIconButton(task, tint: tint)
                     deleteIconButton(task)
                     Spacer(minLength: 0)
@@ -560,6 +567,32 @@ struct SchedulerView: View {
         .padding(.horizontal, 9)
         .padding(.vertical, 6)
         .background(Color.platformControlBackground.opacity(0.54), in: Capsule(style: .continuous))
+    }
+
+    /// [趋势洞察] 走势按钮 —— 仅当该任务已有运行历史时显示;点开历次摘要时间线 + 一键趋势报告。
+    @ViewBuilder
+    private func trendIconButton(_ task: ScheduledTask, tint: Color) -> some View {
+        let count = task.runDigestHistory?.count ?? 0
+        if count >= 1 {
+            Button {
+                trendTask = task
+            } label: {
+                HStack(spacing: 3) {
+                    Image(systemName: "chart.line.uptrend.xyaxis")
+                        .font(.caption.weight(.black))
+                    Text("\(count)")
+                        .font(.caption2.weight(.black))
+                        .monospacedDigit()
+                }
+                .foregroundStyle(tint)
+                .padding(.horizontal, 9)
+                .frame(height: 29)
+                .background(tint.opacity(0.12), in: Capsule(style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .help(task.hasTrendData ? "查看走势(\(count) 次记录)" : "查看运行记录(再多跑几次可分析走势)")
+            .accessibilityLabel("查看走势")
+        }
     }
 
     private func editIconButton(_ task: ScheduledTask, tint: Color) -> some View {
