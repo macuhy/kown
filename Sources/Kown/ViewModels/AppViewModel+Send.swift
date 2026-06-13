@@ -76,11 +76,23 @@ extension AppViewModel {
         let personaFx = personaEffectsForSend()
         panel = personaFx.applyingModelOverride(to: panel, mode: currentMode)
 
-        // Direct 模式 + 自动路由:按问题难度在当前 provider 的 vendor 内换 model(便宜↔旗舰)。
-        // 本地胜率榜样本足够时走学习型成本路由(同档位选「胜率相当且更便宜」,带中文理由落盘展示);
-        // 样本不足时 CostRouter 内部回退静态规则,行为与原 QuestionRouter 完全一致(reason = nil)。
+        // Direct 模式路由层(优先级:个人偏好 > 学习型成本/难度自动)。
+        // routeNoteForSend 落进 Turn.routeNote,在答卡上以角标展示「为什么选了这个模型」。
         var routeNoteForSend: String? = nil
-        if autoRouteEnabled, currentMode == .direct, let first = panel.first {
+        // ① 个人偏好路由:按本人盲测画像(PreferenceProfileStore)+ 任务类别选模型。
+        //    开启且样本足够 → 优先生效(显式「用我的偏好」),并跳过下面的难度/成本自动路由。
+        var preferenceRouted = false
+        if preferenceRouteEnabled, currentMode == .direct, let first = panel.first, !first.kind.isCLI {
+            let routed = PreferenceRouter.route(first, prompt: trimmed)
+            if routed.reason != nil {
+                if routed.changed { panel[0] = routed.config }
+                routeNoteForSend = routed.reason
+                preferenceRouted = true
+            }
+        }
+        // ② 按难度自动选模型(便宜↔旗舰);本地胜率榜样本足够时叠加学习型成本路由(同档位选「胜率相当且更便宜」)。
+        //    样本不足时 CostRouter 内部回退静态规则。仅当个人偏好未生效时才跑,避免两层互相覆盖。
+        if !preferenceRouted, autoRouteEnabled, currentMode == .direct, let first = panel.first {
             let routed = CostRouter.route(first, prompt: trimmed)
             if routed.changed { panel[0] = routed.config }
             routeNoteForSend = routed.reason

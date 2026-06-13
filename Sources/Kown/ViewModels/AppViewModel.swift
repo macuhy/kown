@@ -127,6 +127,11 @@ final class AppViewModel {
     var costCascadeEnabled: Bool {
         didSet { UserDefaults.standard.set(costCascadeEnabled, forKey: Self.costCascadeKey) }
     }
+    /// 个人偏好路由(仅 Direct):按本人盲测画像(PreferenceProfileStore)+ 任务类别选模型。
+    /// 开启时优先于「按难度自动选模型」;样本不足时回退当前模型。默认关。
+    var preferenceRouteEnabled: Bool {
+        didSet { UserDefaults.standard.set(preferenceRouteEnabled, forKey: Self.preferenceRouteKey) }
+    }
     /// 跨会话长期记忆:开启后发送时注入相关长期记忆,并在会话进行中自动抽取。默认关(隐私优先)。
     var memoryInjectionEnabled: Bool {
         didSet { UserDefaults.standard.set(memoryInjectionEnabled, forKey: Self.memoryInjectionKey) }
@@ -285,6 +290,7 @@ final class AppViewModel {
     private static let councilVotingKey = "kown.councilVoting.v1"
     private static let autoRouteKey = "kown.autoRoute.v1"
     private static let costCascadeKey = "kown.costCascade.v1"
+    static let preferenceRouteKey = "kown.preferenceRoute.v1"
     private static let memoryInjectionKey = "kown.memory.injection.v1"
     private static let recallKey = "kown.recall.enabled"
     /// Translate 全局默认语言 key(非 private:AppViewModel+Send 跨文件读取做发送时回退)。
@@ -327,6 +333,7 @@ final class AppViewModel {
         self.councilVotingEnabled = UserDefaults.standard.bool(forKey: Self.councilVotingKey)
         self.autoRouteEnabled = UserDefaults.standard.bool(forKey: Self.autoRouteKey)
         self.costCascadeEnabled = UserDefaults.standard.bool(forKey: Self.costCascadeKey)
+        self.preferenceRouteEnabled = UserDefaults.standard.bool(forKey: Self.preferenceRouteKey)
         self.memoryInjectionEnabled = UserDefaults.standard.bool(forKey: Self.memoryInjectionKey)
         self.recallEnabled = UserDefaults.standard.bool(forKey: Self.recallKey)
         self.deviceToolsEnabledForNextSend = UserDefaults.standard.bool(forKey: Self.deviceToolsToggleKey)
