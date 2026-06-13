@@ -12,6 +12,8 @@ import SwiftUI
 struct MeetingCaptureView: View {
     @Bindable var viewModel: AppViewModel
     @ObservedObject private var capture = MeetingCaptureService.shared
+    /// 日历到点自动开会捕获总控(开关 + 待处理会议提示)。
+    @ObservedObject private var watcher = CalendarMeetingWatcher.shared
 
     @State private var isStarting = false
     @State private var notes: MeetingNotes?
@@ -26,9 +28,11 @@ struct MeetingCaptureView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             header
+            if let pending = watcher.pendingMeeting { pendingMeetingBanner(pending) }
             controlBar
             liveSubtitles
             if let notes { MeetingNotesResultView(notes: notes, viewModel: viewModel, tint: tint) }
+            autoMeetingCard
         }
         .alert("出错了", isPresented: Binding(
             get: { errorMessage != nil },
@@ -37,6 +41,9 @@ struct MeetingCaptureView: View {
             Button("好", role: .cancel) { errorMessage = nil }
         } message: { Text(errorMessage ?? "") }
         .onChange(of: capture.lastError) { _, new in
+            if let new, !new.isEmpty { errorMessage = new }
+        }
+        .onChange(of: watcher.lastArchiveResult) { _, new in
             if let new, !new.isEmpty { errorMessage = new }
         }
     }
@@ -78,6 +85,87 @@ struct MeetingCaptureView: View {
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    // MARK: - 日历到点自动开会:待处理会议提示
+
+    private func pendingMeetingBanner(_ meeting: EventKitService.UpcomingMeeting) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "calendar.badge.clock").foregroundStyle(tint)
+                Text("会议即将开始").font(.subheadline.weight(.bold))
+                Spacer()
+                Text(meetingStartLabel(meeting.start))
+                    .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            }
+            Text(meeting.title).font(.callout.weight(.medium)).lineLimit(2)
+            if let url = meeting.videoURL {
+                Text(url).font(.caption2).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+            }
+            HStack(spacing: 10) {
+                Button {
+                    Task { await watcher.beginCapture(for: meeting) }
+                } label: {
+                    Label("开始捕获", systemImage: "record.circle.fill")
+                        .font(.callout.weight(.semibold))
+                }
+                .buttonStyle(.borderedProminent).tint(tint)
+                Button("不用了") { watcher.dismissPending() }
+                    .buttonStyle(.bordered)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(tint.opacity(0.30), lineWidth: 1)
+        }
+    }
+
+    // MARK: - 日历到点自动开会:设置卡片
+
+    private var autoMeetingCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("日历到点自动开会", systemImage: "calendar.badge.clock")
+                .font(.subheadline.weight(.bold)).foregroundStyle(tint)
+            Text("开启后,Kown 会留意你日历里即将开始的会议(含视频会议链接或有与会者),到点提示你开始捕获;结束后把纪要自动写回该日历事件的备注。")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Toggle("留意即将开始的会议", isOn: $watcher.isEnabled)
+                .font(.callout)
+
+            if watcher.isEnabled {
+                Toggle("到点自动开始捕获(否则只提示)", isOn: $watcher.autoStart)
+                    .font(.callout)
+                HStack {
+                    Text("提前提醒").font(.callout)
+                    Spacer()
+                    Stepper("\(watcher.leadMinutes) 分钟", value: $watcher.leadMinutes, in: 1...10)
+                        .fixedSize()
+                }
+                Text("自动开始需要麦克风没被语音对话占用;占用时会降级为提示。轮询仅在 Kown 运行期间生效。")
+                    .font(.caption2).foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if watcher.isArchiving {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("正在生成并写回会议纪要…").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private func meetingStartLabel(_ start: Date) -> String {
+        let secs = start.timeIntervalSinceNow
+        if secs <= 0 { return "已开始" }
+        let mins = Int((secs / 60).rounded())
+        return mins <= 0 ? "马上" : "\(mins) 分钟后"
     }
 
     // MARK: - 控制条(开始 / 停止 + 计时)
@@ -215,7 +303,9 @@ struct MeetingCaptureView: View {
     }
 
     private func stopCapture() {
-        Task { await capture.stop() }
+        // 经由 watcher 停止:若本场是「日历到点自动开会」拉起的,停止后会自动把纪要写回该日历事件;
+        // 普通手动捕获时 watcher 没有 activeMeeting,等价于直接 stop(),不写回。
+        Task { await watcher.stopCaptureAndArchive() }
     }
 
     private func generateNotes() {
