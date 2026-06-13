@@ -7,6 +7,12 @@ struct RootView: View {
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     // [MeetingNotes] 录音/会议转写工具 sheet 开关。
     @State private var showMeetingNotes = false
+    // [VoiceJournal] 语音随手记 sheet 开关(跨平台)。
+    @State private var showVoiceJournal = false
+    #if os(macOS)
+    // [ScreenCopilot] 实时屏幕副驾 sheet 开关(macOS 专属)。
+    @State private var showScreenCopilot = false
+    #endif
 
     var body: some View {
         Group {
@@ -51,6 +57,14 @@ struct RootView: View {
                 settingsButton
             }
             #else
+            // [ScreenCopilot] Mac 工具栏入口:实时屏幕副驾。
+            ToolbarItem(placement: .primaryAction) {
+                screenCopilotButton
+            }
+            // [VoiceJournal] Mac 工具栏入口:语音随手记。
+            ToolbarItem(placement: .primaryAction) {
+                voiceJournalButton
+            }
             // [MeetingNotes] Mac 工具栏入口:录音/会议转写。
             ToolbarItem(placement: .primaryAction) {
                 meetingNotesButton
@@ -76,7 +90,71 @@ struct RootView: View {
         .sheet(isPresented: $showMeetingNotes) {
             MeetingNotesView(viewModel: viewModel)
         }
+        // [VoiceJournal] 语音随手记(跨平台)。
+        .sheet(isPresented: $showVoiceJournal) {
+            voiceJournalSheet
+        }
+        #if os(macOS)
+        // [ScreenCopilot] 实时屏幕副驾(macOS 专属)。
+        .sheet(isPresented: $showScreenCopilot) {
+            screenCopilotSheet
+        }
+        #endif
     }
+
+    // [VoiceJournal] 语音随手记 sheet 内容(两端共用主体,平台各自包装)。
+    private var voiceJournalSheet: some View {
+        NavigationStack {
+            ScrollView {
+                VoiceJournalView(viewModel: viewModel)
+                    .padding(.horizontal, 20).padding(.vertical, 18)
+            }
+            .scrollIndicators(.hidden)
+            .navigationTitle("语音随手记")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完成") {
+                        if SpeechRecognizer.shared.isRecording { SpeechRecognizer.shared.stop() }
+                        showVoiceJournal = false
+                    }
+                }
+            }
+        }
+        #if os(macOS)
+        .frame(minWidth: 560, minHeight: 620)
+        #else
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+        .presentationCornerRadius(28)
+        #endif
+    }
+
+    #if os(macOS)
+    // [ScreenCopilot] 实时屏幕副驾 sheet 内容。
+    private var screenCopilotSheet: some View {
+        NavigationStack {
+            ScrollView {
+                ScreenCopilotView(viewModel: viewModel)
+                    .padding(.horizontal, 20).padding(.vertical, 18)
+            }
+            .scrollIndicators(.hidden)
+            .navigationTitle("实时屏幕副驾")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完成") {
+                        // 关面板默认停掉看屏(隐私:不留后台偷看)。
+                        ScreenCopilotService.shared.stop()
+                        showScreenCopilot = false
+                    }
+                }
+            }
+        }
+        .frame(minWidth: 600, minHeight: 660)
+    }
+    #endif
 
     #if os(iOS)
     private var iOSBody: some View {
@@ -222,6 +300,34 @@ struct RootView: View {
         .help("录音 / 会议转写 → AI 纪要")
     }
 
+    // [VoiceJournal] 工具栏按钮:打开语音随手记。
+    private var voiceJournalButton: some View {
+        Button {
+            showVoiceJournal = true
+        } label: {
+            Image(systemName: "mic.badge.plus")
+                #if os(iOS)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(.primary)
+                .frame(width: 36, height: 36)
+                .background(.thinMaterial, in: Circle())
+                #endif
+        }
+        .help("语音随手记 → 自动打标归档")
+    }
+
+    #if os(macOS)
+    // [ScreenCopilot] 工具栏按钮:打开实时屏幕副驾(macOS)。
+    private var screenCopilotButton: some View {
+        Button {
+            showScreenCopilot = true
+        } label: {
+            Image(systemName: "eye")
+        }
+        .help("实时屏幕副驾:看屏 + 基于屏幕内容提问")
+    }
+    #endif
+
     private var settingsButton: some View {
         Button {
             showSettings = true
@@ -303,6 +409,12 @@ struct RootView: View {
                 showMeetingNotes = true
             } label: {
                 Label("会议纪要", systemImage: "waveform.badge.mic")
+            }
+            // [VoiceJournal] iOS「更多操作」菜单入口。
+            Button {
+                showVoiceJournal = true
+            } label: {
+                Label("语音随手记", systemImage: "mic.badge.plus")
             }
             Button {
                 showSettings = true
