@@ -29,6 +29,10 @@ struct SidebarView: View {
     @State private var folderRenameDraft = ""
     /// 正在配置「项目设置」的项目(文件夹)。nil = 未打开。
     @State private var projectSettingsTarget: IdentifiedID?
+    /// [对话树画布] 是否打开分支血缘可视化画布。
+    @State private var showConversationTree = false
+    /// [知识图谱] 是否打开知识↔对话↔记忆关系图。
+    @State private var showKnowledgeGraph = false
 
     /// 当前是否处于搜索态
     private var isSearching: Bool {
@@ -105,6 +109,12 @@ struct SidebarView: View {
         }
         .sheet(item: $projectSettingsTarget) { target in
             ProjectSettingsSheet(viewModel: viewModel, folderID: target.id)
+        }
+        .sheet(isPresented: $showConversationTree) {
+            ConversationTreeView(viewModel: viewModel)
+        }
+        .sheet(isPresented: $showKnowledgeGraph) {
+            KnowledgeGraphView(viewModel: viewModel)
         }
         .alert("编辑标签", isPresented: Binding(
             get: { tagEditTarget != nil },
@@ -293,6 +303,12 @@ struct SidebarView: View {
 
             Spacer(minLength: 6)
 
+            desktopHeaderButton("arrow.triangle.branch", help: "对话树画布(分支血缘)") {
+                showConversationTree = true
+            }
+            desktopHeaderButton("point.3.connected.trianglepath.dotted", help: "知识图谱(发现暗线)") {
+                showKnowledgeGraph = true
+            }
             desktopHeaderButton("folder.badge.plus", help: "新建文件夹") {
                 newFolderName = ""
                 showNewFolder = true
@@ -359,6 +375,12 @@ struct SidebarView: View {
             Spacer(minLength: 8)
 
             headerIconButton("gearshape.fill", help: "设置", action: onOpenSettings)
+            headerIconButton("arrow.triangle.branch", help: "对话树画布") {
+                showConversationTree = true
+            }
+            headerIconButton("point.3.connected.trianglepath.dotted", help: "知识图谱") {
+                showKnowledgeGraph = true
+            }
             headerIconButton("folder.badge.plus", help: "新建文件夹") {
                 newFolderName = ""
                 showNewFolder = true
