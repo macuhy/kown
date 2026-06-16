@@ -34,6 +34,8 @@ final class MeetingCaptureService: ObservableObject {
     /// 计时(秒),每 0.5s 更新一次。
     @Published private(set) var elapsed: TimeInterval = 0
     @Published var lastError: String?
+    /// 非致命状态提示(如本地语音识别自动回退到联网识别)。
+    @Published var statusNotice: String?
     /// 系统声音那路是否真的在出声(用于 UI 提示「没捕到对方声音?」)。
     @Published private(set) var systemTrackActive = false
 
@@ -95,6 +97,7 @@ final class MeetingCaptureService: ObservableObject {
         guard await requestSpeechAndMic() else { throw StartError.recognizerUnavailable }
 
         lastError = nil
+        statusNotice = nil
         liveUtterances = []
         minePending = nil; theirsPending = nil
         mineFinal = []; theirsFinal = []
@@ -107,11 +110,19 @@ final class MeetingCaptureService: ObservableObject {
             speaker: .me, sessionStart: sessionStart
         ) { [weak self] id, u, isFinal in
             Task { @MainActor [weak self] in self?.ingestMine(id: id, utterance: u, isFinal: isFinal) }
+        } onNotice: { [weak self] message in
+            Task { @MainActor [weak self] in self?.setTrackNotice("我", message) }
+        } onError: { [weak self] message in
+            Task { @MainActor [weak self] in self?.setTrackError("我", message) }
         }
         let systemTrack = StreamingTrackRecognizer(
             speaker: .them, sessionStart: sessionStart
         ) { [weak self] id, u, isFinal in
             Task { @MainActor [weak self] in self?.ingestTheirs(id: id, utterance: u, isFinal: isFinal) }
+        } onNotice: { [weak self] message in
+            Task { @MainActor [weak self] in self?.setTrackNotice("对方", message) }
+        } onError: { [weak self] message in
+            Task { @MainActor [weak self] in self?.setTrackError("对方", message) }
         }
         guard micTrack.isAvailable else { throw StartError.recognizerUnavailable }
         self.micTrack = micTrack
@@ -200,6 +211,14 @@ final class MeetingCaptureService: ObservableObject {
             theirsPending = utterance
         }
         rebuildTimeline()
+    }
+
+    private func setTrackNotice(_ track: String, _ message: String) {
+        statusNotice = "\(track)轨:\(message)"
+    }
+
+    private func setTrackError(_ track: String, _ message: String) {
+        lastError = "\(track)轨:\(message)"
     }
 
     /// 合并两路(已定稿 + 当前 pending)成实时时间线。纯函数 `MeetingTranscriptMerger.merge` 出活。

@@ -29,7 +29,10 @@ final class CalendarMeetingWatcher: ObservableObject {
     }
     /// 到点是否**自动**开始捕获(否则只提示)。持久化。
     @Published var autoStart: Bool {
-        didSet { UserDefaults.standard.set(autoStart, forKey: Self.autoStartKey) }
+        didSet {
+            UserDefaults.standard.set(autoStart, forKey: Self.autoStartKey)
+            refreshAfterPreferenceChange()
+        }
     }
     /// 提前多少分钟视为「即将开始」(到点前这个窗口内就提示/开会)。1~10。
     @Published var leadMinutes: Int {
@@ -40,6 +43,7 @@ final class CalendarMeetingWatcher: ObservableObject {
                 return
             }
             UserDefaults.standard.set(leadMinutes, forKey: Self.leadKey)
+            refreshAfterPreferenceChange()
         }
     }
 
@@ -92,11 +96,23 @@ final class CalendarMeetingWatcher: ObservableObject {
         timer = nil
     }
 
+    private func refreshAfterPreferenceChange() {
+        guard isEnabled else { return }
+        Task { @MainActor [weak self] in await self?.poll() }
+    }
+
     // MARK: - 轮询
 
     /// 查即将到点的会议;取最近一个未处理的:自动模式直接开,否则放进 pendingMeeting 提示。
     private func poll() async {
         guard isEnabled else { return }
+        if autoStart, let pending = pendingMeeting,
+           !MeetingCaptureService.shared.voiceBusy,
+           !MeetingCaptureService.shared.isCapturing {
+            await beginCapture(for: pending)
+            return
+        }
+
         let meetings = await EventKitService.shared.upcomingMeetings(withinMinutes: leadMinutes)
         // 清掉已经远去(超过 lead 窗口又没在捕获)的 handled 记录,允许同名循环会议下次再触发。
         let liveIDs = Set(meetings.map { $0.eventIdentifier })

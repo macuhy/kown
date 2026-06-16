@@ -61,6 +61,18 @@ struct MeetingCaptureView: View {
             if !SystemAudioCaptureService.hasScreenRecordingPermission() {
                 permissionBanner
             }
+            if let notice = capture.statusNotice, !notice.isEmpty {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "info.circle.fill").foregroundStyle(tint)
+                    Text(notice)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)

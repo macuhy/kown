@@ -28,6 +28,10 @@ final class StreamingTrackRecognizer: @unchecked Sendable {
     /// - 中间态(partial):`isFinal == false`,UI 增量刷新这条气泡。
     /// - 终态:`isFinal == true`,这条定稿,下一句换新 id。
     private let onUtterance: @Sendable (_ id: UUID, _ utterance: MeetingUtterance, _ isFinal: Bool) -> Void
+    /// 非致命提示:例如本地识别不可用时自动切到联网识别。
+    private let onNotice: @Sendable (_ message: String) -> Void
+    /// 识别链路持续失败时的可见错误提示。
+    private let onError: @Sendable (_ message: String) -> Void
 
     private let recognizer: SFSpeechRecognizer?
     private let serial = DispatchQueue(label: "com.kown.meeting.track")
@@ -41,17 +45,23 @@ final class StreamingTrackRecognizer: @unchecked Sendable {
     private var segmentStart: TimeInterval = 0
     private var segmentStartedAt: Date?
     private var lastText = ""
+    private var didFallbackToServerRecognition = false
+    private var lastErrorNoticeAt: Date?
 
     init(
         speaker: MeetingUtterance.Speaker,
         sessionStart: Date,
         rollWindow: TimeInterval = 45,
-        onUtterance: @escaping @Sendable (_ id: UUID, _ utterance: MeetingUtterance, _ isFinal: Bool) -> Void
+        onUtterance: @escaping @Sendable (_ id: UUID, _ utterance: MeetingUtterance, _ isFinal: Bool) -> Void,
+        onNotice: @escaping @Sendable (_ message: String) -> Void = { _ in },
+        onError: @escaping @Sendable (_ message: String) -> Void = { _ in }
     ) {
         self.speaker = speaker
         self.sessionStart = sessionStart
         self.rollWindow = rollWindow
         self.onUtterance = onUtterance
+        self.onNotice = onNotice
+        self.onError = onError
         self.recognizer = SFSpeechRecognizer(locale: Locale(identifier: "zh-CN")) ?? SFSpeechRecognizer()
     }
 
@@ -98,7 +108,8 @@ final class StreamingTrackRecognizer: @unchecked Sendable {
         guard !stopped, let recognizer, recognizer.isAvailable else { return }
         let req = SFSpeechAudioBufferRecognitionRequest()
         req.shouldReportPartialResults = true
-        if recognizer.supportsOnDeviceRecognition {
+        let useOnDevice = recognizer.supportsOnDeviceRecognition && !didFallbackToServerRecognition
+        if useOnDevice {
             req.requiresOnDeviceRecognition = true
         }
         request = req
@@ -110,12 +121,13 @@ final class StreamingTrackRecognizer: @unchecked Sendable {
 
         let segID = currentID
         let segStart = segmentStart
+        let segUsesOnDevice = useOnDevice
         task = recognizer.recognitionTask(with: req) { [weak self] result, error in
             guard let self else { return }
             // 在回调线程先把需要的值抽成 Sendable 标量,再过队列(SFSpeechRecognitionResult 非 Sendable)。
             let text = result?.bestTranscription.formattedString
             let isFinal = result?.isFinal ?? false
-            let hasError = error != nil
+            let errorMessage = error.map(Self.describeRecognitionError)
             self.serial.async {
                 // 回调可能晚于段切换:只处理「仍是当前段」的结果。
                 guard segID == self.currentID else { return }
@@ -130,11 +142,12 @@ final class StreamingTrackRecognizer: @unchecked Sendable {
                     if isFinal {
                         // 系统判定本段说完:定稿并自动续下一段(若没停)。
                         self.advanceAfterFinal()
+                        return
                     }
                 }
-                if hasError {
+                if let errorMessage {
                     // 出错也定稿当前 partial 文本并续接,别让长会议因一次错误断流。
-                    self.advanceAfterFinal()
+                    self.handleRecognitionError(errorMessage, segmentUsesOnDevice: segUsesOnDevice)
                 }
             }
         }
@@ -147,14 +160,7 @@ final class StreamingTrackRecognizer: @unchecked Sendable {
             return
         }
         // 如果已有非空 partial,先以它定稿(回调里的 final 可能慢,这里主动补一条 final)。
-        if !lastText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            let end = Date().timeIntervalSince(sessionStart)
-            let u = MeetingUtterance(
-                id: currentID, speaker: speaker, text: lastText,
-                start: segmentStart, end: max(end, segmentStart)
-            )
-            onUtterance(currentID, u, true)
-        }
+        emitFinalForLastTextIfNeeded()
         request?.endAudio()
         task?.cancel()
         request = nil
@@ -167,14 +173,62 @@ final class StreamingTrackRecognizer: @unchecked Sendable {
     }
 
     /// 识别给出 final(或出错)后:换新段继续(若没停)。这里不再补 final 文本(回调已发过)。
-    private func advanceAfterFinal() {
+    private func advanceAfterFinal(restartDelay: TimeInterval = 0) {
         request?.endAudio()
         task = nil
         request = nil
         currentID = UUID()
         segmentStartedAt = nil
         lastText = ""
-        if !stopped { beginSegment() }
+        guard !stopped else { return }
+        if restartDelay > 0 {
+            serial.asyncAfter(deadline: .now() + restartDelay) { [weak self] in
+                guard let self, !self.stopped, self.request == nil, self.task == nil else { return }
+                self.beginSegment()
+            }
+        } else {
+            beginSegment()
+        }
+    }
+
+    private func handleRecognitionError(_ message: String, segmentUsesOnDevice: Bool) {
+        emitFinalForLastTextIfNeeded()
+
+        if segmentUsesOnDevice && !didFallbackToServerRecognition {
+            didFallbackToServerRecognition = true
+            onNotice("本地语音识别不可用,已自动切换为系统联网识别。")
+            advanceAfterFinal()
+            return
+        }
+
+        notifyErrorThrottled("语音识别暂时中断,正在自动重连:\(message)")
+        advanceAfterFinal(restartDelay: 1.5)
+    }
+
+    private func emitFinalForLastTextIfNeeded() {
+        guard !lastText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let end = Date().timeIntervalSince(sessionStart)
+        let u = MeetingUtterance(
+            id: currentID, speaker: speaker, text: lastText,
+            start: segmentStart, end: max(end, segmentStart)
+        )
+        onUtterance(currentID, u, true)
+    }
+
+    private func notifyErrorThrottled(_ message: String) {
+        let now = Date()
+        if let last = lastErrorNoticeAt, now.timeIntervalSince(last) < 15 { return }
+        lastErrorNoticeAt = now
+        onError(message)
+    }
+
+    private static func describeRecognitionError(_ error: Error) -> String {
+        let ns = error as NSError
+        let detail = ns.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        if detail.isEmpty {
+            return "\(ns.domain) code \(ns.code)"
+        }
+        return detail
     }
 }
 #endif
