@@ -11,6 +11,11 @@ struct SettingsView: View {
         case providers
         case prompts
         case skills
+        case connectorHub
+        case agentRuns
+        case meetingWorkflow
+        case deliverables
+        case skillPackages
         case personas
         case deviceTools
         case mcp
@@ -42,6 +47,11 @@ struct SettingsView: View {
             case .providers:   return "厂商"
             case .prompts:     return "Prompt 库"
             case .skills:      return "技能"
+            case .connectorHub: return "连接器"
+            case .agentRuns:    return "Agent 运行"
+            case .meetingWorkflow: return "会议闭环"
+            case .deliverables: return "交付物"
+            case .skillPackages: return "技能包"
             case .personas:    return "Persona"
             case .deviceTools: return "设备工具"
             case .mcp:         return "MCP"
@@ -73,6 +83,11 @@ struct SettingsView: View {
             case .providers:   return "square.stack.3d.up"
             case .prompts:     return "text.badge.plus"
             case .skills:      return "wand.and.stars"
+            case .connectorHub: return "point.3.connected.trianglepath.dotted"
+            case .agentRuns:    return "list.bullet.rectangle.portrait"
+            case .meetingWorkflow: return "person.2.wave.2"
+            case .deliverables: return "shippingbox.and.arrow.backward.fill"
+            case .skillPackages: return "shippingbox.fill"
             case .personas:    return "theatermasks"
             case .deviceTools: return "wrench.and.screwdriver.fill"
             case .mcp:         return "powerplug"
@@ -104,6 +119,11 @@ struct SettingsView: View {
             case .providers:   return Color(red: 0.10, green: 0.66, blue: 0.56)
             case .prompts:     return Color(red: 0.56, green: 0.40, blue: 0.86)
             case .skills:      return Color(red: 0.48, green: 0.36, blue: 0.90)
+            case .connectorHub: return Color(red: 0.12, green: 0.58, blue: 0.62)
+            case .agentRuns:    return Color(red: 0.10, green: 0.45, blue: 0.72)
+            case .meetingWorkflow: return Color(red: 0.85, green: 0.42, blue: 0.18)
+            case .deliverables: return Color(red: 0.88, green: 0.46, blue: 0.18)
+            case .skillPackages: return Color(red: 0.10, green: 0.62, blue: 0.70)
             case .personas:    return Color(red: 0.72, green: 0.34, blue: 0.62)
             case .deviceTools: return Color(red: 0.20, green: 0.60, blue: 0.62)
             case .mcp:         return Color(red: 0.26, green: 0.54, blue: 0.80)
@@ -200,6 +220,16 @@ struct SettingsView: View {
                         PromptLibraryView(viewModel: promptLibrary)
                     case .skills:
                         SkillsLibraryView(store: viewModel.skillsStore, viewModel: viewModel)
+                    case .connectorHub:
+                        ConnectorHubView()
+                    case .agentRuns:
+                        AgentRunCenterView()
+                    case .meetingWorkflow:
+                        MeetingWorkflowView(title: "会议闭环示例", attendees: ["我", "团队"], transcript: "我们决定先上线连接器中心。下周三前补齐 Agent 运行中心。风险是入口太分散,需要统一到设置页。")
+                    case .deliverables:
+                        DeliverableStudioView(request: DeliverableRequest(title: "路线图交付物", sourceKind: .research, sourceText: "# 结论\nKown 下一步应把连接器、Agent 运行、会议闭环、交付物和技能包串成闭环。"))
+                    case .skillPackages:
+                        SkillPackageMarketView()
                     case .personas:
                         PersonaSettingsView(viewModel: viewModel)
                     case .deviceTools:
@@ -606,7 +636,8 @@ struct SettingsView: View {
 
     private var desktopTabSections: [(title: String, tabs: [Tab])] {
         [
-            ("基础", [.providers, .prompts, .skills, .deviceTools, .github]),
+            ("基础", [.providers, .prompts, .skills, .skillPackages, .deviceTools, .github]),
+            ("工作台", [.connectorHub, .agentRuns, .meetingWorkflow, .deliverables]),
             ("工作流", [.personas, .chains, .mcp, .webSearch, .tts, .scheduler, .performance]),
             ("数据", [.sync, .backup, .memory, .favorites, .privacy]),
             ("洞察", [.usage, .dashboard, .leaderboard, .eval]),
@@ -802,6 +833,16 @@ struct SettingsView: View {
                 PromptLibraryView(viewModel: promptLibrary)
             case .skills:
                 SkillsLibraryView(store: viewModel.skillsStore, viewModel: viewModel)
+            case .connectorHub:
+                ConnectorHubView()
+            case .agentRuns:
+                AgentRunCenterView()
+            case .meetingWorkflow:
+                MeetingWorkflowView(title: "会议闭环示例", attendees: ["我", "团队"], transcript: "我们决定先上线连接器中心。下周三前补齐 Agent 运行中心。风险是入口太分散,需要统一到设置页。")
+            case .deliverables:
+                DeliverableStudioView(request: DeliverableRequest(title: "路线图交付物", sourceKind: .research, sourceText: "# 结论\nKown 下一步应把连接器、Agent 运行、会议闭环、交付物和技能包串成闭环。"))
+            case .skillPackages:
+                SkillPackageMarketView()
             case .personas:
                 PersonaSettingsView(viewModel: viewModel)
             case .deviceTools:
@@ -1210,6 +1251,11 @@ struct SettingsView: View {
         case .providers:   return "管理连接、密钥和每个模型的默认生成参数。"
         case .prompts:     return "保存可复用的 Prompt 模板,用 {{变量}} 占位,填充后一键复制。"
         case .skills:      return "技能 = 系统提示 + 可用工具。可按输入自动触发,也可绑定到当前会话。"
+        case .connectorHub: return "统一查看 GitHub、Web、MCP、知识库、iCloud、日历提醒和设备工具的连接状态与权限。"
+        case .agentRuns:   return "集中查看长任务、深度研究、定时任务、工具调用和会议任务的运行记录、步骤、审批和成本。"
+        case .meetingWorkflow: return "把会议从会前准备、会中捕获到会后行动项追踪串成闭环。"
+        case .deliverables: return "把回答、研究或会议内容整理成 Markdown、HTML、网页、PDF/PPT 大纲。"
+        case .skillPackages: return "导入、导出和预览 .kownskill 技能包,包含提示词、变量、示例和所需工具权限。"
         case .personas:    return "Persona = 系统提示词 + 默认模型 + 工具/技能/知识库 打包成档案,输入栏按会话一键切换。"
         case .deviceTools: return "让模型在你的系统「提醒事项 / 备忘录」里创建条目。需授权;iOS 备忘录走剪贴板+跳转。"
         case .mcp:         return "挂载外部 MCP server,把任意第三方工具暴露给模型。支持远程 HTTP/SSE,macOS 还支持本地 stdio 命令。"
