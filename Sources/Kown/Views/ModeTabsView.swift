@@ -44,7 +44,7 @@ struct ModeTabsView: View {
             }
             Button("取消", role: .cancel) { pendingMode = nil }
         } message: {
-            Text("当前会话已有问答记录，切到 \(pendingMode?.displayName ?? "") 模式会新建一个会话。")
+            Text("当前会话已有问答记录，切到 \(pendingMode?.localizedDisplayName ?? "") 模式会新建一个会话。")
         }
     }
 
@@ -66,7 +66,7 @@ struct ModeTabsView: View {
                 Image(systemName: mode.symbol)
                     .font(.system(size: tabIconSize, weight: .bold))
                 if showLabel {
-                    Text(mode.displayName)
+                    Text(mode.localizedDisplayName)
                         .lineLimit(1)
                         .minimumScaleFactor(0.76)
                 }
@@ -100,8 +100,8 @@ struct ModeTabsView: View {
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .help(mode.displayName)
-        .accessibilityLabel(mode.displayName)
+        .help(mode.localizedDisplayName)
+        .accessibilityLabel(mode.localizedDisplayName)
         .accessibilityValue(isActive ? "当前模式" : "未选中")
         .accessibilityHint(isActive ? "已选择" : "切换到此模式")
     }

@@ -262,11 +262,11 @@ struct RootView: View {
                 }
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(viewModel.selectedConversation?.title ?? "Kown")
+                Text(iOSConversationTitle)
                     .font(.subheadline.weight(.heavy))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
-                Text(viewModel.currentMode.displayName)
+                Text(viewModel.currentMode.localizedDisplayName)
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(tint)
                     .lineLimit(1)
@@ -279,6 +279,11 @@ struct RootView: View {
         .overlay {
             Capsule().strokeBorder(tint.opacity(0.14), lineWidth: 1)
         }
+    }
+
+    private var iOSConversationTitle: String {
+        let title = viewModel.selectedConversation?.title.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return title.isEmpty || title == "New Conversation" ? "Kown" : title
     }
     #endif
 

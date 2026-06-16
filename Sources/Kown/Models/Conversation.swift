@@ -21,6 +21,18 @@ enum ConversationMode: String, Codable, CaseIterable, Sendable {
         }
     }
 
+    var localizedDisplayName: String {
+        switch self {
+        case .council: return "议会"
+        case .direct:  return "直接"
+        case .compare: return "对比"
+        case .debate:  return "辩论"
+        case .structured: return "结构化"
+        case .tournament: return "擂台"
+        case .translate: return "翻译"
+        }
+    }
+
     var symbol: String {
         switch self {
         case .council: return "person.3.fill"
@@ -35,22 +47,22 @@ enum ConversationMode: String, Codable, CaseIterable, Sendable {
 
     var emptyStateTitle: String {
         switch self {
-        case .council: return "Start a New Council"
-        case .direct:  return "Start a Direct Chat"
-        case .compare: return "Compare Two Models"
-        case .debate:  return "Start a Model Debate"
-        case .structured: return "Define a JSON Schema"
-        case .tournament: return "Start a Model Tournament"
+        case .council: return "开启一次模型议会"
+        case .direct:  return "开始直接问答"
+        case .compare: return "并排对比多个模型"
+        case .debate:  return "发起一场模型辩论"
+        case .structured: return "定义 JSON Schema"
+        case .tournament: return "开启模型擂台赛"
         case .translate: return "翻译 / 改写"
         }
     }
 
     var emptyStateSubtitle: String {
         switch self {
-        case .council: return "Ask a question below to gather insights from multiple AI models"
-        case .direct:  return "Have a focused conversation with one model"
-        case .compare: return "Send the same question to two models and compare answers side-by-side"
-        case .debate:  return "Let enabled models argue, rebut each other, then produce a moderated conclusion"
+        case .council: return "在下方输入问题,让多家模型先独立思考,再由主席收敛成结论"
+        case .direct:  return "与一个模型快速对话,适合追问、改写、代码和日常任务"
+        case .compare: return "把同一个问题发给多个模型,并排查看差异与优缺点"
+        case .debate:  return "让启用的模型先立论、再互相反驳,最后产出主持总结"
         case .structured: return "让所有启用的模型都按你定义的 JSON Schema 返回严格 JSON,自动校验后并排对比各家的结构化结果"
         case .tournament: return "让所有启用的模型先各自回答,再由裁判用单淘汰赛两两对决,逐轮决出最终冠军"
         case .translate: return "把输入的文本翻译成目标语言;开启「润色」则在翻译的同时改善措辞与语气"

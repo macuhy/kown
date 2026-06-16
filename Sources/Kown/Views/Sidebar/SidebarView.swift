@@ -292,7 +292,7 @@ struct SidebarView: View {
                 Text("会话")
                     .font(.system(.headline, design: .rounded).weight(.black))
                     .lineLimit(1)
-                Text("\(viewModel.currentMode.displayName) · \(viewModel.activeConversations.count) 个会话 · \(viewModel.conversationFolders.count) 个文件夹")
+                Text("\(viewModel.currentMode.localizedDisplayName) · \(viewModel.activeConversations.count) 个会话 · \(viewModel.conversationFolders.count) 个文件夹")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
@@ -366,7 +366,7 @@ struct SidebarView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("会话库")
                     .font(.headline.weight(.black))
-                Text("\(viewModel.activeConversations.count) 个会话 · \(viewModel.currentMode.displayName)")
+                Text("\(viewModel.activeConversations.count) 个会话 · \(viewModel.currentMode.localizedDisplayName)")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .monospacedDigit()

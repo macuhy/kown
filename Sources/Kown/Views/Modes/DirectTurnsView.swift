@@ -20,7 +20,7 @@ struct DirectTurnsView: View {
     var onRegenerate: ((UUID, UUID) -> Void)? = nil
     /// 撤销某轮的 workspace 写入(turnID, write)。
     var onUndoWrite: ((UUID, AppliedWrite) -> Void)? = nil
-    /// 自动升级建议:换更强模型重答 / 转 Council 重答(turnID)。
+    /// 自动升级建议:换更强模型重答 / 转议会重答(turnID)。
     var onEscalateStronger: ((UUID) -> Void)? = nil
     var onEscalateCouncil: ((UUID) -> Void)? = nil
     /// 撤销「全新上下文」截断(分隔线上的撤销按钮)。
@@ -154,11 +154,11 @@ struct DirectTurnsView: View {
                 Image(systemName: mode == .direct ? "bubble.left.and.text.bubble.right.fill" : mode.symbol)
                     .font(.caption.weight(.bold))
                     .foregroundStyle(directTint)
-                Text(mode.displayName)
+                Text(mode.localizedDisplayName)
                     .font(.caption.weight(.bold))
                     .foregroundStyle(directTint)
                 if isLive {
-                    Text("Live")
+                    Text("生成中")
                         .font(.caption2.weight(.bold))
                         .foregroundStyle(directTint)
                         .padding(.horizontal, 7)
@@ -579,7 +579,7 @@ struct EscalationBanner: View {
                     actionButton("换更强模型重答", icon: "arrow.up.circle.fill", action: onStronger)
                 }
                 if let onCouncil {
-                    actionButton("转 Council 重答", icon: "person.3.fill", action: onCouncil)
+                    actionButton("转议会重答", icon: "person.3.fill", action: onCouncil)
                 }
                 Spacer(minLength: 0)
             }

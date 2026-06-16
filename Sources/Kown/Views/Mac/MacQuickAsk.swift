@@ -25,7 +25,7 @@ struct QuickAskView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Text(mode.displayName)
+                Text(mode.localizedDisplayName)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(mode.kownTint)
                     .padding(.horizontal, 7).padding(.vertical, 3)

@@ -71,33 +71,13 @@ struct ConversationRowView: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 } else if !isRenaming {
-                    Text("New conversation")
+                    Text("新会话")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
 
                 if !isRenaming {
-                    HStack(spacing: 6) {
-                        Text(modeLabel)
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(modeColor)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 3)
-                            .background(modeColor.opacity(0.11), in: Capsule())
-                        Text(formattedDate)
-                            .font(.caption2.weight(.medium))
-                            .foregroundStyle(.tertiary)
-                            .monospacedDigit()
-                        ForEach(conversation.tags.prefix(2), id: \.self) { tag in
-                            Text(tag)
-                                .font(.caption2.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color.secondary.opacity(0.12), in: Capsule())
-                        }
-                    }
+                    metadataLine
                 }
             }
 
@@ -255,20 +235,71 @@ struct ConversationRowView: View {
     }
 
     private var displayTitle: String {
-        conversation.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? "New Conversation"
-            : conversation.title
+        let title = conversation.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return title.isEmpty || title == "New Conversation" ? "新会话" : title
+    }
+
+    private var metadataLine: some View {
+        ViewThatFits(in: .horizontal) {
+            metadataRow(showTags: true)
+            metadataRow(showTags: false)
+            modePill
+        }
+    }
+
+    private func metadataRow(showTags: Bool) -> some View {
+        HStack(spacing: 6) {
+            modePill
+            datePill
+            if showTags {
+                tagPills
+            }
+        }
+    }
+
+    private var modePill: some View {
+        Text(modeLabel)
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(modeColor)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(modeColor.opacity(0.11), in: Capsule())
+    }
+
+    private var datePill: some View {
+        Text(formattedDate)
+            .font(.caption2.weight(.medium))
+            .foregroundStyle(.tertiary)
+            .monospacedDigit()
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+    }
+
+    @ViewBuilder
+    private var tagPills: some View {
+        ForEach(conversation.tags.prefix(2), id: \.self) { tag in
+            Text(tag)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Color.secondary.opacity(0.12), in: Capsule())
+        }
     }
 
     private var modeLabel: String {
         switch conversation.mode {
-        case .council: return "Council"
-        case .direct:  return "Direct"
-        case .compare: return "Compare"
-        case .debate:  return "Debate"
-        case .structured: return "Structured"
-        case .tournament: return "Tournament"
-        case .translate: return "Translate"
+        case .council: return "议会"
+        case .direct:  return "直接"
+        case .compare: return "对比"
+        case .debate:  return "辩论"
+        case .structured: return "结构化"
+        case .tournament: return "擂台"
+        case .translate: return "翻译"
         }
     }
 

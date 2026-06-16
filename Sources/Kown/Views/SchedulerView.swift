@@ -1009,7 +1009,7 @@ private struct SchedulerTaskEditor: View {
                     Text(modeLabel(mode))
                         .font(.caption.weight(.black))
                         .foregroundStyle(selected ? .white : .primary)
-                    Text(mode.displayName)
+                    Text(mode.kownModeDescription)
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(selected ? Color.white.opacity(0.82) : .secondary)
                         .lineLimit(1)

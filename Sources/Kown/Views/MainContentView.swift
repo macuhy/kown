@@ -52,7 +52,7 @@ struct MainContentView: View {
                 #endif
             }
         }
-        .navigationTitle(viewModel.selectedConversation?.title ?? "New Conversation")
+        .navigationTitle(currentConversationTitle)
         .toolbar {
             #if os(iOS)
             ToolbarItem(placement: .topBarTrailing) {
@@ -107,10 +107,10 @@ struct MainContentView: View {
             KownModeMark(mode: mode, size: 42)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 8) {
-                    Text(viewModel.selectedConversation?.title ?? "New Conversation")
+                    Text(currentConversationTitle)
                         .font(.system(.title3, design: .rounded).weight(.bold))
                         .lineLimit(1)
-                    Text(mode.displayName)
+                    Text(mode.localizedDisplayName)
                         .font(.caption.weight(.black))
                         .foregroundStyle(tint)
                         .padding(.horizontal, 8)
@@ -123,10 +123,10 @@ struct MainContentView: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 12)
-            headerMetric("\(turnCount)", label: "Turns", tint: tint)
-            headerMetric("\(providerCount)", label: "Models", tint: providerCount == 0 ? .orange : tint)
+            headerMetric("\(turnCount)", label: "轮次", tint: tint)
+            headerMetric("\(providerCount)", label: "模型", tint: providerCount == 0 ? .orange : tint)
             if viewModel.isRunning {
-                headerMetric("Live", label: "Running", tint: .green)
+                headerMetric("进行中", label: "状态", tint: .green)
             }
             HStack(spacing: 8) {
                 desktopHeaderButton(viewModel.showFind ? "xmark" : "magnifyingglass", tint: tint, help: "会话内查找") {
@@ -1017,6 +1017,11 @@ struct MainContentView: View {
         viewModel.currentMode.kownTint
     }
 
+    private var currentConversationTitle: String {
+        let title = viewModel.selectedConversation?.title.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return title.isEmpty || title == "New Conversation" ? "新会话" : title
+    }
+
     #if os(iOS)
     private var mobileModeBar: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -1028,14 +1033,14 @@ struct MainContentView: View {
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
                     .background(modeTint.opacity(0.12), in: Capsule())
-                Text("\(viewModel.currentMode.displayName) · \(viewModel.currentMode.kownModeDescription)")
+                Text("\(viewModel.currentMode.localizedDisplayName) · \(viewModel.currentMode.kownModeDescription)")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.82)
             }
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("当前模式 \(viewModel.currentMode.displayName)，\(viewModel.currentMode.kownModeDescription)")
+            .accessibilityLabel("当前模式 \(viewModel.currentMode.localizedDisplayName)，\(viewModel.currentMode.kownModeDescription)")
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 5)

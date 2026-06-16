@@ -338,7 +338,7 @@ struct ShareSessionCard: View {
                     Text(conversation.title)
                         .font(.system(.title3, design: .rounded).weight(.bold))
                         .lineLimit(2)
-                    Text("\(conversation.mode.displayName) · \(conversation.turns.count) 轮")
+                    Text("\(conversation.mode.localizedDisplayName) · \(conversation.turns.count) 轮")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 0)
@@ -498,7 +498,7 @@ enum AnswerImageExporter {
             VStack(alignment: .leading, spacing: 3) {
                 Text(conv.title.isEmpty ? "Kown 会话" : conv.title)
                     .font(.system(.title3, design: .rounded).weight(.bold)).lineLimit(2)
-                Text("\(conv.mode.displayName) · \(conv.turns.count) 轮")
+                Text("\(conv.mode.localizedDisplayName) · \(conv.turns.count) 轮")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)

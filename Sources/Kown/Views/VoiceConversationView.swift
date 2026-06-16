@@ -527,7 +527,7 @@ struct VoiceConversationView: View {
                     Text(statusTitle)
                         .font(.system(.headline, design: .rounded).weight(.bold))
                         .foregroundStyle(tint)
-                    Text(viewModel.currentMode.displayName)
+                    Text(viewModel.currentMode.localizedDisplayName)
                         .font(.caption2.weight(.black))
                         .foregroundStyle(viewModel.currentMode.kownTint)
                         .padding(.horizontal, 7)

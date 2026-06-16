@@ -72,12 +72,12 @@ extension ConversationMode {
 
     var kownPromptPlaceholder: String {
         switch self {
-        case .council: return "Ask the council..."
-        case .direct:  return "Send a message..."
-        case .compare: return "Ask both models..."
-        case .debate:  return "Start a debate..."
-        case .structured: return "Ask for structured JSON..."
-        case .tournament: return "Start a tournament..."
+        case .council: return "召集模型议会,输入你的问题..."
+        case .direct:  return "输入消息..."
+        case .compare: return "把同一个问题发给多个模型..."
+        case .debate:  return "抛出一个值得辩论的问题..."
+        case .structured: return "描述要生成或抽取的结构化内容..."
+        case .tournament: return "发起一个模型擂台题目..."
         case .translate: return "粘贴要翻译 / 改写的文本..."
         }
     }

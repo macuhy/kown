@@ -218,7 +218,7 @@ struct EmptyStateCard: View {
     private var mobileQuickStartCard: some View {
         VStack(alignment: .leading, spacing: 9) {
             sectionHeader(
-                title: "Quick start",
+                title: "快速开始",
                 subtitle: "三个小动作让回答更稳定",
                 icon: "sparkles",
                 tint: modeTint
@@ -227,7 +227,7 @@ struct EmptyStateCard: View {
             VStack(spacing: 8) {
                 mobileTipRow("1", text: mode == .debate ? "把争议点写清楚，让模型先独立立论" : "直接描述目标、背景和你希望比较的标准")
                 mobileTipRow("2", text: "需要上下文时先附图，再在问题里说明重点")
-                mobileTipRow("3", text: "发送前可用 Prompt Enhancer 做一次整理")
+                mobileTipRow("3", text: "发送前可用「AI 改写问题」做一次整理")
             }
         }
         .padding(12)
@@ -244,7 +244,7 @@ struct EmptyStateCard: View {
         return VStack(alignment: .leading, spacing: 9) {
             HStack(spacing: 12) {
                 sectionHeader(
-                    title: enabled.isEmpty ? "Provider 未就绪" : "Provider 已就绪",
+                    title: enabled.isEmpty ? "模型未就绪" : "模型已就绪",
                     subtitle: enabled.isEmpty ? "先启用一个模型再开始" : "\(enabled.count) 个模型可参与本轮",
                     icon: enabled.isEmpty ? "exclamationmark.triangle.fill" : "checkmark.seal.fill",
                     tint: enabled.isEmpty ? .orange : modeTint
@@ -383,10 +383,10 @@ struct EmptyStateCard: View {
         HStack(spacing: 7) {
             Image(systemName: mode.symbol)
                 .font(.caption.weight(.bold))
-            Text(mode.displayName.uppercased())
+            Text("\(mode.localizedDisplayName)模式")
                 .font(.caption.weight(.black))
                 .tracking(0.7)
-            Text("\(enabledProviders.count) active")
+            Text("\(enabledProviders.count) 个已启用")
                 .font(.caption.weight(.semibold))
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
@@ -475,8 +475,8 @@ struct EmptyStateCard: View {
     private var tipsCard: some View {
         VStack(alignment: .leading, spacing: 16) {
             sectionHeader(
-                title: "Better first prompts",
-                subtitle: "Small moves that improve the whole run",
+                title: "更稳的第一问",
+                subtitle: "这些细节会明显提升整轮质量",
                 icon: "sparkles",
                 tint: modeTint
             )
@@ -485,17 +485,17 @@ struct EmptyStateCard: View {
                 tipRow(
                     "lightbulb.fill",
                     text: mode == .debate
-                        ? "Use Debate for questions with trade-offs, uncertainty, or competing strategies"
-                        : "Ask complex questions that benefit from multiple perspectives",
+                        ? "有取舍、争议或策略冲突的问题,更适合用辩论模式"
+                        : "把目标、背景和判断标准写清楚,多模型视角会更有价值",
                     color: .yellow
                 )
-                tipRow("paperclip", text: "Attach files by dragging them into the input area", color: .secondary)
-                tipRow("wand.and.stars", text: "Use the Prompt Enhancer to refine your question before sending", color: Color(red: 0.57, green: 0.42, blue: 0.82))
+                tipRow("paperclip", text: "把文件或图片拖进输入框,模型会把它们作为上下文", color: .secondary)
+                tipRow("wand.and.stars", text: "发送前用「AI 改写问题」整理提示词,减少歧义", color: Color(red: 0.57, green: 0.42, blue: 0.82))
                 tipRow(
                     mode == .debate ? "quote.bubble.fill" : "slider.horizontal.3",
                     text: mode == .debate
-                        ? "Models will first argue independently, then read each other and rebut"
-                        : "Adjust response depth and style using the toolbar options",
+                        ? "模型会先独立立论,再阅读彼此观点并反驳收敛"
+                        : "用输入栏工具切换联网、设备工具、知识库和 Persona",
                     color: .pink
                 )
             }
@@ -644,10 +644,10 @@ struct EmptyStateCard: View {
         switch mode {
         case .direct: return "对话模型"
         case .compare: return "对比模型"
-        case .council: return "Your council"
-        case .debate: return "Your debaters"
+        case .council: return "本轮议会阵容"
+        case .debate: return "本轮辩手"
         case .structured: return "结构化模型"
-        case .tournament: return "Your contenders"
+        case .tournament: return "擂台参赛者"
         case .translate: return "翻译模型"
         }
     }
@@ -672,13 +672,13 @@ struct EmptyStateCard: View {
             HStack(spacing: 12) {
                 sectionHeader(
                     title: councilCardTitle,
-                    subtitle: enabled.isEmpty ? "Enable providers before sending" : "Ready for the next message",
+                    subtitle: enabled.isEmpty ? "发送前请先启用至少一个模型" : "已准备好参与下一轮",
                     icon: councilCardIcon,
                     tint: modeTint
                 )
                 Spacer(minLength: 8)
                 Button(action: onOpenSettings) {
-                    Text("Change")
+                    Text("调整")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(modeTint)
                         .padding(.horizontal, 10)
@@ -730,7 +730,7 @@ struct EmptyStateCard: View {
                 .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             Text("还没启用任何模型")
                 .font(.callout.weight(.semibold))
-            Text("点 \"Change\" 在配置里启用至少一个 provider。")
+            Text("点「调整」在配置里启用至少一个 Provider。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -764,7 +764,7 @@ struct EmptyStateCard: View {
                         .foregroundStyle(.primary)
                         .lineLimit(1)
                     if showChairBadge {
-                        Text(mode == .debate ? "Moderator" : "Chair")
+                        Text(mode == .debate ? "主持" : "主席")
                             .font(.caption2.weight(.bold))
                             .padding(.horizontal, 7)
                             .padding(.vertical, 3)
