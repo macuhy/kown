@@ -135,10 +135,9 @@ final class MacSelectionAssistant {
             onReplace: { [weak self] result in self?.replaceSelection(with: result) }
         )
         let host = NSHostingController(rootView: root)
-        // 结果区出现/长高时让窗口跟着内容长,否则 ScrollView 会被压扁成一条缝,
-        // 看起来像「结果没显示」(实际文字在,被压没了)。
-        host.sizingOptions = .preferredContentSize
         let panel = NSPanel(contentViewController: host)
+        // 避免 preferredContentSize 跟随流式状态频繁改窗口尺寸,macOS 26 上会触发 AppKit 约束重入崩溃。
+        panel.setContentSize(NSSize(width: 428, height: 430))
         // 非激活面板:弹出时不把前台 app 的焦点抢走,点按钮才接收事件。
         panel.styleMask = [.titled, .closable, .nonactivatingPanel, .fullSizeContentView]
         panel.titleVisibility = .hidden
@@ -154,7 +153,7 @@ final class MacSelectionAssistant {
         let mouse = NSEvent.mouseLocation
         var origin = NSPoint(x: mouse.x + 12, y: mouse.y - 12)
         if let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) {
-            let size = host.view.fittingSize
+            let size = panel.frame.size
             origin.x = min(origin.x, screen.visibleFrame.maxX - size.width - 8)
             origin.y = max(origin.y, screen.visibleFrame.minY + size.height + 8)
         }

@@ -9,6 +9,7 @@ struct QuickAskView: View {
     @State private var text = ""
     /// 菜单栏剪贴板动作(翻译/总结/解释)的运行状态。
     @State private var clipboardRunner = ClipboardActionRunner()
+    @State private var focusTask: Task<Void, Never>?
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -78,7 +79,19 @@ struct QuickAskView: View {
                     )
             }
         }
-        .onAppear { focused = true }
+        .onAppear {
+            focusTask?.cancel()
+            focusTask = Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(120))
+                guard !Task.isCancelled else { return }
+                focused = true
+            }
+        }
+        .onDisappear {
+            focusTask?.cancel()
+            focusTask = nil
+            focused = false
+        }
     }
 
     private func send() {

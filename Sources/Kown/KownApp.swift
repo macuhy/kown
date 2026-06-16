@@ -148,7 +148,8 @@ struct KownApp: App {
             }
         }
         #if os(macOS)
-        .windowResizability(.contentSize)
+        // 不用 .windowResizability(.contentSize):复杂动态视图在 preferredContentSize 期间改状态会触发 AppKit 约束重入崩溃。
+        .defaultSize(width: 1100, height: 720)
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("新建会话") {

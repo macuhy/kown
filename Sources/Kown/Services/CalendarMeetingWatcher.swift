@@ -34,7 +34,11 @@ final class CalendarMeetingWatcher: ObservableObject {
     /// 提前多少分钟视为「即将开始」(到点前这个窗口内就提示/开会)。1~10。
     @Published var leadMinutes: Int {
         didSet {
-            leadMinutes = min(max(leadMinutes, 1), 10)
+            let clamped = min(max(leadMinutes, 1), 10)
+            guard clamped == leadMinutes else {
+                leadMinutes = clamped
+                return
+            }
             UserDefaults.standard.set(leadMinutes, forKey: Self.leadKey)
         }
     }

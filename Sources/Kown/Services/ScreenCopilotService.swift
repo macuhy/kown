@@ -32,7 +32,11 @@ final class ScreenCopilotService: ObservableObject {
 
     /// 截屏间隔(秒),可在 2~5 之间;太密既费电又 OCR 跟不上,太疏会漏内容。
     @Published var intervalSeconds: Double = 3 {
-        didSet { intervalSeconds = min(max(intervalSeconds, 2), 5) }
+        didSet {
+            let clamped = min(max(intervalSeconds, 2), 5)
+            guard clamped != intervalSeconds else { return }
+            intervalSeconds = clamped
+        }
     }
 
     /// buffer 字符上限:超出从头部裁掉(滚动窗口)。约几千字,够「刚读的这段」用,又不至于撑爆上下文。
