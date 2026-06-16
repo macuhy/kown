@@ -61,6 +61,19 @@ enum DeliverableStudioService {
             createdAt: request.createdAt
         )
     }
+
+    /// Returns a self-contained HTML page that can be uploaded to GitHub Pages.
+    /// Native HTML/webpage outputs are already complete documents; text-oriented
+    /// outputs are wrapped in a safe reader page so every deliverable can publish.
+    static func publishableHTML(for deliverable: Deliverable) -> String {
+        switch deliverable.kind {
+        case .html where looksLikeHTMLDocument(deliverable.content),
+             .webpage where looksLikeHTMLDocument(deliverable.content):
+            return deliverable.content
+        default:
+            return publishedTextPage(deliverable)
+        }
+    }
 }
 
 private extension DeliverableStudioService {
@@ -244,6 +257,46 @@ private extension DeliverableStudioService {
         </body>
         </html>
         """
+    }
+
+    static func publishedTextPage(_ deliverable: Deliverable) -> String {
+        let title = escapeHTML(deliverable.title)
+        let summary = escapeHTML(deliverable.summary)
+        let body = escapeHTML(deliverable.content)
+        return """
+        <!DOCTYPE html>
+        <html lang="zh-CN">
+        <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="generator" content="Kown Deliverable Studio">
+        <title>\(title)</title>
+        <style>
+        \(publishedTextCSS)
+        </style>
+        </head>
+        <body>
+          <main class="page">
+            <header class="hero">
+              <p class="eyebrow">\(escapeHTML(deliverable.sourceKind.displayName)) · \(escapeHTML(deliverable.kind.displayName))</p>
+              <h1>\(title)</h1>
+              <p class="summary">\(summary)</p>
+            </header>
+            <article class="paper">
+              <pre>\(body)</pre>
+            </article>
+            <footer>由 Kown 交付物工作台发布</footer>
+          </main>
+        </body>
+        </html>
+        """
+    }
+
+    static func looksLikeHTMLDocument(_ content: String) -> Bool {
+        let prefix = content
+            .prefix(512)
+            .lowercased()
+        return prefix.contains("<!doctype html") || prefix.contains("<html")
     }
 
     static func normalizedTitle(_ raw: String, sourceKind: DeliverableSourceKind) -> String {
@@ -430,5 +483,20 @@ private extension DeliverableStudioService {
     .content-section { margin-top: 16px; }
     .content-section h2 { margin-top: 0; font-size: clamp(1.6rem, 3vw, 2.4rem); }
     .content-section p { color: rgba(255,250,240,.82); line-height: 1.75; }
+    """
+
+    static let publishedTextCSS = """
+    :root { color-scheme: light dark; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Charter, "Songti SC", serif; background: linear-gradient(135deg, #f4ecd9 0%, #cfd8cf 50%, #d7e3ee 100%); color: #211f1b; }
+    .page { width: min(980px, calc(100% - 32px)); margin: 0 auto; padding: 52px 0 80px; }
+    .hero { padding: 34px; border-radius: 30px; background: rgba(255,255,255,.72); border: 1px solid rgba(40,34,24,.12); box-shadow: 0 24px 80px rgba(43,37,28,.12); }
+    .eyebrow { margin: 0 0 12px; color: #9c5229; font: 800 .8rem ui-sans-serif, sans-serif; letter-spacing: .12em; text-transform: uppercase; }
+    h1 { margin: 0; font-size: clamp(2.2rem, 6vw, 5rem); line-height: .95; letter-spacing: -.05em; }
+    .summary { max-width: 720px; color: #5d574d; font-size: 1.08rem; line-height: 1.72; }
+    .paper { margin-top: 18px; padding: clamp(18px, 4vw, 34px); border-radius: 26px; background: rgba(255,255,255,.82); border: 1px solid rgba(40,34,24,.10); box-shadow: 0 18px 60px rgba(43,37,28,.10); }
+    pre { margin: 0; white-space: pre-wrap; word-break: break-word; font: 1rem/1.72 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    footer { margin-top: 18px; text-align: center; color: rgba(33,31,27,.54); font: 700 .78rem ui-sans-serif, sans-serif; letter-spacing: .08em; }
+    @media (prefers-color-scheme: dark) { body { background: radial-gradient(circle at top left, #42341f, transparent 34rem), #101316; color: #f8f0df; } .hero, .paper { background: rgba(31,34,33,.84); border-color: rgba(255,255,255,.12); } .summary { color: #d6cab5; } footer { color: rgba(248,240,223,.54); } }
     """
 }

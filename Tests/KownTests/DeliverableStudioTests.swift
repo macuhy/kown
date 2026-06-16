@@ -48,4 +48,29 @@ final class DeliverableStudioTests: XCTestCase {
         XCTAssertTrue(deliverable.summary.contains("会议交付物"))
         XCTAssertTrue(deliverable.content.contains("补充背景和问题定义"))
     }
+
+    func testPublishableHTMLKeepsNativeHTMLDocument() {
+        let deliverable = DeliverableStudioService.generate(
+            title: "网页",
+            targetKind: .webpage,
+            sourceText: "正文"
+        )
+
+        XCTAssertEqual(DeliverableStudioService.publishableHTML(for: deliverable), deliverable.content)
+    }
+
+    func testPublishableHTMLWrapsTextDeliverablesSafely() {
+        let deliverable = DeliverableStudioService.generate(
+            title: "<script>",
+            targetKind: .markdown,
+            sourceText: "不要执行 <script>alert(1)</script>"
+        )
+
+        let html = DeliverableStudioService.publishableHTML(for: deliverable)
+
+        XCTAssertTrue(html.contains("<!DOCTYPE html>"))
+        XCTAssertTrue(html.contains("&lt;script&gt;"))
+        XCTAssertTrue(html.contains("&lt;script&gt;alert(1)&lt;/script&gt;"))
+        XCTAssertFalse(html.contains("<script>alert(1)</script>"))
+    }
 }

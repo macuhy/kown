@@ -9,6 +9,7 @@ struct DeliverableStudioView: View {
     @State private var request: DeliverableRequest
     @State private var deliverable: Deliverable
     @State private var copied = false
+    @State private var publishPayload: ArtifactPublishPayload?
 
     init(request: DeliverableRequest = DeliverableRequest()) {
         let generated = DeliverableStudioService.generate(request)
@@ -32,6 +33,9 @@ struct DeliverableStudioView: View {
             }
         }
         .onChange(of: request) { _, _ in regenerate() }
+        .sheet(item: $publishPayload) { payload in
+            ArtifactPublishSheet(payload: payload)
+        }
     }
 
     private var header: some View {
@@ -52,6 +56,7 @@ struct DeliverableStudioView: View {
             Menu {
                 Button("复制内容") { copy(deliverable.content) }
                 Button("复制文件名") { copy(deliverable.suggestedFileName) }
+                Button("发布为网页") { preparePublish() }
                 Divider()
                 Button("重新生成") { regenerate() }
             } label: {
@@ -148,6 +153,11 @@ struct DeliverableStudioView: View {
                     Label("复制", systemImage: "doc.on.doc")
                 }
                 Button {
+                    preparePublish()
+                } label: {
+                    Label("发布", systemImage: "globe")
+                }
+                Button {
                     regenerate()
                 } label: {
                     Label("刷新", systemImage: "arrow.clockwise")
@@ -197,6 +207,32 @@ struct DeliverableStudioView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
             copied = false
         }
+    }
+
+    private func preparePublish() {
+        let html = DeliverableStudioService.publishableHTML(for: deliverable)
+        let key = publishKey(for: deliverable)
+        let previous = ArtifactPublishMemory.slug(for: key)
+        let slug = previous ?? GitHubPagesPublisher.defaultSlug(
+            title: deliverable.title,
+            fallbackSeed: "\(deliverable.title)\n\(deliverable.kind.rawValue)\n\(deliverable.content)"
+        )
+        publishPayload = ArtifactPublishPayload(
+            html: html,
+            defaultSlug: slug,
+            artifactKey: key,
+            previousSlug: previous
+        )
+    }
+
+    private func publishKey(for deliverable: Deliverable) -> String {
+        let seed = [
+            deliverable.title,
+            deliverable.sourceKind.rawValue,
+            deliverable.kind.rawValue,
+            request.sourceText
+        ].joined(separator: "\n")
+        return "deliverable-\(GitHubPagesPublisher.shortHash(seed))"
     }
 }
 
