@@ -236,6 +236,55 @@ struct DeliverableStudioView: View {
     }
 }
 
+/// Small reusable launcher for "turn this content into a deliverable".
+/// The studio itself owns the final GitHub Pages publish step, so callers only
+/// need to provide source text and a sensible default format.
+struct DeliverableStudioSheetButton: View {
+    let title: String
+    let sourceKind: DeliverableSourceKind
+    let sourceText: String
+    var targetKind: DeliverableKind = .markdown
+    var audience: String = ""
+    var goal: String = ""
+    var label: String = "交付"
+    var systemImage: String = "shippingbox.and.arrow.backward"
+    var tint: Color = .secondary
+    var compact: Bool = false
+
+    @State private var showingStudio = false
+
+    var body: some View {
+        Button {
+            showingStudio = true
+        } label: {
+            let base = Label(label, systemImage: systemImage)
+                .font(.caption2.weight(.semibold))
+                .lineLimit(1)
+                .foregroundStyle(tint)
+            Group {
+                if compact { base.labelStyle(.iconOnly) }
+                else { base.labelStyle(.titleAndIcon) }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(tint.opacity(0.10), in: Capsule())
+            .fixedSize()
+        }
+        .buttonStyle(.borderless)
+        .disabled(sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        .sheet(isPresented: $showingStudio) {
+            DeliverableStudioView(request: DeliverableRequest(
+                title: title,
+                sourceKind: sourceKind,
+                targetKind: targetKind,
+                sourceText: sourceText,
+                audience: audience,
+                goal: goal
+            ))
+        }
+    }
+}
+
 #Preview("Deliverable Studio") {
     DeliverableStudioView(request: DeliverableRequest(
         title: "季度研究摘要",

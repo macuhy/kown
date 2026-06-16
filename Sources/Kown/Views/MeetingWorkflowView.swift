@@ -6,6 +6,7 @@ import SwiftUI
 /// app can embed it later from any sheet, inspector, or detail route.
 struct MeetingWorkflowView: View {
     let workflow: MeetingWorkflow
+    @State private var showingDeliverable = false
 
     private let preTint = Color(red: 0.18, green: 0.48, blue: 0.74)
     private let inTint = Color(red: 0.85, green: 0.42, blue: 0.18)
@@ -41,6 +42,16 @@ struct MeetingWorkflowView: View {
             .padding(20)
         }
         .scrollIndicators(.hidden)
+        .sheet(isPresented: $showingDeliverable) {
+            DeliverableStudioView(request: DeliverableRequest(
+                title: "\(workflow.title) 会议交付物",
+                sourceKind: .meeting,
+                targetKind: .webpage,
+                sourceText: MeetingWorkflowService.deliverableSource(from: workflow),
+                audience: workflow.attendees.map(\.name).joined(separator: "、"),
+                goal: "把会前准备、会中捕获和会后追踪整理成可分享页面"
+            ))
+        }
         #if os(macOS)
         .frame(minWidth: 580, minHeight: 680)
         #endif
@@ -63,6 +74,17 @@ private extension MeetingWorkflowView {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                 }
+                Button {
+                    showingDeliverable = true
+                } label: {
+                    Label("交付/发布", systemImage: "shippingbox.and.arrow.backward")
+                        .font(.caption.weight(.bold))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(postTint.opacity(0.12), in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(postTint)
             }
 
             if workflow.attendees.isEmpty {

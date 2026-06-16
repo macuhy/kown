@@ -140,6 +140,64 @@ final class AgentRunStore {
     }
 
     @discardableResult
+    func approve(_ id: UUID, at date: Date = Date()) -> Bool {
+        guard let index = runs.firstIndex(where: { $0.id == id }) else { return false }
+        runs[index].approvalStatus = .approved
+        runs[index].updatedAt = date
+        for stepIndex in runs[index].steps.indices
+        where runs[index].steps[stepIndex].approvalStatus == .pending || runs[index].steps[stepIndex].status == .waitingForApproval {
+            runs[index].steps[stepIndex].approvalStatus = .approved
+            if runs[index].steps[stepIndex].status == .waitingForApproval {
+                runs[index].steps[stepIndex].status = .running
+                if runs[index].steps[stepIndex].startedAt == nil { runs[index].steps[stepIndex].startedAt = date }
+            }
+        }
+        for callIndex in runs[index].toolCalls.indices
+        where runs[index].toolCalls[callIndex].approvalStatus == .pending || runs[index].toolCalls[callIndex].status == .waitingForApproval {
+            runs[index].toolCalls[callIndex].approvalStatus = .approved
+            if runs[index].toolCalls[callIndex].status == .waitingForApproval {
+                runs[index].toolCalls[callIndex].status = .running
+                if runs[index].toolCalls[callIndex].startedAt == nil { runs[index].toolCalls[callIndex].startedAt = date }
+            }
+        }
+        if runs[index].status == .waitingForApproval || runs[index].status == .queued {
+            runs[index].applyStatus(.running, at: date, reason: "审批已通过,继续运行。")
+        }
+        sortRuns()
+        persist()
+        return true
+    }
+
+    @discardableResult
+    func reject(_ id: UUID, reason: String = "用户拒绝审批", at date: Date = Date()) -> Bool {
+        guard let index = runs.firstIndex(where: { $0.id == id }) else { return false }
+        runs[index].approvalStatus = .rejected
+        runs[index].updatedAt = date
+        for stepIndex in runs[index].steps.indices
+        where runs[index].steps[stepIndex].approvalStatus == .pending || runs[index].steps[stepIndex].status == .waitingForApproval {
+            runs[index].steps[stepIndex].approvalStatus = .rejected
+            runs[index].steps[stepIndex].status = .skipped
+            runs[index].steps[stepIndex].finishedAt = date
+            runs[index].steps[stepIndex].errorMessage = reason
+        }
+        for callIndex in runs[index].toolCalls.indices
+        where runs[index].toolCalls[callIndex].approvalStatus == .pending || runs[index].toolCalls[callIndex].status == .waitingForApproval {
+            runs[index].toolCalls[callIndex].approvalStatus = .rejected
+            runs[index].toolCalls[callIndex].status = .skipped
+            runs[index].toolCalls[callIndex].finishedAt = date
+            runs[index].toolCalls[callIndex].errorMessage = reason
+        }
+        if runs[index].status.canTransition(to: .cancelled) {
+            runs[index].applyStatus(.cancelled, at: date, reason: reason)
+        } else {
+            runs[index].errorMessage = reason
+        }
+        sortRuns()
+        persist()
+        return true
+    }
+
+    @discardableResult
     func appendStep(to runID: UUID, _ step: AgentRun.Step, at date: Date = Date()) -> AgentRun.Step? {
         guard let index = runs.firstIndex(where: { $0.id == runID }) else { return nil }
         var nextStep = step
@@ -296,12 +354,63 @@ final class AgentRunStore {
         persist()
     }
 
+    func attentionNotifications(now: Date = Date()) -> [AgentRunNotification] {
+        runs.flatMap { run -> [AgentRunNotification] in
+            if run.needsApproval {
+                return [AgentRunNotification(
+                    runID: run.id,
+                    level: .approval,
+                    title: "待审批",
+                    message: run.title.isEmpty ? run.kind.displayName : run.title,
+                    actionTitle: "处理",
+                    createdAt: run.updatedAt
+                )]
+            }
+            if run.status == .running || run.status == .queued || run.status == .paused {
+                return [AgentRunNotification(
+                    runID: run.id,
+                    level: .running,
+                    title: run.status.displayName,
+                    message: run.title.isEmpty ? run.kind.displayName : run.title,
+                    actionTitle: "查看",
+                    createdAt: run.updatedAt
+                )]
+            }
+            guard now.timeIntervalSince(run.updatedAt) <= 86_400 else { return [] }
+            switch run.status {
+            case .succeeded:
+                return [AgentRunNotification(
+                    runID: run.id,
+                    level: .success,
+                    title: "任务已完成",
+                    message: run.summary ?? run.title,
+                    actionTitle: "查看结果",
+                    createdAt: run.updatedAt
+                )]
+            case .failed, .cancelled:
+                return [AgentRunNotification(
+                    runID: run.id,
+                    level: .failure,
+                    title: run.status == .failed ? "任务失败" : "任务已取消",
+                    message: run.errorMessage ?? run.title,
+                    actionTitle: run.canRerun ? "重跑" : "查看",
+                    createdAt: run.updatedAt
+                )]
+            default:
+                return []
+            }
+        }
+        .sorted { $0.createdAt > $1.createdAt }
+        .prefix(8)
+        .map { $0 }
+    }
+
     @discardableResult
     func rerun(_ id: UUID, at date: Date = Date()) -> AgentRun? {
         guard let original = run(id: id) else { return nil }
-        let rerun = AgentRun(
+        var rerun = AgentRun(
             kind: original.kind,
-            title: original.title,
+            title: original.title.isEmpty ? original.kind.displayName : "\(original.title) · 重跑",
             prompt: original.prompt,
             summary: nil,
             status: .queued,
@@ -311,7 +420,19 @@ final class AgentRunStore {
             sourceID: original.sourceID,
             retryOf: original.id,
             tags: original.tags,
-            metadata: original.metadata
+            metadata: original.metadata.merging([
+                "retryOf": original.id.uuidString,
+                "retryCreatedAt": ISO8601DateFormatter().string(from: date)
+            ]) { current, _ in current }
+        )
+        rerun.steps.append(
+            AgentRun.Step(
+                title: "重跑已排队",
+                detail: "来自 \(original.title.isEmpty ? original.kind.displayName : original.title)",
+                status: .queued,
+                resultSummary: original.errorMessage ?? original.summary,
+                metadata: ["retryOf": original.id.uuidString]
+            )
         )
         upsert(rerun)
         return rerun

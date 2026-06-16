@@ -6,6 +6,8 @@ struct AnswerFooterBar: View {
     let text: String
     let providerName: String
     let model: String
+    var deliverableTitle: String? = nil
+    var deliverableSourceKind: DeliverableSourceKind = .answer
     var sources: [SourceRef] = []
     var tint: Color = .secondary
     /// 「换模型重答」候选(空 = 不显示该入口)。
@@ -75,6 +77,17 @@ struct AnswerFooterBar: View {
         }.buttonStyle(.borderless)
         if !text.isEmpty { QuoteReplyMenu(text: text) }
         if !text.isEmpty { SaveToDeviceMenu(text: text) }
+        if !text.isEmpty {
+            DeliverableStudioSheetButton(
+                title: deliverableTitle ?? "\(providerName) 回答",
+                sourceKind: deliverableSourceKind,
+                sourceText: text,
+                targetKind: deliverableSourceKind == .research ? .webpage : .markdown,
+                label: "交付",
+                systemImage: "shippingbox.and.arrow.backward",
+                tint: tint
+            )
+        }
     }
 
     private func chip(_ title: String, systemImage: String, color: Color) -> some View {
@@ -651,6 +664,18 @@ struct HistoricalResponseCard: View {
         .disabled(text.isEmpty)
         if !text.isEmpty { QuoteReplyMenu(text: text, compact: compactFooter) }
         if !text.isEmpty { SaveToDeviceMenu(text: text, compact: compactFooter) }
+        if !text.isEmpty {
+            DeliverableStudioSheetButton(
+                title: "\(config.displayName) 回答",
+                sourceKind: .answer,
+                sourceText: text,
+                targetKind: .markdown,
+                label: "交付",
+                systemImage: "shippingbox.and.arrow.backward",
+                tint: accentColor,
+                compact: compactFooter
+            )
+        }
     }
 
     /// footer 动作按钮的统一外观:单行不换行 + 固定尺寸;iOS 紧凑宽度只显示图标。

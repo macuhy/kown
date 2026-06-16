@@ -64,6 +64,50 @@ final class AgentRunStoreTests: XCTestCase {
         XCTAssertEqual(retry?.retryOf, run.id)
         XCTAssertEqual(retry?.prompt, "总结")
         XCTAssertNotEqual(retry?.id, run.id)
+        XCTAssertEqual(retry?.steps.first?.title, "重跑已排队")
+        XCTAssertEqual(retry?.metadata["retryOf"], run.id.uuidString)
+    }
+
+    func testApproveMovesPendingRunAndStepsToRunning() {
+        let store = AgentRunStore.inMemory()
+        let run = store.create(kind: .toolCall, title: "写文件", status: .waitingForApproval, approvalStatus: .pending)
+        let step = store.appendStep(to: run.id, title: "等待写入确认", status: .waitingForApproval, approvalStatus: .pending)
+
+        XCTAssertTrue(store.approve(run.id))
+
+        let approved = store.run(id: run.id)
+        XCTAssertEqual(approved?.status, .running)
+        XCTAssertEqual(approved?.approvalStatus, .approved)
+        XCTAssertEqual(approved?.steps.first { $0.id == step?.id }?.status, .running)
+        XCTAssertEqual(approved?.steps.first { $0.id == step?.id }?.approvalStatus, .approved)
+    }
+
+    func testRejectCancelsPendingRunAndSkipsApprovalSteps() {
+        let store = AgentRunStore.inMemory()
+        let run = store.create(kind: .toolCall, title: "危险操作", status: .waitingForApproval, approvalStatus: .pending)
+        let step = store.appendStep(to: run.id, title: "等待确认", status: .waitingForApproval, approvalStatus: .pending)
+
+        XCTAssertTrue(store.reject(run.id, reason: "不允许"))
+
+        let rejected = store.run(id: run.id)
+        XCTAssertEqual(rejected?.status, .cancelled)
+        XCTAssertEqual(rejected?.approvalStatus, .rejected)
+        XCTAssertEqual(rejected?.errorMessage, "不允许")
+        XCTAssertEqual(rejected?.steps.first { $0.id == step?.id }?.status, .skipped)
+        XCTAssertEqual(rejected?.steps.first { $0.id == step?.id }?.approvalStatus, .rejected)
+    }
+
+    func testAttentionNotificationsPrioritizeApprovalAndRecentResults() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let store = AgentRunStore.inMemory()
+        _ = store.create(kind: .toolCall, title: "需要审批", status: .waitingForApproval, approvalStatus: .pending, at: now)
+        let done = store.create(kind: .deepResearch, title: "研究完成", status: .running, at: now.addingTimeInterval(-60))
+        XCTAssertTrue(store.transition(done.id, to: .succeeded, reason: "完成", at: now))
+
+        let cards = store.attentionNotifications(now: now)
+
+        XCTAssertEqual(cards.first?.level, .approval)
+        XCTAssertTrue(cards.contains { $0.level == .success && $0.message == "完成" })
     }
 
     private func temporaryURL() throws -> URL {

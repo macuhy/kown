@@ -95,6 +95,24 @@ final class MeetingWorkflowTests: XCTestCase {
         XCTAssertEqual(decoded.inMeeting.actionItems.map(\.title), workflow.inMeeting.actionItems.map(\.title))
     }
 
+    func testDeliverableSourceIncludesThreePhaseContent() {
+        let workflow = MeetingWorkflowService.generate(
+            title: "发布计划会",
+            attendees: ["小王"],
+            transcript: "我们决定下周发布 MVP。行动项由小王负责在6月20日完成回归测试。",
+            now: fixedNow
+        )
+
+        let source = MeetingWorkflowService.deliverableSource(from: workflow)
+
+        XCTAssertTrue(source.contains("# 发布计划会"))
+        XCTAssertTrue(source.contains("## 会前准备"))
+        XCTAssertTrue(source.contains("## 会中捕获"))
+        XCTAssertTrue(source.contains("## 会后追踪"))
+        XCTAssertTrue(source.contains("小王"))
+        XCTAssertTrue(source.contains("行动项"))
+    }
+
     private var fixedNow: Date {
         ISO8601DateFormatter().date(from: "2026-06-16T12:00:00Z")!
     }

@@ -89,9 +89,63 @@ enum MeetingWorkflowService {
             postMeeting: postMeeting
         )
     }
+
+    static func deliverableSource(from workflow: MeetingWorkflow) -> String {
+        var lines: [String] = [
+            "# \(workflow.title)",
+            "",
+            "## 会议概览",
+            "- 来源：\(workflow.source.displayName)",
+            "- 创建时间：\(ISO8601DateFormatter().string(from: workflow.createdAt))"
+        ]
+        if !workflow.attendees.isEmpty {
+            lines.append("- 参会人：\(workflow.attendees.map { "\($0.name)(\($0.role.label))" }.joined(separator: "、"))")
+        }
+
+        lines.append(contentsOf: ["", "## 会前准备", workflow.preMeeting.objective])
+        appendList(title: "议程", values: workflow.preMeeting.agenda.map { item in
+            var text = item.title
+            if let minutes = item.minutes { text += "(\(minutes) min)" }
+            if let detail = item.detail, !detail.isEmpty { text += " — \(detail)" }
+            return text
+        }, to: &lines)
+        appendList(title: "准备清单", values: workflow.preMeeting.preparationItems.map(\.title), to: &lines)
+        appendList(title: "待解决问题", values: workflow.preMeeting.questionsToResolve, to: &lines)
+
+        lines.append(contentsOf: ["", "## 会中捕获", workflow.inMeeting.summary])
+        appendList(title: "决策", values: workflow.inMeeting.decisions.map { decision in
+            [decision.text, decision.owner.map { "负责人：\($0)" }, decision.evidence].compactMap { $0 }.joined(separator: " · ")
+        }, to: &lines)
+        appendList(title: "风险", values: workflow.inMeeting.risks.map { risk in
+            [risk.text, "等级：\(risk.level.label)", risk.owner.map { "负责人：\($0)" }, risk.mitigation].compactMap { $0 }.joined(separator: " · ")
+        }, to: &lines)
+        appendList(title: "行动项", values: workflow.inMeeting.actionItems.map { action in
+            [action.title, action.owner.map { "负责人：\($0)" }, action.dueText.map { "截止：\($0)" }].compactMap { $0 }.joined(separator: " · ")
+        }, to: &lines)
+
+        lines.append(contentsOf: ["", "## 会后追踪", workflow.postMeeting.trackingSummary])
+        appendList(title: "跟进消息草稿", values: workflow.postMeeting.followUpDrafts.map { "\($0.subject)\n\($0.body)" }, to: &lines)
+        appendList(title: "提醒建议", values: workflow.postMeeting.reminderSuggestions.map { reminder in
+            [reminder.title, reminder.suggestedAt.map { "建议时间：\(ISO8601DateFormatter().string(from: $0))" }, reminder.reason]
+                .compactMap { $0 }
+                .joined(separator: " · ")
+        }, to: &lines)
+
+        return lines.joined(separator: "\n")
+    }
 }
 
 private extension MeetingWorkflowService {
+    static func appendList(title: String, values: [String], to lines: inout [String]) {
+        let cleaned = values
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !cleaned.isEmpty else { return }
+        lines.append("")
+        lines.append("### \(title)")
+        lines.append(contentsOf: cleaned.map { "- \($0)" })
+    }
+
     static func source(hasTranscript: Bool, notes: MeetingNotes?) -> MeetingWorkflow.Source {
         let hasNotes = notes.map { !$0.isEmpty } ?? false
         switch (hasTranscript, hasNotes) {

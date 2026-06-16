@@ -77,6 +77,7 @@ struct DirectTurnsView: View {
                 }
                 if let cfg = turn.orderedPanelConfigs.first {
                     let key = cfg.id.uuidString
+                    let sourceKind: DeliverableSourceKind = isDeepResearchTurn(turn) ? .research : .answer
                     assistantBubble(
                         config: cfg,
                         text: turn.responses[key] ?? "",
@@ -88,7 +89,9 @@ struct DirectTurnsView: View {
                         sources: turn.sourcesByProvider?[key] ?? (turn.sources ?? []),
                         knowledgeSources: turn.knowledgeSources ?? [],
                         onRegenerate: onRegenerate.map { f in { pid in f(turn.id, pid) } },
-                        routeNote: turn.routeNote
+                        routeNote: turn.routeNote,
+                        deliverableTitle: deliverableTitle(for: turn, sourceKind: sourceKind),
+                        deliverableSourceKind: sourceKind
                     )
                 }
                 // 省钱级联(实验):初答被裁判打了低分、已自动旗舰档重答 → 升级答单独一张卡,标注「已自动升级」。
@@ -272,7 +275,9 @@ struct DirectTurnsView: View {
                                  showActions: Bool = false, sources: [SourceRef] = [],
                                  knowledgeSources: [KnowledgeSourceRef] = [],
                                  onRegenerate: ((UUID) -> Void)? = nil,
-                                 routeNote: String? = nil) -> some View {
+                                 routeNote: String? = nil,
+                                 deliverableTitle: String? = nil,
+                                 deliverableSourceKind: DeliverableSourceKind = .answer) -> some View {
         HStack(alignment: .top, spacing: assistantSpacing) {
             ZStack {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -330,6 +335,8 @@ struct DirectTurnsView: View {
                 }
                 if showActions, error == nil, !text.isEmpty {
                     AnswerFooterBar(text: text, providerName: config.displayName, model: config.model,
+                                    deliverableTitle: deliverableTitle,
+                                    deliverableSourceKind: deliverableSourceKind,
                                     sources: sources, tint: accentColor(config),
                                     regenerateProviders: onRegenerate == nil ? [] : regenerateProviders,
                                     onRegenerate: onRegenerate)
@@ -358,6 +365,17 @@ struct DirectTurnsView: View {
             }
             Spacer(minLength: assistantTrailingGutter)
         }
+    }
+
+    private func isDeepResearchTurn(_ turn: Turn) -> Bool {
+        turn.toolSteps?.contains { $0.toolName.hasPrefix("research_") } == true
+    }
+
+    private func deliverableTitle(for turn: Turn, sourceKind: DeliverableSourceKind) -> String {
+        let prompt = turn.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let prefix = sourceKind == .research ? "深度研究" : "回答"
+        guard !prompt.isEmpty else { return "\(prefix)交付物" }
+        return "\(prefix) · \(String(prompt.prefix(36)))"
     }
 
     private func assistantHeader(config: ProviderConfig, streaming: Bool, tokenUsage: TurnTokenUsage?) -> some View {

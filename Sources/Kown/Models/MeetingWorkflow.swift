@@ -39,6 +39,15 @@ extension MeetingWorkflow {
         case transcript
         case meetingNotes
         case transcriptAndNotes
+
+        var displayName: String {
+            switch self {
+            case .manual: return "手动输入"
+            case .transcript: return "会议转写"
+            case .meetingNotes: return "会议纪要"
+            case .transcriptAndNotes: return "转写 + 纪要"
+            }
+        }
     }
 
     struct Participant: Identifiable, Sendable, Equatable, Codable {

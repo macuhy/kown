@@ -373,6 +373,12 @@ struct AgentRun: Identifiable, Codable, Hashable, Sendable {
     var canResume: Bool { status.canResume }
     var canCancel: Bool { status.canCancel }
     var canRerun: Bool { status.isTerminal || status == .paused }
+    var needsApproval: Bool {
+        status == .waitingForApproval ||
+        approvalStatus == .pending ||
+        steps.contains { $0.approvalStatus == .pending || $0.status == .waitingForApproval } ||
+        toolCalls.contains { $0.approvalStatus == .pending || $0.status == .waitingForApproval }
+    }
 
     mutating func applyStatus(_ newStatus: Status, at date: Date = Date(), reason: String? = nil) {
         status = newStatus
@@ -394,4 +400,21 @@ struct AgentRun: Identifiable, Codable, Hashable, Sendable {
             }
         }
     }
+}
+
+struct AgentRunNotification: Identifiable, Equatable, Sendable {
+    enum Level: String, Equatable, Sendable {
+        case approval
+        case running
+        case success
+        case failure
+    }
+
+    var id: String { "\(runID.uuidString)-\(level.rawValue)" }
+    let runID: UUID
+    let level: Level
+    let title: String
+    let message: String
+    let actionTitle: String?
+    let createdAt: Date
 }

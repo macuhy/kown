@@ -6,6 +6,8 @@ struct AgentRunCenterView: View {
     var onPause: (@MainActor (AgentRun) -> Void)?
     var onCancel: (@MainActor (AgentRun) -> Void)?
     var onRerun: (@MainActor (AgentRun) -> Void)?
+    var onApprove: (@MainActor (AgentRun) -> Void)?
+    var onReject: (@MainActor (AgentRun) -> Void)?
 
     @State private var selectedRunID: UUID?
     @State private var statusFilter: AgentRun.Status?
@@ -14,12 +16,16 @@ struct AgentRunCenterView: View {
         store: AgentRunStore = .shared,
         onPause: (@MainActor (AgentRun) -> Void)? = nil,
         onCancel: (@MainActor (AgentRun) -> Void)? = nil,
-        onRerun: (@MainActor (AgentRun) -> Void)? = nil
+        onRerun: (@MainActor (AgentRun) -> Void)? = nil,
+        onApprove: (@MainActor (AgentRun) -> Void)? = nil,
+        onReject: (@MainActor (AgentRun) -> Void)? = nil
     ) {
         self.store = store
         self.onPause = onPause
         self.onCancel = onCancel
         self.onRerun = onRerun
+        self.onApprove = onApprove
+        self.onReject = onReject
     }
 
     private let tint = Color(red: 0.10, green: 0.45, blue: 0.72)
@@ -45,7 +51,9 @@ struct AgentRunCenterView: View {
                     tint: tint,
                     onPause: { handlePause(selectedRun) },
                     onCancel: { handleCancel(selectedRun) },
-                    onRerun: { handleRerun(selectedRun) }
+                    onRerun: { handleRerun(selectedRun) },
+                    onApprove: { handleApprove(selectedRun) },
+                    onReject: { handleReject(selectedRun) }
                 )
             } else {
                 emptyState
@@ -70,6 +78,7 @@ struct AgentRunCenterView: View {
     private var runList: some View {
         VStack(spacing: 0) {
             filterBar
+            attentionStrip
             Divider()
             List(selection: $selectedRunID) {
                 if filteredRuns.isEmpty {
@@ -85,6 +94,31 @@ struct AgentRunCenterView: View {
                 }
             }
             .listStyle(.sidebar)
+        }
+    }
+
+    @ViewBuilder
+    private var attentionStrip: some View {
+        let cards = store.attentionNotifications()
+        if !cards.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(cards) { card in
+                        AgentRunAttentionCard(
+                            card: card,
+                            onSelect: { selectedRunID = card.runID },
+                            onApprove: {
+                                if let run = store.run(id: card.runID) { handleApprove(run) }
+                            },
+                            onReject: {
+                                if let run = store.run(id: card.runID) { handleReject(run) }
+                            }
+                        )
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 10)
+            }
         }
     }
 
@@ -168,6 +202,22 @@ struct AgentRunCenterView: View {
         }
     }
 
+    private func handleApprove(_ run: AgentRun) {
+        if let onApprove {
+            onApprove(run)
+        } else {
+            store.approve(run.id)
+        }
+    }
+
+    private func handleReject(_ run: AgentRun) {
+        if let onReject {
+            onReject(run)
+        } else {
+            store.reject(run.id)
+        }
+    }
+
     private func filterColor(for status: AgentRun.Status?) -> Color {
         status.map(color(for:)) ?? tint
     }
@@ -229,18 +279,86 @@ private struct AgentRunRow: View {
     }
 }
 
+private struct AgentRunAttentionCard: View {
+    let card: AgentRunNotification
+    let onSelect: () -> Void
+    let onApprove: () -> Void
+    let onReject: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                Text(card.title)
+                Spacer(minLength: 0)
+            }
+            .font(.caption.weight(.bold))
+            .foregroundStyle(color)
+            Text(card.message)
+                .font(.caption)
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+            if card.level == .approval {
+                HStack(spacing: 6) {
+                    Button("批准", action: onApprove)
+                        .buttonStyle(.borderless)
+                    Button("拒绝", role: .destructive, action: onReject)
+                        .buttonStyle(.borderless)
+                }
+                .font(.caption2.weight(.semibold))
+            } else if let actionTitle = card.actionTitle {
+                Text(actionTitle)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(color)
+            }
+        }
+        .frame(width: 210, alignment: .leading)
+        .padding(11)
+        .background(color.opacity(0.09), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(color.opacity(0.18), lineWidth: 1)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .onTapGesture(perform: onSelect)
+    }
+
+    private var color: Color {
+        switch card.level {
+        case .approval: return .orange
+        case .running: return .blue
+        case .success: return .green
+        case .failure: return .red
+        }
+    }
+
+    private var icon: String {
+        switch card.level {
+        case .approval: return "hand.raised.fill"
+        case .running: return "arrow.triangle.2.circlepath"
+        case .success: return "checkmark.circle.fill"
+        case .failure: return "exclamationmark.triangle.fill"
+        }
+    }
+}
+
 private struct AgentRunDetailView: View {
     let run: AgentRun
     let tint: Color
     let onPause: () -> Void
     let onCancel: () -> Void
     let onRerun: () -> Void
+    let onApprove: () -> Void
+    let onReject: () -> Void
+
+    @State private var copied = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 header
                 metricsGrid
+                resultActions
                 if !run.prompt.isEmpty { textSection("任务输入", text: run.prompt) }
                 if let summary = run.summary, !summary.isEmpty { textSection("结果摘要", text: summary) }
                 if let error = run.errorMessage, !error.isEmpty { textSection("错误信息", text: error, color: .red) }
@@ -257,6 +375,10 @@ private struct AgentRunDetailView: View {
         #endif
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
+                if run.needsApproval {
+                    Button("批准") { onApprove() }
+                    Button("拒绝", role: .destructive) { onReject() }
+                }
                 Button(run.canResume ? "继续" : "暂停") { onPause() }
                     .disabled(!run.canPause && !run.canResume)
                 Button("取消", role: .destructive) { onCancel() }
@@ -288,6 +410,10 @@ private struct AgentRunDetailView: View {
                 Spacer(minLength: 0)
             }
             HStack(spacing: 10) {
+                if run.needsApproval {
+                    actionButton(title: "批准", systemImage: "hand.thumbsup.fill", roleColor: .green, action: onApprove)
+                    actionButton(title: "拒绝", systemImage: "hand.thumbsdown.fill", roleColor: .red, action: onReject)
+                }
                 actionButton(title: run.canResume ? "继续" : "暂停", systemImage: run.canResume ? "play.fill" : "pause.fill", action: onPause)
                     .disabled(!run.canPause && !run.canResume)
                 actionButton(title: "取消", systemImage: "xmark", roleColor: .red, action: onCancel)
@@ -301,6 +427,42 @@ private struct AgentRunDetailView: View {
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .strokeBorder(tint.opacity(0.16), lineWidth: 1)
+        }
+    }
+
+    @ViewBuilder
+    private var resultActions: some View {
+        let text = deliverableText
+        if !text.isEmpty {
+            HStack(spacing: 10) {
+                Button {
+                    Platform.copyText(text)
+                    withAnimation { copied = true }
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .seconds(1.4))
+                        withAnimation { copied = false }
+                    }
+                } label: {
+                    Label(copied ? "已复制结果" : "复制结果", systemImage: copied ? "checkmark" : "doc.on.doc")
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.secondary.opacity(0.10), in: Capsule())
+                }
+                .buttonStyle(.borderless)
+                DeliverableStudioSheetButton(
+                    title: "\(run.title.isEmpty ? run.kind.displayName : run.title) 交付物",
+                    sourceKind: deliverableSourceKind,
+                    sourceText: text,
+                    targetKind: run.kind == .deepResearch ? .webpage : .markdown,
+                    goal: "整理 Agent 运行输入、过程和结果,便于复盘或分享",
+                    label: "转交付/发布",
+                    systemImage: "shippingbox.and.arrow.backward",
+                    tint: tint
+                )
+                Spacer()
+            }
+            .sectionCard()
         }
     }
 
@@ -465,6 +627,57 @@ private struct AgentRunDetailView: View {
         if let retryOf = run.retryOf { rows.append(("retryOf", retryOf.uuidString)) }
         rows.append(contentsOf: run.metadata.sorted { $0.key < $1.key }.map { ($0.key, $0.value) })
         return rows
+    }
+
+    private var deliverableSourceKind: DeliverableSourceKind {
+        switch run.kind {
+        case .deepResearch: return .research
+        case .meetingTask: return .meeting
+        default: return .custom
+        }
+    }
+
+    private var deliverableText: String {
+        var lines: [String] = [
+            "# \(run.title.isEmpty ? run.kind.displayName : run.title)",
+            "",
+            "## 状态",
+            "- 类型：\(run.kind.displayName)",
+            "- 状态：\(run.status.displayName)",
+            "- 审批：\(run.approvalStatus.displayName)",
+            "- 创建：\(formatDate(run.createdAt))"
+        ]
+        if !run.prompt.isEmpty {
+            lines.append(contentsOf: ["", "## 任务输入", run.prompt])
+        }
+        if let summary = run.summary, !summary.isEmpty {
+            lines.append(contentsOf: ["", "## 结果摘要", summary])
+        }
+        if let error = run.errorMessage, !error.isEmpty {
+            lines.append(contentsOf: ["", "## 错误信息", error])
+        }
+        if !run.steps.isEmpty {
+            lines.append(contentsOf: ["", "## 运行步骤"])
+            lines.append(contentsOf: run.steps.map { step in
+                var text = "- [\(step.status.displayName)] \(step.title)"
+                if !step.detail.isEmpty { text += " — \(step.detail)" }
+                if let result = step.resultSummary, !result.isEmpty { text += " · \(result)" }
+                if let error = step.errorMessage, !error.isEmpty { text += " · \(error)" }
+                return text
+            })
+        }
+        if !run.toolCalls.isEmpty {
+            lines.append(contentsOf: ["", "## 工具调用"])
+            lines.append(contentsOf: run.toolCalls.map { call in
+                var text = "- [\(call.status.displayName)] \(call.displayName)"
+                if !call.argumentsSummary.isEmpty { text += " — \(call.argumentsSummary)" }
+                if let result = call.resultSummary, !result.isEmpty { text += " · \(result)" }
+                if let error = call.errorMessage, !error.isEmpty { text += " · \(error)" }
+                return text
+            })
+        }
+        let body = lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        return body == "# \(run.title.isEmpty ? run.kind.displayName : run.title)\n\n## 状态" ? "" : body
     }
 
     private func placeholder(_ text: String) -> some View {
