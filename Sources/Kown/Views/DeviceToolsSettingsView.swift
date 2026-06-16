@@ -1,6 +1,8 @@
 import SwiftUI
 #if os(macOS)
 import AppKit
+#elseif os(iOS)
+import UIKit
 #endif
 
 /// 设备工具设置(设置 ▸ 设备工具)。让模型能在系统「提醒事项 / 备忘录」里创建条目。
@@ -12,6 +14,9 @@ struct DeviceToolsSettingsView: View {
 
     @State private var reminderAuthorized: Bool = false
     @State private var calendarAuthorized: Bool = false
+    #if canImport(EventKit)
+    @State private var calendarAccessState: EventKitService.AccessState = .notDetermined
+    #endif
     @State private var requesting = false
     @State private var requestingCalendar = false
 
@@ -41,6 +46,11 @@ struct DeviceToolsSettingsView: View {
         }
         .scrollIndicators(.automatic)
         .onAppear { refreshAuth() }
+        #if os(macOS)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in refreshAuth() }
+        #elseif os(iOS)
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in refreshAuth() }
+        #endif
     }
 
     private var toolColumns: [GridItem] {
@@ -74,9 +84,9 @@ struct DeviceToolsSettingsView: View {
                         color: reminderAuthorized ? .green : .orange
                     )
                     statusChip(
-                        title: calendarAuthorized ? "日历已授权" : "日历待授权",
-                        icon: calendarAuthorized ? "checkmark.circle.fill" : "exclamationmark.circle.fill",
-                        color: calendarAuthorized ? .green : .orange
+                        title: calendarHeroTitle,
+                        icon: calendarHeroIcon,
+                        color: calendarAuthColor
                     )
                     #if os(macOS)
                     statusChip(title: "备忘录自动化", icon: "note.text", color: .teal)
@@ -175,7 +185,7 @@ struct DeviceToolsSettingsView: View {
                     calendarAuthButton
                 }
             }
-            Text("模型添加日程时会按当前时间换算「明天下午 3 点」等相对时间;没给结束时间则默认 1 小时。")
+            Text(calendarHelpText)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -388,23 +398,115 @@ struct DeviceToolsSettingsView: View {
 
     private var calendarAuthPill: some View {
         statusChip(
-            title: calendarAuthorized ? "已授权" : "未授权",
+            title: calendarAuthTitle,
             icon: calendarAuthorized ? "checkmark.circle.fill" : "exclamationmark.circle.fill",
-            color: calendarAuthorized ? .green : .orange
+            color: calendarAuthColor
         )
     }
 
     private var calendarAuthButton: some View {
         Button {
-            requestCalendar()
+            if calendarNeedsSettings {
+                openCalendarSettings()
+            } else {
+                requestCalendar()
+            }
         } label: {
-            Label(requestingCalendar ? "请求中…" : "授权访问", systemImage: "lock.open")
+            Label(requestingCalendar ? "请求中…" : calendarButtonTitle, systemImage: calendarNeedsSettings ? "gearshape" : "lock.open")
                 .font(.caption.weight(.semibold))
         }
         .buttonStyle(.bordered)
         .tint(Self.tint)
         .disabled(requestingCalendar || calendarAuthorized)
         .fixedSize()
+    }
+
+    private var calendarHeroTitle: String {
+        #if canImport(EventKit)
+        switch calendarAccessState {
+        case .fullAccess: return "日历已授权"
+        case .writeOnly: return "日历仅添加"
+        case .denied, .restricted: return "日历需设置"
+        case .notDetermined: return "日历待授权"
+        case .unknown: return "日历状态未知"
+        }
+        #else
+        return calendarAuthorized ? "日历已授权" : "日历待授权"
+        #endif
+    }
+
+    private var calendarHeroIcon: String {
+        #if canImport(EventKit)
+        switch calendarAccessState {
+        case .fullAccess: return "checkmark.circle.fill"
+        case .writeOnly: return "calendar.badge.plus"
+        case .denied, .restricted, .notDetermined, .unknown: return "exclamationmark.circle.fill"
+        }
+        #else
+        return calendarAuthorized ? "checkmark.circle.fill" : "exclamationmark.circle.fill"
+        #endif
+    }
+
+    private var calendarAuthTitle: String {
+        #if canImport(EventKit)
+        switch calendarAccessState {
+        case .fullAccess: return "已授权"
+        case .writeOnly: return "仅可添加"
+        case .denied, .restricted: return "需到系统设置开启"
+        case .notDetermined: return "未授权"
+        case .unknown: return "状态未知"
+        }
+        #else
+        return calendarAuthorized ? "已授权" : "未授权"
+        #endif
+    }
+
+    private var calendarButtonTitle: String {
+        #if canImport(EventKit)
+        switch calendarAccessState {
+        case .writeOnly: return "升级完整访问"
+        case .denied, .restricted: return "打开系统设置"
+        default: return "授权访问"
+        }
+        #else
+        return "授权访问"
+        #endif
+    }
+
+    private var calendarHelpText: String {
+        #if canImport(EventKit)
+        switch calendarAccessState {
+        case .writeOnly:
+            return "当前只有「仅添加事件」权限:可创建新日程,但不能读取会议列表或把纪要写回已有事件。请升级为完整访问。"
+        case .denied, .restricted:
+            return "系统已拒绝日历访问:请到系统设置里允许 Kown 完整访问日历,回到 App 后状态会自动刷新。"
+        default:
+            return "模型添加日程时会按当前时间换算「明天下午 3 点」等相对时间;没给结束时间则默认 1 小时。自动会议捕获需要完整日历访问。"
+        }
+        #else
+        return "模型添加日程时会按当前时间换算「明天下午 3 点」等相对时间;没给结束时间则默认 1 小时。"
+        #endif
+    }
+
+    private var calendarAuthColor: Color {
+        #if canImport(EventKit)
+        switch calendarAccessState {
+        case .fullAccess: return .green
+        case .writeOnly: return .yellow
+        case .denied, .restricted: return .red
+        case .notDetermined, .unknown: return .orange
+        }
+        #else
+        return calendarAuthorized ? .green : .orange
+        #endif
+    }
+
+    private var calendarNeedsSettings: Bool {
+        #if canImport(EventKit)
+        return calendarAccessState.isDeniedOrRestricted
+        #else
+        return false
+        #endif
     }
 
     private func statusChip(title: String, icon: String, color: Color) -> some View {
@@ -451,6 +553,7 @@ struct DeviceToolsSettingsView: View {
     private func refreshAuth() {
         #if canImport(EventKit)
         reminderAuthorized = EventKitService.shared.isAuthorized
+        calendarAccessState = EventKitService.shared.eventAccessState
         calendarAuthorized = EventKitService.shared.isEventAuthorized
         #endif
     }
@@ -474,9 +577,21 @@ struct DeviceToolsSettingsView: View {
         Task {
             let granted = await EventKitService.shared.requestEventAccess()
             await MainActor.run {
-                calendarAuthorized = granted
+                calendarAccessState = EventKitService.shared.eventAccessState
+                calendarAuthorized = granted || EventKitService.shared.isEventAuthorized
                 requestingCalendar = false
             }
+        }
+        #endif
+    }
+    private func openCalendarSettings() {
+        #if os(macOS)
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars") {
+            NSWorkspace.shared.open(url)
+        }
+        #elseif os(iOS)
+        if let url = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(url)
         }
         #endif
     }

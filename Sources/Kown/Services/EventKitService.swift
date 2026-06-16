@@ -59,17 +59,22 @@ actor EventKitService {
 
     /// 当前是否已拿到完全访问权限(同步查询,不弹窗)。
     nonisolated var isAuthorized: Bool {
-        EKEventStore.authorizationStatus(for: .reminder) == .fullAccess
+        Self.hasFullOrLegacyAccess(EKEventStore.authorizationStatus(for: .reminder))
     }
 
     /// 请求完全访问权限。已授权直接返回 true;被拒/出错返回 false(不抛)。
     @discardableResult
     func requestAccess() async -> Bool {
-        if EKEventStore.authorizationStatus(for: .reminder) == .fullAccess { return true }
+        if Self.hasFullOrLegacyAccess(EKEventStore.authorizationStatus(for: .reminder)) {
+            store.reset()
+            return true
+        }
         do {
-            return try await store.requestFullAccessToReminders()
+            let granted = try await store.requestFullAccessToReminders()
+            if granted { store.reset() }
+            return granted || Self.hasFullOrLegacyAccess(EKEventStore.authorizationStatus(for: .reminder))
         } catch {
-            return false
+            return Self.hasFullOrLegacyAccess(EKEventStore.authorizationStatus(for: .reminder))
         }
     }
 
@@ -123,19 +128,46 @@ actor EventKitService {
     //
     // 日历授权与提醒**相互独立**(`.event` ≠ `.reminder`),但共用同一个 store 实例。
 
+    /// 当前日历授权状态(同步查询,不弹窗)。
+    nonisolated var eventAccessState: AccessState {
+        Self.accessState(for: EKEventStore.authorizationStatus(for: .event), entity: .event)
+    }
+
     /// 当前是否已拿到日历完全访问权限(同步查询,不弹窗)。
     nonisolated var isEventAuthorized: Bool {
-        EKEventStore.authorizationStatus(for: .event) == .fullAccess
+        Self.hasFullOrLegacyAccess(EKEventStore.authorizationStatus(for: .event))
     }
 
     /// 请求日历完全访问权限。已授权直接返回 true;被拒/出错返回 false(不抛)。
     @discardableResult
     func requestEventAccess() async -> Bool {
-        if EKEventStore.authorizationStatus(for: .event) == .fullAccess { return true }
+        if Self.hasFullOrLegacyAccess(EKEventStore.authorizationStatus(for: .event)) {
+            store.reset()
+            return true
+        }
         do {
-            return try await store.requestFullAccessToEvents()
+            let granted = try await store.requestFullAccessToEvents()
+            if granted { store.reset() }
+            return granted || Self.hasFullOrLegacyAccess(EKEventStore.authorizationStatus(for: .event))
         } catch {
-            return false
+            return Self.hasFullOrLegacyAccess(EKEventStore.authorizationStatus(for: .event))
+        }
+    }
+
+    /// 请求日历写入权限。只创建新日程时,系统的「仅添加事件」权限也足够。
+    @discardableResult
+    func requestEventWriteAccess() async -> Bool {
+        let status = EKEventStore.authorizationStatus(for: .event)
+        if Self.canWriteEvents(status) {
+            store.reset()
+            return true
+        }
+        do {
+            let granted = try await store.requestFullAccessToEvents()
+            if granted { store.reset() }
+            return granted || Self.canWriteEvents(EKEventStore.authorizationStatus(for: .event))
+        } catch {
+            return Self.canWriteEvents(EKEventStore.authorizationStatus(for: .event))
         }
     }
 
@@ -144,7 +176,7 @@ actor EventKitService {
                      end: Date?, location: String?) async throws -> EventCreateResult {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw EventKitError.underlying("日程标题不能为空。") }
-        guard await requestEventAccess() else { throw EventKitError.calendarDenied }
+        guard await requestEventWriteAccess() else { throw EventKitError.calendarDenied }
 
         let event = EKEvent(eventStore: store)
         event.title = trimmed
@@ -252,6 +284,55 @@ actor EventKitService {
         }
         return EventItem(title: event.title ?? "", start: event.startDate,
                          end: event.endDate, location: event.location)
+    }
+
+    // MARK: - 授权状态兼容
+
+    /// 给设置页展示用的轻量授权状态。
+    enum AccessState: Sendable, Equatable {
+        case notDetermined
+        case fullAccess
+        case writeOnly
+        case denied
+        case restricted
+        case unknown
+
+        var isDeniedOrRestricted: Bool {
+            self == .denied || self == .restricted
+        }
+    }
+
+    nonisolated static func accessState(for status: EKAuthorizationStatus, entity: EKEntityType) -> AccessState {
+        switch status {
+        case .notDetermined: return .notDetermined
+        case .restricted: return .restricted
+        case .denied: return .denied
+        case .authorized: return .fullAccess
+        case .fullAccess: return .fullAccess
+        case .writeOnly where entity == .event: return .writeOnly
+        case .writeOnly: return .restricted
+        @unknown default: return .unknown
+        }
+    }
+
+    /// macOS 14 / iOS 17 引入 `.fullAccess`,但旧系统升级或历史授权仍可能返回 `.authorized`。
+    nonisolated static func hasFullOrLegacyAccess(_ status: EKAuthorizationStatus) -> Bool {
+        switch status {
+        case .authorized, .fullAccess:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// 创建新日程只需要 full / legacy / write-only 中任一种可写权限。
+    nonisolated static func canWriteEvents(_ status: EKAuthorizationStatus) -> Bool {
+        switch status {
+        case .authorized, .fullAccess, .writeOnly:
+            return true
+        default:
+            return false
+        }
     }
 
     // MARK: - 会议判定(纯函数,不依赖 store 实例外的状态)
