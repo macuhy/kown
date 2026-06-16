@@ -90,7 +90,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.xiaobo.kown
         # 本地默认版本;CI 用命令行覆盖(发版走 ios-v* tag → MARKETING_VERSION)。
-        MARKETING_VERSION: "0.32.0"
+        MARKETING_VERSION: "0.32.2"
         CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_STYLE: Automatic
         # 仅当 CI 把 CODE_SIGN_STYLE 覆盖成 Manual 时才生效;本地 Automatic 会忽略它。
@@ -147,7 +147,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.xiaobo.kown.watchkitapp
-        MARKETING_VERSION: "0.32.0"
+        MARKETING_VERSION: "0.32.2"
         CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_STYLE: Automatic
         PROVISIONING_PROFILE_SPECIFIER: "Kown Watch AppStore"
@@ -192,7 +192,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.xiaobo.kown.watchkitapp.widgets
-        MARKETING_VERSION: "0.32.0"
+        MARKETING_VERSION: "0.32.2"
         CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_STYLE: Automatic
         PROVISIONING_PROFILE_SPECIFIER: "Kown Watch Widgets AppStore"
@@ -243,7 +243,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.xiaobo.kown.Keyboard
-        MARKETING_VERSION: "0.32.0"
+        MARKETING_VERSION: "0.32.2"
         CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_STYLE: Automatic
         PROVISIONING_PROFILE_SPECIFIER: "Kown Keyboard AppStore"
@@ -283,7 +283,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.xiaobo.kown.Share
-        MARKETING_VERSION: "0.32.0"
+        MARKETING_VERSION: "0.32.2"
         CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_STYLE: Automatic
         PROVISIONING_PROFILE_SPECIFIER: "Kown Share AppStore"
@@ -326,7 +326,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.xiaobo.kown.widgets
-        MARKETING_VERSION: "0.32.0"
+        MARKETING_VERSION: "0.32.2"
         CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_STYLE: Automatic
         # 仅当 CI 把 CODE_SIGN_STYLE 覆盖成 Manual 时才生效;本地 Automatic 会忽略它。
