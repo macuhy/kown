@@ -1305,7 +1305,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.32.4;
+				MARKETING_VERSION = 0.32.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown;
 				SDKROOT = macosx;
 				SWIFT_UPCOMING_FEATURE_STRICT_CONCURRENCY = YES;
@@ -1331,7 +1331,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.32.4;
+				MARKETING_VERSION = 0.32.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown;
 				SDKROOT = macosx;
 				SWIFT_UPCOMING_FEATURE_STRICT_CONCURRENCY = YES;
