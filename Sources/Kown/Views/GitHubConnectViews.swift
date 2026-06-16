@@ -99,6 +99,8 @@ struct GitHubRepoButton: View {
                 }
             }
             Divider()
+            // 常驻刷新入口:列表非空时也要能强制重拉(新建仓库 / 组织批准 OAuth App 后缓存是旧的)
+            Button("刷新仓库列表") { Task { await viewModel.loadGitHubRepos(force: true) } }
             if viewModel.currentGitHubRepo != nil {
                 Button("解除绑定", role: .destructive) { viewModel.clearGitHubRepo() }
             }

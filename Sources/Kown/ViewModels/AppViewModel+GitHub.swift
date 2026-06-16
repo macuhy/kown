@@ -41,6 +41,18 @@ extension AppViewModel {
         gitHubPendingDeviceCode = nil
     }
 
+    /// 重算 `gitHubConnected`,从最新 syncedDataDir 读取 token 实际状态。
+    /// 与 `refreshHasWebSearchKey` 同模式:init 评估时 iCloud 容器可能还没探测到位,
+    /// 从本地路径误读 → 永久显示「未连接」(firecrawl key「同步失败」的同款问题)。
+    /// 在 iCloud 容器到位 / refreshFromICloud / setICloudSyncEnabled 之后调用。
+    func refreshGitHubConnected() {
+        let connected = GitHubAuth.isConnected()
+        guard gitHubConnected != connected else { return }
+        gitHubConnected = connected
+        // token 消失(另一端断开 / 数据源切换)时清掉过期仓库缓存,避免菜单残留
+        if !connected { gitHubRepos = [] }
+    }
+
     /// 断开 GitHub:删 token、清缓存、解绑所有会话的仓库选择。
     func disconnectGitHub() {
         gitHubFlowTask?.cancel()

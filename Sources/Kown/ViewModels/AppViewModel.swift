@@ -79,6 +79,8 @@ final class AppViewModel {
     /// 接力流水线失败原因,key = turnID。
     var relayErrors: [UUID: String] = [:]
     /// GitHub 集成:是否已连接(token 存在)。连接 / 断开后刷新,驱动 UI 显示。
+    /// 注:init 评估时 iCloud 容器可能没就绪 → 从本地路径误读;与 hasWebSearchKey 同模式,
+    /// 在容器到位 / refreshFromICloud / setICloudSyncEnabled 后调 `refreshGitHubConnected()` 重算。
     var gitHubConnected: Bool = GitHubAuth.isConnected()
     /// 当前用户的 GitHub 仓库列表(选仓库菜单用,首次打开时按需拉取后缓存)。
     var gitHubRepos: [GitHubRepo] = []
@@ -389,9 +391,10 @@ final class AppViewModel {
             if self.iCloudSync.isEnabled, self.iCloudSync.isAvailable, !self.iCloudMigrationInFlight {
                 self.refreshFromICloud()
             } else {
-                // 没触发 iCloud 同步全套 reload 时,至少把 hasWebSearchKey 重新从 syncedDataDir 读一次,
-                // 避免 init 时刻 Container 没就绪导致永久误报 "未设置"。
+                // 没触发 iCloud 同步全套 reload 时,至少把 hasWebSearchKey / gitHubConnected
+                // 重新从 syncedDataDir 读一次,避免 init 时刻 Container 没就绪导致永久误报 "未设置/未连接"。
                 self.refreshHasWebSearchKey()
+                self.refreshGitHubConnected()
             }
         }
 
@@ -1431,6 +1434,8 @@ final class AppViewModel {
             self.conversations = ConversationStore.loadAll()
             self.conversationFolders = ConversationFolderStore.load()
             self.refreshHasWebSearchKey()
+            // GitHub token 也在 apikeys.json 里,数据源切换后同样要重算连接状态
+            self.refreshGitHubConnected()
             // 用量也跟着同步刷新 — 其他设备的 usage-*.json 文件可能刚被 iCloud 拉到本地
             UsageStore.shared.reload()
             // 胜率榜同理 — leaderboard.json 可能刚被 iCloud 拉下来
@@ -1463,6 +1468,8 @@ final class AppViewModel {
             // 缓存的 hasWebSearchKey 标志。拉到新 apikeys.json 后必须重算一次,否则另一端填的 key
             // 同步过来了却一直显示「未设置」(firecrawl key「同步失败」的真因)。
             self.refreshHasWebSearchKey()
+            // GitHub token 同在 apikeys.json:另一端授权后这边要重算,否则一直显示「未连接」
+            self.refreshGitHubConnected()
             // 用量也要 reload — 别的设备的 usage-*.json 可能刚被 iCloud 拉下来。
             // 启动 2s 后会自动走到这里,所以多端用量累加在 app 启动后短延迟就能看到。
             UsageStore.shared.reload()

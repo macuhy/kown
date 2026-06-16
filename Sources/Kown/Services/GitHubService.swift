@@ -160,21 +160,28 @@ struct GitHubClient: Sendable {
 
     // MARK: 仓库 / 文件（带 token）
 
-    /// 列出当前用户可写的仓库(按最近更新排序,取前 100 个）。
+    /// 列出当前用户可访问的仓库(个人 + 协作 + 组织,按最近更新排序)。
+    /// 翻页拉全:只取第一页时,仓库总数超 100 的用户会看不到排在后面的组织仓库。
+    /// 上限 10 页(1000 个)防极端账号无限翻页。
     func listRepos() async throws -> [GitHubRepo] {
-        let url = URL(string: "\(Self.api)/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member")!
-        let data = try await get(url)
-        guard let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
-            throw GitHubError.decoding("repos 响应非数组")
+        var repos: [GitHubRepo] = []
+        for page in 1...10 {
+            let url = URL(string: "\(Self.api)/user/repos?per_page=100&page=\(page)&sort=updated&affiliation=owner,collaborator,organization_member")!
+            let data = try await get(url)
+            guard let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+                throw GitHubError.decoding("repos 响应非数组")
+            }
+            repos.append(contentsOf: arr.compactMap { item in
+                guard let full = item["full_name"] as? String else { return nil }
+                return GitHubRepo(
+                    fullName: full,
+                    defaultBranch: (item["default_branch"] as? String) ?? "main",
+                    isPrivate: (item["private"] as? Bool) ?? false
+                )
+            })
+            if arr.count < 100 { break }   // 不满一页 = 最后一页
         }
-        return arr.compactMap { item in
-            guard let full = item["full_name"] as? String else { return nil }
-            return GitHubRepo(
-                fullName: full,
-                defaultBranch: (item["default_branch"] as? String) ?? "main",
-                isPrivate: (item["private"] as? Bool) ?? false
-            )
-        }
+        return repos
     }
 
     /// 列出仓库某分支的全部文件路径(blob),递归。用于让模型在改文件前知道仓库里有什么。
