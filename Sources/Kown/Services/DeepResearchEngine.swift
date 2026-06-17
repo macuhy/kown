@@ -10,6 +10,7 @@ import Foundation
 /// - 中途取消复用发送取消机制:引擎跑在 `runningTask` 里,各阶段检查 `Task.isCancelled`。
 @MainActor
 final class DeepResearchEngine {
+    typealias Redactor = (ProviderConfig, inout String, inout ChatOptions) -> PIIRedactor.StreamingRestorer?
 
     // MARK: - 可调常量
 
@@ -37,6 +38,10 @@ final class DeepResearchEngine {
     private let state: ResponseState
     /// 新来源上报(已全局去重、顺序即引用编号),由调用方并入 liveSources / state.sources。
     private let onSources: ([SourceRef]) -> Void
+    /// 步骤状态上报,供 AgentRunStore 等长期运行记录同步进度。
+    private let onStep: (ToolStep) -> Void
+    /// 复用主发送链路的 PII 出站脱敏/流式还原策略。
+    private let redactor: Redactor?
 
     /// 全局编号的来源列表(index + 1 = 引用编号 [n]),与上报给 UI 的顺序严格一致。
     private var sources: [SourceRef] = []
@@ -49,12 +54,16 @@ final class DeepResearchEngine {
          apiKey: String,
          web: WebSearchSession,
          state: ResponseState,
-         onSources: @escaping ([SourceRef]) -> Void) {
+         onSources: @escaping ([SourceRef]) -> Void,
+         onStep: @escaping (ToolStep) -> Void = { _ in },
+         redactor: Redactor? = nil) {
         self.provider = provider
         self.apiKey = apiKey
         self.web = web
         self.state = state
         self.onSources = onSources
+        self.onStep = onStep
+        self.redactor = redactor
     }
 
     // MARK: - 主流程
@@ -262,17 +271,20 @@ final class DeepResearchEngine {
                          temperature: Double?,
                          streamIntoState: Bool = false) async throws -> String {
         let client = ProviderRegistry.client(for: provider.kind)
-        let options = ChatOptions(systemPrompt: system,
+        var outboundPrompt = prompt
+        var options = ChatOptions(systemPrompt: system,
                                   temperature: temperature,
                                   maxTokens: provider.maxTokens)
+        let restorer = redactor?(provider, &outboundPrompt, &options)
         var collected = ""
-        for try await chunk in client.stream(prompt: prompt, options: options,
+        for try await chunk in client.stream(prompt: outboundPrompt, options: options,
                                              config: provider, apiKey: apiKey) {
             try Task.checkCancellation()
             switch chunk {
             case .text(let t):
-                collected += t
-                if streamIntoState { state.append(t) }
+                let text = restorer?.push(t) ?? t
+                collected += text
+                if streamIntoState { state.append(text) }
             case .reasoning(let r):
                 // 思考过程只在报告阶段透出(中间小调用的思考混进来会很乱)。
                 if streamIntoState { state.appendReasoning(r) }
@@ -284,6 +296,13 @@ final class DeepResearchEngine {
                                          inputTokens: input, outputTokens: output, cachedTokens: cached)
             default:
                 break
+            }
+        }
+        if let restorer {
+            let tail = restorer.flush()
+            if !tail.isEmpty {
+                collected += tail
+                if streamIntoState { state.append(tail) }
             }
         }
         return collected.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -308,7 +327,7 @@ final class DeepResearchEngine {
     private func beginStep(round: Int, tool: String, args: String) -> ToolStep {
         let step = ToolStep(id: UUID().uuidString, round: round, toolName: tool,
                             argsSummary: args, status: .running)
-        state.upsertToolStep(step)
+        publishStep(step)
         return step
     }
 
@@ -316,14 +335,19 @@ final class DeepResearchEngine {
         var s = step
         s.status = .done
         s.resultSummary = summary
-        state.upsertToolStep(s)
+        publishStep(s)
     }
 
     private func failStep(_ step: ToolStep, summary: String) {
         var s = step
         s.status = .error
         s.resultSummary = summary
-        state.upsertToolStep(s)
+        publishStep(s)
+    }
+
+    private func publishStep(_ step: ToolStep) {
+        state.upsertToolStep(step)
+        onStep(step)
     }
 
     /// 宽容解析模型输出的 JSON 字符串数组(容忍 ```json 围栏与前后赘述);失败返回空数组。

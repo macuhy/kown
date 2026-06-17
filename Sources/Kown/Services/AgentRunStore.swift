@@ -54,6 +54,32 @@ final class AgentRunStore {
         runs.first { $0.id == id }
     }
 
+    func filteredRuns(
+        status: AgentRun.Status? = nil,
+        kind: AgentRun.Kind? = nil,
+        query: String = ""
+    ) -> [AgentRun] {
+        var candidates = runs
+        if let status {
+            candidates = candidates.filter { $0.status == status }
+        }
+        if let kind {
+            candidates = candidates.filter { $0.kind == kind }
+        }
+
+        let tokens = query
+            .lowercased()
+            .split(whereSeparator: { $0.isWhitespace || $0.isNewline })
+            .map(String.init)
+            .filter { !$0.isEmpty }
+        guard !tokens.isEmpty else { return candidates }
+
+        return candidates.filter { run in
+            let text = Self.searchableText(for: run).lowercased()
+            return tokens.allSatisfy { text.contains($0) }
+        }
+    }
+
     @discardableResult
     func create(
         kind: AgentRun.Kind,
@@ -440,6 +466,47 @@ final class AgentRunStore {
 
     private func sortRuns() {
         runs = Self.sorted(runs)
+    }
+
+    nonisolated private static func searchableText(for run: AgentRun) -> String {
+        var parts: [String] = [
+            run.kind.displayName,
+            run.status.displayName,
+            run.approvalStatus.displayName,
+            run.title,
+            run.prompt,
+            run.summary ?? "",
+            run.errorMessage ?? "",
+            run.sourceID ?? "",
+            run.retryOf?.uuidString ?? ""
+        ]
+        parts.append(contentsOf: run.tags)
+        parts.append(contentsOf: run.metadata.flatMap { [$0.key, $0.value] })
+        for step in run.steps {
+            parts.append(contentsOf: [
+                step.title,
+                step.detail,
+                step.status.displayName,
+                step.resultSummary ?? "",
+                step.errorMessage ?? "",
+                step.approvalStatus.displayName
+            ])
+            parts.append(contentsOf: step.metadata.flatMap { [$0.key, $0.value] })
+        }
+        for call in run.toolCalls {
+            parts.append(contentsOf: [
+                call.name,
+                call.displayName,
+                call.argumentsSummary,
+                call.status.displayName,
+                call.resultSummary ?? "",
+                call.errorMessage ?? "",
+                call.approvalStatus.displayName,
+                call.externalID ?? ""
+            ])
+            parts.append(contentsOf: call.metadata.flatMap { [$0.key, $0.value] })
+        }
+        return parts.joined(separator: "\n")
     }
 
     nonisolated private static func sorted(_ runs: [AgentRun]) -> [AgentRun] {

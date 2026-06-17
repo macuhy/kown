@@ -11,6 +11,8 @@ struct AgentRunCenterView: View {
 
     @State private var selectedRunID: UUID?
     @State private var statusFilter: AgentRun.Status?
+    @State private var kindFilter: AgentRun.Kind?
+    @State private var searchText = ""
 
     init(
         store: AgentRunStore = .shared,
@@ -31,8 +33,7 @@ struct AgentRunCenterView: View {
     private let tint = Color(red: 0.10, green: 0.45, blue: 0.72)
 
     private var filteredRuns: [AgentRun] {
-        guard let statusFilter else { return store.runs }
-        return store.runs.filter { $0.status == statusFilter }
+        store.filteredRuns(status: statusFilter, kind: kindFilter, query: searchText)
     }
 
     private var selectedRun: AgentRun? {
@@ -77,12 +78,15 @@ struct AgentRunCenterView: View {
 
     private var runList: some View {
         VStack(spacing: 0) {
+            overviewBar
+            searchField
             filterBar
+            kindFilterBar
             attentionStrip
             Divider()
             List(selection: $selectedRunID) {
                 if filteredRuns.isEmpty {
-                    Text("暂无运行记录")
+                    Text(emptyListText)
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .padding(.vertical, 18)
@@ -95,6 +99,42 @@ struct AgentRunCenterView: View {
             }
             .listStyle(.sidebar)
         }
+    }
+
+    private var overviewBar: some View {
+        HStack(spacing: 8) {
+            overviewChip("活跃", value: activeCount, icon: "arrow.triangle.2.circlepath", color: .blue)
+            overviewChip("待批", value: approvalCount, icon: "hand.raised.fill", color: .orange)
+            overviewChip("失败", value: recentFailureCount, icon: "exclamationmark.triangle.fill", color: .red)
+            overviewChip("Token", valueText: compactTokenCount, icon: "number", color: tint)
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 10)
+        .padding(.bottom, 6)
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField("搜索运行、步骤、模型或错误", text: $searchText)
+                .textFieldStyle(.plain)
+            if !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Button {
+                    searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.tertiary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .font(.callout)
+        .padding(.horizontal, 11)
+        .padding(.vertical, 8)
+        .background(Color.platformControlBackground.opacity(0.75), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .padding(.horizontal, 12)
+        .padding(.bottom, 6)
     }
 
     @ViewBuilder
@@ -125,9 +165,10 @@ struct AgentRunCenterView: View {
     private var filterBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                filterChip(title: "全部", status: nil, count: store.runs.count)
+                filterChip(title: "全部", status: nil,
+                           count: store.filteredRuns(kind: kindFilter, query: searchText).count)
                 ForEach(AgentRun.Status.allCases, id: \.self) { status in
-                    let count = store.runs.filter { $0.status == status }.count
+                    let count = store.filteredRuns(status: status, kind: kindFilter, query: searchText).count
                     if count > 0 {
                         filterChip(title: status.displayName, status: status, count: count)
                     }
@@ -135,6 +176,23 @@ struct AgentRunCenterView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
+        }
+    }
+
+    private var kindFilterBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                kindFilterChip(title: "全部类型", kind: nil,
+                               count: store.filteredRuns(status: statusFilter, query: searchText).count)
+                ForEach(AgentRun.Kind.allCases, id: \.self) { kind in
+                    let count = store.filteredRuns(status: statusFilter, kind: kind, query: searchText).count
+                    if count > 0 {
+                        kindFilterChip(title: kind.displayName, kind: kind, count: count)
+                    }
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 10)
         }
     }
 
@@ -158,6 +216,55 @@ struct AgentRunCenterView: View {
             .foregroundStyle(statusFilter == status ? filterColor(for: status) : .secondary)
         }
         .buttonStyle(.plain)
+    }
+
+    private func kindFilterChip(title: String, kind: AgentRun.Kind?, count: Int) -> some View {
+        Button {
+            kindFilter = kind
+        } label: {
+            HStack(spacing: 5) {
+                if let kind {
+                    Image(systemName: kind.symbolName)
+                }
+                Text(title)
+                Text("\(count)")
+                    .font(.caption2.weight(.bold))
+                    .monospacedDigit()
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(.white.opacity(0.20), in: Capsule())
+            }
+            .font(.caption.weight(.semibold))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(kindColor(for: kind).opacity(kindFilter == kind ? 0.18 : 0.08), in: Capsule())
+            .foregroundStyle(kindFilter == kind ? kindColor(for: kind) : .secondary)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func overviewChip(_ title: String, value: Int, icon: String, color: Color) -> some View {
+        overviewChip(title, valueText: "\(value)", icon: icon, color: color)
+    }
+
+    private func overviewChip(_ title: String, valueText: String, icon: String, color: Color) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Text(valueText)
+                    .font(.caption.weight(.bold))
+                    .monospacedDigit()
+                    .foregroundStyle(.primary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 8)
+        .background(color.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .foregroundStyle(color)
     }
 
     private var emptyState: some View {
@@ -220,6 +327,44 @@ struct AgentRunCenterView: View {
 
     private func filterColor(for status: AgentRun.Status?) -> Color {
         status.map(color(for:)) ?? tint
+    }
+
+    private func kindColor(for kind: AgentRun.Kind?) -> Color {
+        guard let kind else { return tint }
+        switch kind {
+        case .longTask: return .indigo
+        case .deepResearch: return .blue
+        case .scheduledTask: return .teal
+        case .toolCall: return .orange
+        case .meetingTask: return .green
+        }
+    }
+
+    private var activeCount: Int {
+        store.runs.filter { $0.status.isActive }.count
+    }
+
+    private var approvalCount: Int {
+        store.runs.filter(\.needsApproval).count
+    }
+
+    private var recentFailureCount: Int {
+        let cutoff = Date().addingTimeInterval(-86_400)
+        return store.runs.filter {
+            ($0.status == .failed || $0.status == .cancelled) && $0.updatedAt >= cutoff
+        }.count
+    }
+
+    private var compactTokenCount: String {
+        let total = store.runs.reduce(0) { $0 + $1.cost.totalTokens }
+        if total >= 1_000_000 { return String(format: "%.1fM", Double(total) / 1_000_000) }
+        if total >= 1_000 { return String(format: "%.1fK", Double(total) / 1_000) }
+        return "\(total)"
+    }
+
+    private var emptyListText: String {
+        if store.runs.isEmpty { return "暂无运行记录" }
+        return "没有匹配的运行记录"
     }
 }
 

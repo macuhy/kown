@@ -1825,6 +1825,23 @@ extension AppViewModel {
             return ([:], [config.id.uuidString: "状态丢失"])
         }
         let apiKey = config.kind.isCLI ? "" : ((try? KeychainStore.load(id: config.id)) ?? "")
+        let runTitle = "深度研究 · \(String(question.prefix(32)))"
+        let agentRun = AgentRunStore.shared.create(
+            kind: .deepResearch,
+            title: runTitle,
+            prompt: question,
+            status: .running,
+            sourceID: conversationID,
+            tags: ["深度研究"],
+            metadata: [
+                "provider": config.displayName,
+                "providerKind": config.kind.rawValue,
+                "model": config.model,
+                "roundID": roundID,
+                "conversationTitle": conversationTitle
+            ]
+        )
+        var agentStepIDs: [String: UUID] = [:]
         let engine = DeepResearchEngine(
             provider: config, apiKey: apiKey, web: web, state: state,
             onSources: { [weak self, weak state] refs in
@@ -1836,6 +1853,40 @@ extension AppViewModel {
                     let stateKnown = Set(state.sources.map(\.url))
                     state.sources.append(contentsOf: refs.filter { !stateKnown.contains($0.url) })
                 }
+            },
+            onStep: { step in
+                let status = Self.agentRunStepStatus(from: step.status)
+                let resultSummary = step.status == .error ? nil : step.resultSummary
+                let errorMessage = step.status == .error ? step.resultSummary : nil
+                if let stepID = agentStepIDs[step.id] {
+                    AgentRunStore.shared.updateStep(
+                        runID: agentRun.id,
+                        stepID: stepID,
+                        status: status,
+                        resultSummary: resultSummary,
+                        errorMessage: errorMessage
+                    )
+                } else if let appended = AgentRunStore.shared.appendStep(
+                    to: agentRun.id,
+                    AgentRun.Step(
+                        title: step.displayName,
+                        detail: step.argsSummary,
+                        status: status,
+                        resultSummary: resultSummary,
+                        errorMessage: errorMessage,
+                        metadata: [
+                            "toolStepID": step.id,
+                            "toolName": step.toolName,
+                            "round": "\(step.round + 1)"
+                        ]
+                    )
+                ) {
+                    agentStepIDs[step.id] = appended.id
+                }
+            },
+            redactor: { [weak self] config, prompt, options in
+                guard let self else { return nil }
+                return self.applyPIIRedaction(config: config, prompt: &prompt, options: &options)
             }
         )
         let result = await engine.run(question: question, systemPrompt: systemPrompt)
@@ -1843,6 +1894,35 @@ extension AppViewModel {
             state.fail(err)
         } else {
             state.finish()
+        }
+
+        let estimatedCost = ProviderModelCatalog.estimatedCost(
+            model: config.model,
+            providerKind: config.kind,
+            input: state.inputTokens,
+            output: state.outputTokens
+        ) ?? 0
+        AgentRunStore.shared.setCost(
+            runID: agentRun.id,
+            cost: AgentRun.Cost(
+                inputTokens: state.inputTokens,
+                outputTokens: state.outputTokens,
+                cachedInputTokens: state.cachedInputTokens,
+                estimatedUSD: estimatedCost
+            )
+        )
+        if let err = result.error {
+            if err == "已取消" {
+                AgentRunStore.shared.cancel(agentRun.id, reason: err)
+            } else {
+                AgentRunStore.shared.transition(agentRun.id, to: .failed, reason: err)
+            }
+        } else {
+            AgentRunStore.shared.transition(
+                agentRun.id,
+                to: .succeeded,
+                reason: "完成 \(state.charCount) 字报告,引用 \(result.sources.count) 个来源。"
+            )
         }
 
         ResponseLogger.writeAsync(.init(
@@ -1864,6 +1944,14 @@ extension AppViewModel {
         var errors: [String: String] = [:]
         if let err = result.error { errors[config.id.uuidString] = err }
         return ([config.id.uuidString: state.text], errors)
+    }
+
+    private static func agentRunStepStatus(from status: ToolStep.Status) -> AgentRun.StepStatus {
+        switch status {
+        case .running: return .running
+        case .done: return .done
+        case .error: return .error
+        }
     }
 
     // MARK: - Tournament(擂台 / 淘汰赛)裁定

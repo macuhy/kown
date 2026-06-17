@@ -110,6 +110,26 @@ final class AgentRunStoreTests: XCTestCase {
         XCTAssertTrue(cards.contains { $0.level == .success && $0.message == "完成" })
     }
 
+    func testFilteredRunsSearchesAcrossMetadataStepsAndToolCalls() {
+        let store = AgentRunStore.inMemory()
+        let research = store.create(
+            kind: .deepResearch,
+            title: "研究 SwiftUI Observation",
+            prompt: "对比状态管理",
+            status: .running,
+            tags: ["ui"],
+            metadata: ["model": "gemini-2.5-pro"]
+        )
+        _ = store.appendStep(to: research.id, title: "抓取正文", detail: "developer.apple.com", status: .done)
+        _ = store.create(kind: .scheduledTask, title: "日报", prompt: "总结市场新闻", status: .queued)
+        let tool = store.create(kind: .toolCall, title: "代码执行", status: .running)
+        _ = store.appendToolCall(to: tool.id, name: "run_code", argumentsSummary: "python revenue forecast", status: .done)
+
+        XCTAssertEqual(store.filteredRuns(query: "swiftui gemini").map(\.id), [research.id])
+        XCTAssertEqual(store.filteredRuns(kind: .toolCall, query: "python").map(\.id), [tool.id])
+        XCTAssertTrue(store.filteredRuns(status: .succeeded, query: "swiftui").isEmpty)
+    }
+
     private func temporaryURL() throws -> URL {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("AgentRunStoreTests-\(UUID().uuidString)", isDirectory: true)
