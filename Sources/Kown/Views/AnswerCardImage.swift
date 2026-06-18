@@ -1,5 +1,5 @@
 import SwiftUI
-import MarkdownUI
+import Textual
 #if os(macOS)
 import AppKit
 typealias PlatformImage = NSImage
@@ -9,7 +9,7 @@ typealias PlatformImage = UIImage
 #endif
 
 /// 用于导出成图片的回答卡片(ImageRenderer 渲染目标)。固定宽度、浅色底。
-/// 用 MarkdownUI 渲染完整 markdown(标题/代码块/表格/列表),代码块自动换行不撑宽。
+/// 用 Textual 原生管线渲染完整 markdown(标题/代码块/表格/列表),代码块自动换行不撑宽。
 struct AnswerCardImage: View {
     let providerName: String
     let model: String
@@ -25,9 +25,7 @@ struct AnswerCardImage: View {
                 Spacer()
             }
             Rectangle().fill(Color.black.opacity(0.08)).frame(height: 1)
-            Markdown(MD.stylizeMath(text))
-                .markdownTheme(MD.exportTheme)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            MD.renderedForExport(MD.stylizeMath(text))
             Rectangle().fill(Color.black.opacity(0.08)).frame(height: 1)
             Text("via Kown").font(.caption2).foregroundStyle(.secondary)
         }
@@ -134,9 +132,7 @@ private struct ShareAnswerPanel: View {
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else {
-            Markdown(MD.stylizeMath(capText ? shareCap(text) : text))
-                .markdownTheme(MD.exportTheme)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            MD.renderedForExport(MD.stylizeMath(capText ? shareCap(text) : text))
         }
     }
 }
@@ -168,9 +164,7 @@ private struct ShareChairBlock: View {
                 Spacer(minLength: 0)
             }
             Rectangle().fill(role.tint.opacity(0.18)).frame(height: 1)
-            Markdown(MD.stylizeMath(capText ? shareCap(text) : text))
-                .markdownTheme(MD.exportTheme)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            MD.renderedForExport(MD.stylizeMath(capText ? shareCap(text) : text))
         }
         .padding(16)
         .frame(width: width, alignment: .leading)

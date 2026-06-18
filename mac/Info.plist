@@ -34,7 +34,7 @@
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.productivity</string>
 	<key>LSMinimumSystemVersion</key>
-	<string>14.0</string>
+	<string>15.0</string>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Kown 用自动化把整理好的内容写进「备忘录」。</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>

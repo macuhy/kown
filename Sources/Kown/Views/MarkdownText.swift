@@ -1,5 +1,5 @@
 import SwiftUI
-import MarkdownUI
+import Textual
 
 /// 把正文里的 `[n]`(1≤n≤来源数)替换成指向对应来源的 markdown 链接,链接文字仍是 `[n]`。
 /// 这样答卡正文里的引用角标可直接点开来源,且复用现有 markdown 链接渲染(不改渲染器)。
@@ -49,12 +49,8 @@ private struct CitationMemoKey: Hashable {
 /// 模型输出渲染:
 /// - **streaming=true**: 渲染**节流快照**的 markdown(每 ~150ms 取一次 text),把"每 chunk 重 parse
 ///   整段"(O(N²))降为按时间节流;未闭合代码围栏临时补全;流式期间不开 textSelection 更轻;超长(>6000 字)退回 raw。
-/// - **finished**: 双路径:
-///   - 默认走 `Text(AttributedString(markdown:))` — **整个回答作为单个 Text view**,
-///     支持跨段/跨标题/跨列表的全文拖选。内联格式(粗体/斜体/inline code/链接)保留。
-///     常见块级语法(标题 / 分割线)会先折成可选富文本,避免多列卡片里一边能选一边不能选。
-///   - 含代码块(```或 ~~~)/ 表格 / 任务列表(`- [ ]`)的回答 fallback 到 swift-markdown-ui,
-///     保留代码块、表格、checkbox 视觉;完成态同样开启系统文本选择,可像备忘录一样选中拷贝片段。
+/// - **finished**: 走 Textual 的 SwiftUI 原生 `StructuredText` 管线,保留代码块/表格/列表视觉,
+///   同时避免 MarkdownUI/cmark 的重解析和复杂 View 树拖慢长会话滚动。
 struct MarkdownText: View {
     let text: String
     var streaming: Bool = false
@@ -118,7 +114,7 @@ private struct StreamingMarkdownText: View {
 }
 
 /// Equatable 包装:父视图仍会跟随 live text 高频刷新,但只要节流后的 source 没变,
-/// SwiftUI 就不用重新跑 `AttributedString(markdown:)` / MarkdownUI 解析。
+/// SwiftUI 就不用重新跑 Textual 的 markdown 解析。
 private struct MarkdownRenderView: View, Equatable {
     let source: String
     let selectable: Bool
@@ -165,30 +161,27 @@ enum MD {
     /// `selectable` 只在完成态开启;流式期间关闭,避免高频刷新时选择层反复重布局。
     @ViewBuilder
     static func rendered(for src: String, selectable: Bool) -> some View {
-        if hasBlockLevelExtras(src) {
-            Markdown(src)
-                .textSelectable(selectable)
-                .markdownTheme(kownTheme)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        } else if let attr = try? AttributedString(markdown: inlineRichCached(src), options: .init(
-            allowsExtendedAttributes: true,
-            interpretedSyntax: .inlineOnlyPreservingWhitespace,
-            failurePolicy: .returnPartiallyParsedIfPossible
-        )) {
-            Text(attr)
-                .textSelectable(selectable)
-                .font(.body)
-                .lineSpacing(5)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
+        let view = StructuredText(markdown: linkifiedMarkdownCached(src))
+            .textual.structuredTextStyle(.gitHub)
+            .textual.codeBlockStyle(KownTextualCodeBlockStyle())
+            .textual.overflowMode(.scroll)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        if selectable {
+            view.textual.textSelection(.enabled)
         } else {
-            Markdown(src)
-                .textSelectable(selectable)
-                .markdownTheme(kownTheme)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            view
         }
+    }
+
+    /// 分享图/PDF 使用同一原生 Markdown 管线,但关闭横向滚动并隐藏交互按钮,避免导出图片被长代码行撑宽。
+    @ViewBuilder
+    static func renderedForExport(_ src: String) -> some View {
+        StructuredText(markdown: src)
+            .textual.structuredTextStyle(.gitHub)
+            .textual.overflowMode(.wrap)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // 裸 URL → markdown 链接。lookbehind 跳过已是 `](url)` / `<url>` / `"url"` 的情况。
@@ -213,18 +206,18 @@ enum MD {
         return result
     }
 
-    /// `linkify(selectableRichMarkdown(:))` 的记忆版,供 `rendered` 的单 Text 路径使用:
-    /// 该路径每次求值都要跑 3 条正则整段扫描,静态历史卡被反复求值时同一段文本被反复扫。
+    /// 裸链接补 markdown 语法的记忆版,供 Textual 解析前使用。
+    /// 只处理无代码块/表格/任务列表的轻量正文,避免误改代码块里的 URL。
     /// 结果直接作为正文渲染,哈希碰撞不可接受,故用原文做 key(String 为 COW,key 只持引用);
-    /// 到 128 条清空封顶。流式快照也会进来(每 ~200ms 一条新文本),最坏只是周期性清表后
-    /// 各重算一次,不劣于不缓存,tick 间隔内的重复求值反而能命中。
-    private static var inlineRichMemo: [String: String] = [:]
+    /// 到 128 条清空封顶。
+    private static var linkifiedMarkdownMemo: [String: String] = [:]
 
-    private static func inlineRichCached(_ s: String) -> String {
-        if let cached = inlineRichMemo[s] { return cached }
-        let result = linkify(selectableRichMarkdown(s))
-        if inlineRichMemo.count >= 128 { inlineRichMemo.removeAll(keepingCapacity: true) }
-        inlineRichMemo[s] = result
+    private static func linkifiedMarkdownCached(_ s: String) -> String {
+        if hasBlockLevelExtras(s) { return s }
+        if let cached = linkifiedMarkdownMemo[s] { return cached }
+        let result = linkify(s)
+        if linkifiedMarkdownMemo.count >= 128 { linkifiedMarkdownMemo.removeAll(keepingCapacity: true) }
+        linkifiedMarkdownMemo[s] = result
         return result
     }
 
@@ -275,12 +268,12 @@ enum MD {
         return result
     }
 
-    /// hasBlockLevelExtras 记忆表:MD.rendered 每次渲染都调它(跑最多 5 条正则整段扫描),
+    /// hasBlockLevelExtras 记忆表:Textual 解析前判断是否能安全 linkify(跑最多 5 条正则整段扫描),
     /// 完成卡折叠/展开会一帧内把所有可见卡重渲一遍 → 同一段文本被反复扫。按内容 hash 记忆最近结果。
     /// 哈希碰撞最坏只让某次渲染走错 inline/block 分支一帧,可接受;到 128 条清空封顶,防无限增长。
     private static var blockExtrasMemo: [Int: Bool] = [:]
 
-    /// 含代码块 / 表格 / 任务列表 — 这些 block 用 AttributedString 渲染体验差,继续走 MarkdownUI。
+    /// 含代码块 / 表格 / 任务列表时不做裸 URL linkify,避免误改 block 内源码。
     static func hasBlockLevelExtras(_ text: String) -> Bool {
         let key = text.hashValue
         if let cached = blockExtrasMemo[key] { return cached }
@@ -296,180 +289,70 @@ enum MD {
         || text.range(of: #"^\|.+\|"#, options: [.regularExpression, .anchored]) != nil
         || text.range(of: #"\n\|.+\|"#, options: .regularExpression) != nil
         || text.range(of: #"(?m)^[ \t]*[-*] \[[ xX]\] "#, options: .regularExpression) != nil
-        // 普通标题 / 分割线仍走单个 Text 路径:多模型并排时 MarkdownUI 的块级 Text 选择不稳定,
-        // 单 Text 能保证每张卡都可像备忘录一样拖选复制。
-    }
-
-    private static let headingRe = try? NSRegularExpression(
-        pattern: #"(?m)^[ \t]{0,3}#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$"#
-    )
-    private static let horizontalRuleRe = try? NSRegularExpression(
-        pattern: #"(?m)^[ \t]{0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$"#
-    )
-
-    /// 单 `Text` 可选路径用的轻量块级规范化:
-    /// - `### 标题` → `**标题**`,保留标题的富文本感,同时避免落到 MarkdownUI 的多块选择路径。
-    /// - `---` 分割线 → 视觉分隔字符,避免显示 markdown 源码。
-    static func selectableRichMarkdown(_ s: String) -> String {
-        var out = replaceCapture(s, headingRe) { "**\($0)**" }
-        out = replaceMatches(out, horizontalRuleRe) { _ in "────────" }
-        return out
-    }
-
-    private static func replaceMatches(_ s: String, _ re: NSRegularExpression?, _ transform: (String) -> String) -> String {
-        guard let re else { return s }
-        let ns = s as NSString
-        var result = ""
-        var last = 0
-        re.enumerateMatches(in: s, range: NSRange(location: 0, length: ns.length)) { m, _, _ in
-            guard let m else { return }
-            result += ns.substring(with: NSRange(location: last, length: m.range.location - last))
-            result += transform(ns.substring(with: m.range))
-            last = m.range.location + m.range.length
-        }
-        result += ns.substring(from: last)
-        return result
-    }
-
-    /// `Theme` 不是 Sendable;计算属性每次实例化,SwiftUI 缓存渲染结果。
-    static var kownTheme: Theme {
-        Theme.gitHub
-            .text { FontSize(.em(1.0)) }
-            .code {
-                FontFamilyVariant(.monospaced)
-                FontSize(.em(0.92))
-                BackgroundColor(inlineCodeBackground)
-            }
-            .link {
-                ForegroundColor(.accentColor)
-                UnderlineStyle(.single)
-            }
-            .codeBlock { configuration in
-                CodeBlockView(configuration: configuration)
-            }
+        // 标题 / 分割线交给 Textual 原生结构化渲染。
     }
 
     static var inlineCodeBackground: Color { Color.primary.opacity(0.08) }
+}
 
-    /// 导出图片专用主题:与聊天一致的块级渲染,但代码块**自动换行**(不横滚、不 fixedSize),
-    /// 避免 ImageRenderer 下长行把图片撑得过宽。
-    static var exportTheme: Theme {
-        Theme.gitHub
-            .text { FontSize(.em(1.0)) }
-            .code {
-                FontFamilyVariant(.monospaced)
-                FontSize(.em(0.9))
-                BackgroundColor(inlineCodeBackground)
-            }
-            .link { ForegroundColor(.accentColor) }
-            .codeBlock { configuration in
-                configuration.label
-                    .markdownTextStyle {
-                        FontFamilyVariant(.monospaced)
-                        FontSize(.em(0.82))
-                    }
-                    .padding(10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
-                    .markdownMargin(top: .em(0.5), bottom: .em(0.5))
-            }
+/// Textual 代码块样式:保留 GitHub 风格语法高亮和横向溢出容器,只叠加语言标签/复制按钮。
+/// Textual 不暴露代码块原文给样式层,所以复制走库内置 `CodeBlockProxy` 的原生 pasteboard 支持。
+private struct KownTextualCodeBlockStyle: StructuredText.CodeBlockStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        KownTextualCodeBlock(configuration: configuration)
     }
 }
 
-/// 代码块渲染:等宽字体 + 横向滚动(长行不换行)+ 右上角「复制」按钮;
-/// 可运行语言(CodeSandboxService 支持的)再加「运行」按钮,结果内嵌在代码块下方。
-/// macOS 上指针悬停时按钮高亮,iOS 上常驻可点。复制走 `Platform.copyText`。
-private struct CodeBlockView: View {
-    let configuration: CodeBlockConfiguration
-
+private struct KownTextualCodeBlock: View {
+    let configuration: StructuredText.CodeBlockStyleConfiguration
     @State private var copied = false
-    /// 运行状态自持在本代码块的 @State 上(独立 @Observable):状态变化只重渲当前块,
-    /// 不触发历史列表整列重渲;不落盘,卡片销毁即消失。
-    @State private var runner = CodeRunController()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ZStack(alignment: .topTrailing) {
-                // 横向滚动:代码长行保持不换行,溢出可左右滑
-                ScrollView(.horizontal, showsIndicators: true) {
-                    // 自绘语法高亮(按围栏语言着色),替代 MarkdownUI 的纯色 label。
-                    Text(SyntaxHighlighter.highlight(configuration.content, language: configuration.language))
-                        .font(.system(size: 12.5, design: .monospaced))
-                        .padding(.horizontal, 12)
-                        .padding(.top, languageTag == nil ? 10 : 24)
-                        .padding(.bottom, 10)
-                        // 让短代码块也能撑满宽度,文字左对齐
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .fixedSize(horizontal: true, vertical: false)
-                }
-                .background(Self.blockBackground)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .strokeBorder(Color.primary.opacity(0.10), lineWidth: 1)
-                )
+        ZStack(alignment: .topTrailing) {
+            Overflow {
+                configuration.label
+                    .textual.lineSpacing(.fontScaled(0.225))
+                    .textual.fontScale(0.85)
+                    .monospaced()
+                    .padding(.horizontal, 12)
+                    .padding(.top, languageTag == nil ? 10 : 24)
+                    .padding(.bottom, 10)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .background(Color.primary.opacity(0.05))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(Color.primary.opacity(0.10), lineWidth: 1)
+            }
 
-                if let lang = languageTag {
-                    Text(lang)
-                        .font(.system(size: 10, weight: .bold, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 7).padding(.vertical, 3)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.leading, 4)
-                        .padding(.top, 4)
-                }
+            if let lang = languageTag {
+                Text(lang)
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.leading, 4)
+                    .padding(.top, 4)
+            }
 
-                HStack(spacing: 6) {
-                    if let lang = runLanguage {
-                        runButton(lang)
-                    }
-                    copyButton
-                }
+            copyButton
                 .padding(8)
-            }
-
-            // 内嵌运行结果区(运行中转圈 / stdout / stderr / 超时,可折叠)。
-            if runner.phase != .idle, let lang = runLanguage {
-                CodeRunResultPanel(controller: runner, language: lang, code: configuration.content)
-            }
         }
-        .markdownMargin(top: .em(0.6), bottom: .em(0.6))
+        .textual.blockSpacing(.fontScaled(top: 0.6, bottom: 0.6))
     }
 
-    /// 围栏语言标签(非空才显示)。
     private var languageTag: String? {
-        guard let l = configuration.language?.trimmingCharacters(in: .whitespaces), !l.isEmpty else { return nil }
-        return l.lowercased()
-    }
-
-    /// 归一后的可运行语言;nil = 当前平台不支持,不显示运行按钮。
-    private var runLanguage: String? {
-        runnableLanguage(forFence: configuration.language)
-    }
-
-    /// 「运行」按钮:点击执行;运行中变为停止图标,再点取消(重复点运行也会先取消上一次)。
-    private func runButton(_ lang: String) -> some View {
-        Button {
-            if runner.phase == .running {
-                runner.cancel()
-            } else {
-                runner.run(language: lang, code: configuration.content)
-            }
-        } label: {
-            Image(systemName: runner.phase == .running ? "stop.fill" : "play.fill")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(runner.phase == .running ? Color.orange : Color.secondary)
-                .padding(6)
-                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 6))
-        }
-        .buttonStyle(.plain)
-        .help(runner.phase == .running ? "停止运行" : "运行代码")
-        .accessibilityLabel(runner.phase == .running ? "停止运行" : "运行代码")
+        guard let language = configuration.languageHint?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !language.isEmpty else { return nil }
+        return language.lowercased()
     }
 
     private var copyButton: some View {
         Button {
-            Platform.copyText(configuration.content)
+            configuration.codeBlock.copyToPasteboard()
             withAnimation { copied = true }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
                 withAnimation { copied = false }
@@ -484,10 +367,6 @@ private struct CodeBlockView: View {
         .buttonStyle(.plain)
         .help(copied ? "已复制" : "复制代码")
         .accessibilityLabel(copied ? "已复制" : "复制代码")
-    }
-
-    private static var blockBackground: Color {
-        Color.primary.opacity(0.05)
     }
 }
 

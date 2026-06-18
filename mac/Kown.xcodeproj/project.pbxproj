@@ -106,7 +106,7 @@
 		5D9AF26CAD876C5811778057 /* MCPServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D645C797069A3DE2337B644 /* MCPServer.swift */; };
 		5F1A0E334420452C494B0437 /* GitHubConnectViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74F9068B4A8CF8A86C53E00F /* GitHubConnectViews.swift */; };
 		5F28C5030B88AF0BBCE9BAFB /* ConversationRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E99E10045CA633CC12C339A4 /* ConversationRowView.swift */; };
-		5F5B8612E2826B0709CC10D2 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 03754B00E6FF65D102142998 /* MarkdownUI */; };
+		5F5B8612E2826B0709CC10D2 /* Textual in Frameworks */ = {isa = PBXBuildFile; productRef = 98323354C4F332B53D39F7BC /* Textual */; };
 		6007BD2F1C199504FA140386 /* TranslateTextIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 487FE43C44AAC9A49A2881FD /* TranslateTextIntent.swift */; };
 		61C0DB45B1866244F7C98DEC /* ModeTabsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19C42B62D779696D4A48F9C7 /* ModeTabsView.swift */; };
 		620786F19645F71B291B5DEC /* ModelDoctorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CEBBC4C0FFBF63B1EB7CC12 /* ModelDoctorView.swift */; };
@@ -524,7 +524,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				5F5B8612E2826B0709CC10D2 /* MarkdownUI in Frameworks */,
+				5F5B8612E2826B0709CC10D2 /* Textual in Frameworks */,
 				88EA49C0CEC2CC668CA6B995 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -930,7 +930,7 @@
 			);
 			name = Kown;
 			packageProductDependencies = (
-				03754B00E6FF65D102142998 /* MarkdownUI */,
+				98323354C4F332B53D39F7BC /* Textual */,
 				1EC08FBC2A1DEBCFBB480821 /* Sparkle */,
 			);
 			productName = Kown;
@@ -962,8 +962,8 @@
 			mainGroup = 7B27D1438A66F9C366341E8A;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				12DBABACAECD0E6C2EA27F0C /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
 				FAA7E8E7F9670F8F2DB205D1 /* XCRemoteSwiftPackageReference "Sparkle" */,
+				E19F0FEC3A55BD5ED767A429 /* XCRemoteSwiftPackageReference "textual" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = C6EFD1DDA8489A567D112DC2 /* Products */;
@@ -1299,7 +1299,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -1356,7 +1356,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -1384,8 +1384,8 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.36.2;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 0.36.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown;
 				SDKROOT = macosx;
 				SWIFT_UPCOMING_FEATURE_STRICT_CONCURRENCY = YES;
@@ -1410,8 +1410,8 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.36.2;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 0.36.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown;
 				SDKROOT = macosx;
 				SWIFT_UPCOMING_FEATURE_STRICT_CONCURRENCY = YES;
@@ -1443,12 +1443,12 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		12DBABACAECD0E6C2EA27F0C /* XCRemoteSwiftPackageReference "swift-markdown-ui" */ = {
+		E19F0FEC3A55BD5ED767A429 /* XCRemoteSwiftPackageReference "textual" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/gonzalezreal/swift-markdown-ui";
+			repositoryURL = "https://github.com/gonzalezreal/textual";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 2.4.0;
+				minimumVersion = 0.5.0;
 			};
 		};
 		FAA7E8E7F9670F8F2DB205D1 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
@@ -1462,15 +1462,15 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		03754B00E6FF65D102142998 /* MarkdownUI */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 12DBABACAECD0E6C2EA27F0C /* XCRemoteSwiftPackageReference "swift-markdown-ui" */;
-			productName = MarkdownUI;
-		};
 		1EC08FBC2A1DEBCFBB480821 /* Sparkle */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = FAA7E8E7F9670F8F2DB205D1 /* XCRemoteSwiftPackageReference "Sparkle" */;
 			productName = Sparkle;
+		};
+		98323354C4F332B53D39F7BC /* Textual */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E19F0FEC3A55BD5ED767A429 /* XCRemoteSwiftPackageReference "textual" */;
+			productName = Textual;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
