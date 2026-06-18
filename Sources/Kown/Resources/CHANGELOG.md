@@ -1,9 +1,11 @@
 # 更新日志
 
-## 0.36.3 — 2026-06-18
+## 0.36.4 — 2026-06-18
 ### 改进
 - **Markdown 渲染换成原生 Textual 管线** — 回答正文、代码块、表格、列表和分享图从 MarkdownUI/cmark 切到 Textual 的 SwiftUI `Text` 渲染管线,减少长会话滚动时的重解析和复杂布局开销。
 - **最低系统版本升级** — macOS 最低版本调整为 15.0,iOS 主 App 最低版本调整为 18.0,以启用 Textual 的原生文本选择、语法高亮和平台适配能力。
+### 修复
+- **发版构建兼容 Textual 资源包** — macOS 发版配置改为只给 App target 注入 Developer ID profile,避免 Textual/SwiftUIMath 资源 bundle 被套用 provisioning profile。
 
 ## 0.36.2 — 2026-06-18
 ### 修复

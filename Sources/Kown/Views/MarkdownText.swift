@@ -292,6 +292,35 @@ enum MD {
         // 标题 / 分割线交给 Textual 原生结构化渲染。
     }
 
+    private static let headingRe = try? NSRegularExpression(
+        pattern: #"(?m)^[ \t]{0,3}#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$"#
+    )
+    private static let horizontalRuleRe = try? NSRegularExpression(
+        pattern: #"(?m)^[ \t]{0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$"#
+    )
+
+    /// 旧单 `Text` 路径的规范化 helper。Textual 渲染不再使用它,保留给单元测试和兼容调用方。
+    static func selectableRichMarkdown(_ s: String) -> String {
+        var out = replaceCapture(s, headingRe) { "**\($0)**" }
+        out = replaceMatches(out, horizontalRuleRe) { _ in "────────" }
+        return out
+    }
+
+    private static func replaceMatches(_ s: String, _ re: NSRegularExpression?, _ transform: (String) -> String) -> String {
+        guard let re else { return s }
+        let ns = s as NSString
+        var result = ""
+        var last = 0
+        re.enumerateMatches(in: s, range: NSRange(location: 0, length: ns.length)) { m, _, _ in
+            guard let m else { return }
+            result += ns.substring(with: NSRange(location: last, length: m.range.location - last))
+            result += transform(ns.substring(with: m.range))
+            last = m.range.location + m.range.length
+        }
+        result += ns.substring(from: last)
+        return result
+    }
+
     static var inlineCodeBackground: Color { Color.primary.opacity(0.08) }
 }
 

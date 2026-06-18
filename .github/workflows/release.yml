@@ -40,7 +40,9 @@ jobs:
       # mac/Kown.xcodeproj 已由 xcodegen 本地生成并提交（含 Sparkle），CI 直接构建
       use_xcodegen: false
       # Kown 带 iCloud entitlement → 需 Developer ID provisioning profile
-      provisioning_profile_specifier: "Kown Developer ID"
+      # 不能直接传 profile 名:命令行 build setting 会套到 Textual/SwiftUIMath 的资源 bundle target,
+      # 导致 "does not support provisioning profiles"。用 target-local 变量只让 Kown App 展开成 profile。
+      provisioning_profile_specifier: "$(KOWN_DEVELOPER_ID_PROFILE)"
 
   # 发版结束后发邮件通知(成功/失败都发)。
   # 需在仓库 Settings ▸ Secrets and variables ▸ Actions 配置:
