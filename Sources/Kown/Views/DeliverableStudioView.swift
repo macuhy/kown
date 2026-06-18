@@ -10,6 +10,10 @@ struct DeliverableStudioView: View {
     @State private var deliverable: Deliverable
     @State private var copied = false
     @State private var publishPayload: ArtifactPublishPayload?
+    @State private var exportStatus: String?
+    #if os(iOS)
+    @State private var sharePayload: DeliverableSharePayload?
+    #endif
 
     init(request: DeliverableRequest = DeliverableRequest()) {
         let generated = DeliverableStudioService.generate(request)
@@ -36,6 +40,11 @@ struct DeliverableStudioView: View {
         .sheet(item: $publishPayload) { payload in
             ArtifactPublishSheet(payload: payload)
         }
+        #if os(iOS)
+        .sheet(item: $sharePayload) { payload in
+            DeliverableShareSheet(activityItems: [payload.url])
+        }
+        #endif
     }
 
     private var header: some View {
@@ -48,7 +57,7 @@ struct DeliverableStudioView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("交付物工作台")
                     .font(.title3.weight(.bold))
-                Text("把回答、研究或会议内容整理成 Markdown、网页、PDF/PPT 大纲。")
+                Text("把回答、研究或会议内容整理成 Markdown、网页、Word、PPTX 或 PDF。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -56,6 +65,7 @@ struct DeliverableStudioView: View {
             Menu {
                 Button("复制内容") { copy(deliverable.content) }
                 Button("复制文件名") { copy(deliverable.suggestedFileName) }
+                Button("导出文件…") { exportFile() }
                 Button("发布为网页") { preparePublish() }
                 Divider()
                 Button("重新生成") { regenerate() }
@@ -153,6 +163,11 @@ struct DeliverableStudioView: View {
                     Label("复制", systemImage: "doc.on.doc")
                 }
                 Button {
+                    exportFile()
+                } label: {
+                    Label("导出", systemImage: "square.and.arrow.down")
+                }
+                Button {
                     preparePublish()
                 } label: {
                     Label("发布", systemImage: "globe")
@@ -169,6 +184,14 @@ struct DeliverableStudioView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
+                    if let exportStatus {
+                        Label(exportStatus, systemImage: exportStatus.hasPrefix("导出失败") ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(exportStatus.hasPrefix("导出失败") ? .orange : .green)
+                            .padding(10)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background((exportStatus.hasPrefix("导出失败") ? Color.orange : Color.green).opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
                     Text(deliverable.summary)
                         .font(.callout)
                         .foregroundStyle(.secondary)
@@ -234,7 +257,49 @@ struct DeliverableStudioView: View {
         ].joined(separator: "\n")
         return "deliverable-\(GitHubPagesPublisher.shortHash(seed))"
     }
+
+    private func exportFile() {
+        #if os(macOS)
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = deliverable.suggestedFileName
+        panel.canCreateDirectories = true
+        panel.isExtensionHidden = false
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            do {
+                try DeliverableFileExporter.write(deliverable, to: url)
+                exportStatus = "已导出 \(url.lastPathComponent)"
+            } catch {
+                exportStatus = "导出失败: \(error.localizedDescription)"
+            }
+        }
+        #else
+        do {
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent(deliverable.suggestedFileName)
+            try DeliverableFileExporter.write(deliverable, to: url)
+            sharePayload = DeliverableSharePayload(url: url)
+            exportStatus = "已生成 \(url.lastPathComponent)"
+        } catch {
+            exportStatus = "导出失败: \(error.localizedDescription)"
+        }
+        #endif
+    }
 }
+
+#if os(iOS)
+private struct DeliverableSharePayload: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+private struct DeliverableShareSheet: UIViewControllerRepresentable {
+    let activityItems: [Any]
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+    }
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
+}
+#endif
 
 /// Small reusable launcher for "turn this content into a deliverable".
 /// The studio itself owns the final GitHub Pages publish step, so callers only

@@ -6,6 +6,7 @@ struct AgentRunCenterView: View {
     var onPause: (@MainActor (AgentRun) -> Void)?
     var onCancel: (@MainActor (AgentRun) -> Void)?
     var onRerun: (@MainActor (AgentRun) -> Void)?
+    var onForkFromStep: (@MainActor (AgentRun, AgentRun.Step) -> Void)?
     var onApprove: (@MainActor (AgentRun) -> Void)?
     var onReject: (@MainActor (AgentRun) -> Void)?
 
@@ -19,6 +20,7 @@ struct AgentRunCenterView: View {
         onPause: (@MainActor (AgentRun) -> Void)? = nil,
         onCancel: (@MainActor (AgentRun) -> Void)? = nil,
         onRerun: (@MainActor (AgentRun) -> Void)? = nil,
+        onForkFromStep: (@MainActor (AgentRun, AgentRun.Step) -> Void)? = nil,
         onApprove: (@MainActor (AgentRun) -> Void)? = nil,
         onReject: (@MainActor (AgentRun) -> Void)? = nil
     ) {
@@ -26,6 +28,7 @@ struct AgentRunCenterView: View {
         self.onPause = onPause
         self.onCancel = onCancel
         self.onRerun = onRerun
+        self.onForkFromStep = onForkFromStep
         self.onApprove = onApprove
         self.onReject = onReject
     }
@@ -53,6 +56,7 @@ struct AgentRunCenterView: View {
                     onPause: { handlePause(selectedRun) },
                     onCancel: { handleCancel(selectedRun) },
                     onRerun: { handleRerun(selectedRun) },
+                    onForkFromStep: { step in handleForkFromStep(selectedRun, step: step) },
                     onApprove: { handleApprove(selectedRun) },
                     onReject: { handleReject(selectedRun) }
                 )
@@ -309,6 +313,14 @@ struct AgentRunCenterView: View {
         }
     }
 
+    private func handleForkFromStep(_ run: AgentRun, step: AgentRun.Step) {
+        if let onForkFromStep {
+            onForkFromStep(run, step)
+        } else if let fork = store.forkFromStep(runID: run.id, stepID: step.id) {
+            selectedRunID = fork.id
+        }
+    }
+
     private func handleApprove(_ run: AgentRun) {
         if let onApprove {
             onApprove(run)
@@ -493,10 +505,12 @@ private struct AgentRunDetailView: View {
     let onPause: () -> Void
     let onCancel: () -> Void
     let onRerun: () -> Void
+    let onForkFromStep: (AgentRun.Step) -> Void
     let onApprove: () -> Void
     let onReject: () -> Void
 
     @State private var copied = false
+    @State private var replayCopied = false
 
     var body: some View {
         ScrollView {
@@ -530,6 +544,7 @@ private struct AgentRunDetailView: View {
                     .disabled(!run.canCancel)
                 Button("重跑") { onRerun() }
                     .disabled(!run.canRerun)
+                Button(replayCopied ? "已复制回放" : "复制回放") { copyReplay() }
             }
         }
     }
@@ -565,6 +580,7 @@ private struct AgentRunDetailView: View {
                     .disabled(!run.canCancel)
                 actionButton(title: "重跑", systemImage: "arrow.clockwise", action: onRerun)
                     .disabled(!run.canRerun)
+                actionButton(title: replayCopied ? "已复制回放" : "回放", systemImage: "play.rectangle", action: copyReplay)
             }
         }
         .padding(16)
@@ -692,6 +708,17 @@ private struct AgentRunDetailView: View {
                 }
             }
             Spacer(minLength: 0)
+            Button {
+                onForkFromStep(step)
+            } label: {
+                Label("分叉", systemImage: "arrow.triangle.branch")
+                    .font(.caption2.weight(.semibold))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(tint.opacity(0.10), in: Capsule())
+            }
+            .buttonStyle(.borderless)
+            .help("从这个步骤分叉出一个新的 Agent 运行记录")
             if let duration = step.durationSeconds {
                 Text(formatDuration(duration))
                     .font(.caption2.monospacedDigit())
@@ -746,6 +773,15 @@ private struct AgentRunDetailView: View {
         }
         .padding(10)
         .background(tint.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func copyReplay() {
+        Platform.copyText(AgentRunStore.replayMarkdown(for: run))
+        withAnimation { replayCopied = true }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.4))
+            withAnimation { replayCopied = false }
+        }
     }
 
     @ViewBuilder

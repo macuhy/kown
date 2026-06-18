@@ -135,6 +135,122 @@ struct FactCheckCard: View {
     }
 }
 
+/// 可信度 / 证据锁定卡:本地列出关键事实句是否绑定来源。
+struct AnswerTrustCard: View {
+    let report: AnswerTrustReport
+
+    private var tint: Color {
+        switch report.verdict {
+        case "high": return Color(red: 0.18, green: 0.62, blue: 0.42)
+        case "medium": return Color(red: 0.88, green: 0.52, blue: 0.18)
+        default: return Color(red: 0.82, green: 0.30, blue: 0.26)
+        }
+    }
+
+    private var scoreLabel: String {
+        switch report.verdict {
+        case "high": return "可信度高"
+        case "medium": return "中等可信"
+        default: return "需要补证据"
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.shield.fill")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(tint)
+                Text("可信度 / 证据锁定")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(tint)
+                Spacer()
+                Text("\(report.score)")
+                    .font(.caption.weight(.black))
+                    .monospacedDigit()
+                    .foregroundStyle(tint)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(tint.opacity(0.12), in: Capsule())
+            }
+            Text("\(scoreLabel) · \(report.summary)")
+                .font(.callout)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 8) {
+                metaChip("Web \(report.sourceCount)", icon: "globe")
+                metaChip("知识库 \(report.knowledgeSourceCount)", icon: "books.vertical")
+                metaChip(report.evidenceLocked ? "证据锁定" : "普通分析", icon: "lock.shield")
+            }
+
+            if report.claims.isEmpty {
+                Text("没有发现明显需要逐句补证据的事实性强论断。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(report.claims) { claim in
+                        claimRow(claim)
+                    }
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardBackground(tint))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(tint.opacity(0.24), lineWidth: 1)
+        }
+    }
+
+    private func claimRow(_ claim: AnswerTrustReport.Claim) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top, spacing: 8) {
+                claimBadge(claim.verdict)
+                Text(claim.text)
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            Text(claim.reason)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func claimBadge(_ verdict: String) -> some View {
+        let (label, color, icon): (String, Color, String) = {
+            switch verdict {
+            case "supported": return ("有证据", Color(red: 0.18, green: 0.62, blue: 0.42), "link.badge.plus")
+            case "weak": return ("弱证据", Color(red: 0.88, green: 0.52, blue: 0.18), "exclamationmark.triangle")
+            default: return ("缺证据", Color(red: 0.82, green: 0.30, blue: 0.26), "lock.slash")
+            }
+        }()
+        return Label(label, systemImage: icon)
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(color)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(color.opacity(0.12), in: Capsule())
+            .fixedSize()
+    }
+
+    private func metaChip(_ title: String, icon: String) -> some View {
+        Label(title, systemImage: icon)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.secondary.opacity(0.09), in: Capsule())
+            .fixedSize()
+    }
+}
+
 /// 合成最优终稿结果卡:展示「最优答案」+ 可展开的「合成说明」。视觉对齐 `SelfRevisionCard`。
 struct SynthesisCard: View {
     let conclusion: SynthesizedConclusion

@@ -518,14 +518,15 @@ struct MainContentView: View {
         if let turn = viewModel.selectedConversation?.turns.last {
             let revising = viewModel.isRevising(turnID: turn.id)
             let checking = viewModel.isFactChecking(turnID: turn.id)
+            let assessing = viewModel.isAssessingTrust(turnID: turn.id)
             VStack(alignment: .leading, spacing: 10) {
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 10) {
-                        postAnswerActionButtons(for: turn, revising: revising, checking: checking)
+                        postAnswerActionButtons(for: turn, revising: revising, checking: checking, assessing: assessing)
                         Spacer(minLength: 0)
                     }
                     WrappingHStack(horizontalSpacing: 8, verticalSpacing: 7) {
-                        postAnswerActionButtons(for: turn, revising: revising, checking: checking)
+                        postAnswerActionButtons(for: turn, revising: revising, checking: checking, assessing: assessing)
                     }
                 }
                 .padding(10)
@@ -544,9 +545,16 @@ struct MainContentView: View {
     }
 
     @ViewBuilder
-    private func postAnswerActionButtons(for turn: Turn, revising: Bool, checking: Bool) -> some View {
+    private func postAnswerActionButtons(for turn: Turn, revising: Bool, checking: Bool, assessing: Bool) -> some View {
         postActionChip("继续生成", systemImage: "arrow.down.circle") {
             viewModel.continueGenerating()
+        }
+        if turn.answerTrustReport == nil {
+            postActionChip(assessing ? "分析中…" : "可信度",
+                           systemImage: "checkmark.shield.fill",
+                           disabled: assessing) {
+                viewModel.assessAnswerTrust(turnID: turn.id)
+            }
         }
         if turn.selfRevision == nil {
             postActionChip(revising ? "反思中…" : "自我反思",
@@ -628,6 +636,9 @@ struct MainContentView: View {
         if let err = viewModel.factCheckErrors[turn.id] {
             Text(err).font(.caption2).foregroundStyle(.red)
         }
+        if let err = viewModel.trustReportErrors[turn.id] {
+            Text(err).font(.caption2).foregroundStyle(.red)
+        }
         if let err = viewModel.redTeamErrors[turn.id] {
             Text(err).font(.caption2).foregroundStyle(.red)
         }
@@ -647,6 +658,9 @@ struct MainContentView: View {
         if let factCheck = turn.factCheck {
             FactCheckCard(result: factCheck,
                           providerName: turn.providerSnapshot[factCheck.providerID]?.displayName)
+        }
+        if let trust = turn.answerTrustReport {
+            AnswerTrustCard(report: trust)
         }
         if let redTeam = turn.redTeamResult {
             RedTeamCard(result: redTeam,

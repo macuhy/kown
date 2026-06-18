@@ -9,6 +9,7 @@ struct SettingsView: View {
 
     enum Tab: String, CaseIterable, Identifiable {
         case providers
+        case modelDoctor
         case prompts
         case skills
         case connectorHub
@@ -45,6 +46,7 @@ struct SettingsView: View {
         var label: String {
             switch self {
             case .providers:   return "厂商"
+            case .modelDoctor: return "模型体检"
             case .prompts:     return "Prompt 库"
             case .skills:      return "技能"
             case .connectorHub: return "连接器"
@@ -81,6 +83,7 @@ struct SettingsView: View {
         var symbol: String {
             switch self {
             case .providers:   return "square.stack.3d.up"
+            case .modelDoctor: return "stethoscope"
             case .prompts:     return "text.badge.plus"
             case .skills:      return "wand.and.stars"
             case .connectorHub: return "point.3.connected.trianglepath.dotted"
@@ -117,6 +120,7 @@ struct SettingsView: View {
         var tint: Color {
             switch self {
             case .providers:   return Color(red: 0.10, green: 0.66, blue: 0.56)
+            case .modelDoctor: return Color(red: 0.10, green: 0.66, blue: 0.56)
             case .prompts:     return Color(red: 0.56, green: 0.40, blue: 0.86)
             case .skills:      return Color(red: 0.48, green: 0.36, blue: 0.90)
             case .connectorHub: return Color(red: 0.12, green: 0.58, blue: 0.62)
@@ -216,6 +220,8 @@ struct SettingsView: View {
                     switch tab {
                     case .providers:
                         mobileProvidersList
+                    case .modelDoctor:
+                        ModelDoctorView(viewModel: viewModel)
                     case .prompts:
                         PromptLibraryView(viewModel: promptLibrary)
                     case .skills:
@@ -636,7 +642,7 @@ struct SettingsView: View {
 
     private var desktopTabSections: [(title: String, tabs: [Tab])] {
         [
-            ("基础", [.providers, .prompts, .skills, .skillPackages, .deviceTools, .github]),
+            ("基础", [.providers, .modelDoctor, .prompts, .skills, .skillPackages, .deviceTools, .github]),
             ("工作台", [.connectorHub, .agentRuns, .meetingWorkflow, .deliverables]),
             ("工作流", [.personas, .chains, .mcp, .webSearch, .tts, .scheduler, .performance]),
             ("数据", [.sync, .backup, .memory, .favorites, .privacy]),
@@ -829,6 +835,8 @@ struct SettingsView: View {
             switch tab {
             case .providers:
                 providersList
+            case .modelDoctor:
+                ModelDoctorView(viewModel: viewModel)
             case .prompts:
                 PromptLibraryView(viewModel: promptLibrary)
             case .skills:
@@ -1249,6 +1257,7 @@ struct SettingsView: View {
     private var headerSubtitle: String {
         switch tab {
         case .providers:   return "管理连接、密钥和每个模型的默认生成参数。"
+        case .modelDoctor: return "批量检测模型是否真能用,并给出 Key、模型名、Base URL、限流和 CLI 的修复建议。"
         case .prompts:     return "保存可复用的 Prompt 模板,用 {{变量}} 占位,填充后一键复制。"
         case .skills:      return "技能 = 系统提示 + 可用工具。可按输入自动触发,也可绑定到当前会话。"
         case .connectorHub: return "统一查看 GitHub、Web、MCP、知识库、iCloud、日历提醒和设备工具的连接状态与权限。"

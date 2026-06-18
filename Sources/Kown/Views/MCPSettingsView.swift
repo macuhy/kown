@@ -14,6 +14,8 @@ struct MCPSettingsView: View {
     /// 测试连接结果:serverID → (成功工具数 / 错误文案)。
     @State private var testResults: [UUID: TestOutcome] = [:]
     @State private var testing: Set<UUID> = []
+    @State private var kownServerStatus: String?
+    @State private var kownConfigCopied = false
 
     private var store: MCPStore { viewModel.mcpStore }
 
@@ -21,6 +23,7 @@ struct MCPSettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 hero
+                kownMCPServerCard
                 if store.servers.isEmpty {
                     emptyCard
                 } else {
@@ -45,6 +48,96 @@ struct MCPSettingsView: View {
         .sheet(item: $editing) { server in
             MCPServerEditSheet(server: server) { store.update($0) }
         }
+    }
+
+    private var kownMCPServerCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center, spacing: 12) {
+                    kownServerTitle
+                    Spacer(minLength: 10)
+                    kownServerActions
+                }
+                VStack(alignment: .leading, spacing: 10) {
+                    kownServerTitle
+                    kownServerActions
+                }
+            }
+            Text("把 Kown 自己暴露成 MCP Server,让 Claude Desktop、Cursor、Codex 等外部工具读取你的会话、长期记忆和项目上下文。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text("数据目录: \(KownMCPServerService.dataDir.path)")
+                .font(.caption2.monospaced())
+                .foregroundStyle(.tertiary)
+                .lineLimit(2)
+                .truncationMode(.middle)
+            if let kownServerStatus {
+                Label(kownServerStatus, systemImage: kownServerStatus.hasPrefix("失败") ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(kownServerStatus.hasPrefix("失败") ? .orange : .green)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Self.tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(Self.tint.opacity(0.18), lineWidth: 1)
+        }
+    }
+
+    private var kownServerTitle: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "externaldrive.connected.to.line.below")
+                .font(.title3.weight(.bold))
+                .foregroundStyle(Self.tint)
+                .frame(width: 38, height: 38)
+                .background(Self.tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Kown MCP Server")
+                    .font(.headline)
+                Text("把 Kown 作为个人上下文中枢接给外部 AI 工具")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var kownServerActions: some View {
+        HStack(spacing: 8) {
+            Button {
+                do {
+                    let url = try KownMCPServerService.installOrUpdate()
+                    kownServerStatus = "已安装: \(url.lastPathComponent)"
+                } catch {
+                    kownServerStatus = "失败: \(error.localizedDescription)"
+                }
+            } label: {
+                Label("安装/更新", systemImage: "square.and.arrow.down")
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Self.tint)
+
+            Button {
+                Platform.copyText(KownMCPServerService.claudeConfigSnippet())
+                withAnimation { kownConfigCopied = true }
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(1.4))
+                    withAnimation { kownConfigCopied = false }
+                }
+            } label: {
+                Label(kownConfigCopied ? "已复制配置" : "复制配置", systemImage: kownConfigCopied ? "checkmark" : "doc.on.doc")
+            }
+            .buttonStyle(.bordered)
+
+            Button {
+                Platform.revealInExplorer(KownMCPServerService.scriptURL)
+            } label: {
+                Label("定位脚本", systemImage: "folder")
+            }
+            .buttonStyle(.borderless)
+        }
+        .font(.caption.weight(.semibold))
     }
 
     // MARK: - Hero

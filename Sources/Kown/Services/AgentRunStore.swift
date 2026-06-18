@@ -464,6 +464,86 @@ final class AgentRunStore {
         return rerun
     }
 
+    @discardableResult
+    func forkFromStep(runID: UUID, stepID: UUID, at date: Date = Date()) -> AgentRun? {
+        guard let original = run(id: runID),
+              let stepIndex = original.steps.firstIndex(where: { $0.id == stepID }) else { return nil }
+        let keptSteps = original.steps.prefix(stepIndex + 1).map { step -> AgentRun.Step in
+            var copy = step
+            copy.metadata = copy.metadata.merging(["replayedFromStep": step.id.uuidString]) { current, _ in current }
+            return copy
+        }
+        let forkPoint = original.steps[stepIndex]
+        var fork = AgentRun(
+            kind: original.kind,
+            title: "\(original.title.isEmpty ? original.kind.displayName : original.title) · 分叉",
+            prompt: original.prompt,
+            summary: "从步骤「\(forkPoint.title)」分叉,可修改输入后重新排队执行。",
+            status: .queued,
+            approvalStatus: original.approvalStatus == .pending ? .pending : .notRequired,
+            createdAt: date,
+            updatedAt: date,
+            sourceID: original.sourceID,
+            retryOf: original.id,
+            tags: Array(Set(original.tags + ["分叉"])),
+            metadata: original.metadata.merging([
+                "forkOf": original.id.uuidString,
+                "forkFromStep": forkPoint.id.uuidString,
+                "forkFromStepTitle": forkPoint.title,
+                "forkCreatedAt": ISO8601DateFormatter().string(from: date)
+            ]) { current, _ in current }
+        )
+        fork.steps = Array(keptSteps)
+        fork.steps.append(AgentRun.Step(
+            title: "分叉待执行",
+            detail: "已复用前 \(stepIndex + 1) 个步骤的上下文,下一次可从这里继续。",
+            status: .queued,
+            resultSummary: forkPoint.resultSummary ?? forkPoint.errorMessage,
+            metadata: ["forkFromStep": forkPoint.id.uuidString]
+        ))
+        upsert(fork)
+        return fork
+    }
+
+    nonisolated static func replayMarkdown(for run: AgentRun) -> String {
+        var lines: [String] = [
+            "# Agent 回放",
+            "",
+            "- 标题: \(run.title.isEmpty ? run.kind.displayName : run.title)",
+            "- 类型: \(run.kind.displayName)",
+            "- 状态: \(run.status.displayName)",
+            "- 创建: \(ISO8601DateFormatter().string(from: run.createdAt))",
+            "",
+            "## 输入",
+            run.prompt.isEmpty ? "(无输入)" : run.prompt,
+            "",
+            "## 步骤"
+        ]
+        if run.steps.isEmpty {
+            lines.append("- 暂无步骤")
+        } else {
+            for (idx, step) in run.steps.enumerated() {
+                lines.append("\(idx + 1). [\(step.status.displayName)] \(step.title)")
+                if !step.detail.isEmpty { lines.append("   - 详情: \(step.detail)") }
+                if let result = step.resultSummary, !result.isEmpty { lines.append("   - 结果: \(result)") }
+                if let error = step.errorMessage, !error.isEmpty { lines.append("   - 错误: \(error)") }
+            }
+        }
+        if !run.toolCalls.isEmpty {
+            lines.append(contentsOf: ["", "## 工具调用"])
+            for call in run.toolCalls {
+                lines.append("- [\(call.status.displayName)] \(call.displayName): \(call.argumentsSummary)")
+            }
+        }
+        if let summary = run.summary, !summary.isEmpty {
+            lines.append(contentsOf: ["", "## 摘要", summary])
+        }
+        if let error = run.errorMessage, !error.isEmpty {
+            lines.append(contentsOf: ["", "## 错误", error])
+        }
+        return lines.joined(separator: "\n")
+    }
+
     private func sortRuns() {
         runs = Self.sorted(runs)
     }

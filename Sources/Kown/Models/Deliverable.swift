@@ -7,6 +7,9 @@ enum DeliverableKind: String, CaseIterable, Codable, Identifiable, Sendable {
     case pdfOutline
     case pptOutline
     case webpage
+    case docx
+    case pptx
+    case pdf
 
     var id: String { rawValue }
 
@@ -17,6 +20,9 @@ enum DeliverableKind: String, CaseIterable, Codable, Identifiable, Sendable {
         case .pdfOutline: return "PDF 大纲"
         case .pptOutline: return "PPT 大纲"
         case .webpage: return "网页"
+        case .docx: return "Word 文档"
+        case .pptx: return "PowerPoint"
+        case .pdf: return "PDF 文件"
         }
     }
 
@@ -27,6 +33,9 @@ enum DeliverableKind: String, CaseIterable, Codable, Identifiable, Sendable {
         case .pdfOutline: return "面向报告/PDF 的章节、页面和版式大纲。"
         case .pptOutline: return "面向演示文稿的逐页幻灯片大纲。"
         case .webpage: return "带基础样式的单页网页草稿。"
+        case .docx: return "生成可直接打开编辑的 .docx 文件。"
+        case .pptx: return "生成可直接打开编辑的 .pptx 幻灯片。"
+        case .pdf: return "生成可分享的分页 PDF 文件。"
         }
     }
 
@@ -34,6 +43,9 @@ enum DeliverableKind: String, CaseIterable, Codable, Identifiable, Sendable {
         switch self {
         case .markdown, .pdfOutline, .pptOutline: return "md"
         case .html, .webpage: return "html"
+        case .docx: return "docx"
+        case .pptx: return "pptx"
+        case .pdf: return "pdf"
         }
     }
 
@@ -44,6 +56,16 @@ enum DeliverableKind: String, CaseIterable, Codable, Identifiable, Sendable {
         case .pdfOutline: return "doc.richtext"
         case .pptOutline: return "rectangle.on.rectangle.angled"
         case .webpage: return "globe"
+        case .docx: return "doc.text"
+        case .pptx: return "rectangle.on.rectangle.angled"
+        case .pdf: return "doc.richtext.fill"
+        }
+    }
+
+    var isBinaryExport: Bool {
+        switch self {
+        case .docx, .pptx, .pdf: return true
+        default: return false
         }
     }
 }

@@ -50,6 +50,10 @@ enum DeliverableStudioService {
             content = pptOutline(context)
         case .webpage:
             content = webpage(context)
+        case .docx, .pdf:
+            content = markdown(context)
+        case .pptx:
+            content = pptOutline(context)
         }
 
         return Deliverable(

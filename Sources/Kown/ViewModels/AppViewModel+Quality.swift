@@ -67,6 +67,43 @@ extension AppViewModel {
 
     func isFactChecking(turnID: UUID) -> Bool { factCheckingTurns.contains(turnID) }
 
+    // MARK: - 可信度 / 证据锁定
+
+    func isAssessingTrust(turnID: UUID) -> Bool { assessingTrustTurns.contains(turnID) }
+
+    /// 本地生成回答可信度报告,重点标出未绑定来源的事实句。无网络 / 无模型成本。
+    func assessAnswerTrust(turnID: UUID) {
+        guard !assessingTrustTurns.contains(turnID) else { return }
+        guard let convID = selectedConversationID,
+              let convIdx = conversations.firstIndex(where: { $0.id == convID }),
+              let turnIdx = conversations[convIdx].turns.firstIndex(where: { $0.id == turnID }) else { return }
+        let turn = conversations[convIdx].turns[turnIdx]
+        let answer = primaryAnswer(for: turn)
+        guard !answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            trustReportErrors[turnID] = "这一轮还没有可分析的答案。"
+            return
+        }
+
+        assessingTrustTurns.insert(turnID)
+        trustReportErrors[turnID] = nil
+        let report = AnswerTrustService.analyze(
+            question: turn.prompt,
+            answer: answer,
+            sources: turn.sources ?? [],
+            knowledgeSources: turn.knowledgeSources ?? [],
+            evidenceLocked: true
+        )
+        guard let liveConvIdx = conversations.firstIndex(where: { $0.id == convID }),
+              let liveTurnIdx = conversations[liveConvIdx].turns.firstIndex(where: { $0.id == turnID }) else {
+            assessingTrustTurns.remove(turnID)
+            return
+        }
+        conversations[liveConvIdx].turns[liveTurnIdx].answerTrustReport = report
+        conversations[liveConvIdx].updatedAt = Date()
+        ConversationStore.save(conversations[liveConvIdx])
+        assessingTrustTurns.remove(turnID)
+    }
+
     /// 对某轮主答案做事实核查(抽论断 → web 检索 → 逐条判定),结果写回 `Turn.factCheck`。
     func factCheckTurn(turnID: UUID) {
         guard !factCheckingTurns.contains(turnID) else { return }

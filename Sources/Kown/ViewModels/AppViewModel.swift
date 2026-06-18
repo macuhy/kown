@@ -66,6 +66,10 @@ final class AppViewModel {
     var factCheckingTurns: Set<UUID> = []
     /// 事实核查失败原因,key = turnID。
     var factCheckErrors: [UUID: String] = [:]
+    /// 正在做可信度 / 证据锁定分析的 turn 集合。
+    var assessingTrustTurns: Set<UUID> = []
+    /// 可信度分析失败原因,key = turnID。
+    var trustReportErrors: [UUID: String] = [:]
     /// 正在做「合成最优终稿」的 turn 集合(Council / Compare)。
     var synthesizingTurns: Set<UUID> = []
     /// 合成失败原因,key = turnID。
@@ -96,6 +100,12 @@ final class AppViewModel {
     var showCommandPalette = false
     /// Artifacts 实时预览面板开关(macOS 用 .inspector,iOS 用 sheet)。
     var showArtifactPanel = false
+    /// 模型体检结果(provider id → 最近一次报告)。
+    var modelHealthReports: [UUID: ModelHealthReport] = [:]
+    /// 正在体检的 provider id 集合。
+    var modelHealthRunning: Set<UUID> = []
+    /// 模型体检批量任务是否运行中。
+    var modelHealthBatchRunning = false
 
     // MARK: - 生成式 UI(AI 现做交互小工具)
     /// 「AI 现做交互工具」面板开关(macOS 用 .inspector / iOS 用 sheet,与 Artifacts 面板独立)。
@@ -2076,5 +2086,34 @@ final class AppViewModel {
             if sample.count >= 24 { break }
         }
         return sample.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    func runModelHealthCheck(for id: UUID) {
+        guard let cfg = providers.first(where: { $0.id == id }),
+              !modelHealthRunning.contains(id) else { return }
+        modelHealthRunning.insert(id)
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let report = await ModelHealthService.check(config: cfg)
+            self.modelHealthReports[id] = report
+            self.modelHealthRunning.remove(id)
+        }
+    }
+
+    func runModelHealthChecks(enabledOnly: Bool = false) {
+        guard !modelHealthBatchRunning else { return }
+        let targets = providers.filter { enabledOnly ? $0.enabled : true }
+        guard !targets.isEmpty else { return }
+        modelHealthBatchRunning = true
+        for target in targets { modelHealthRunning.insert(target.id) }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            for cfg in targets {
+                let report = await ModelHealthService.check(config: cfg)
+                self.modelHealthReports[cfg.id] = report
+                self.modelHealthRunning.remove(cfg.id)
+            }
+            self.modelHealthBatchRunning = false
+        }
     }
 }

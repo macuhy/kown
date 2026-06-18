@@ -340,6 +340,59 @@ struct FactCheckResult: Codable, Hashable, Sendable {
     }
 }
 
+/// 回答可信度 / 证据锁定报告。由本地启发式分析生成,不额外调用模型:
+/// - 找出带数字、日期、强结论等需要证据支撑的句子;
+/// - 检查句内是否带 `[n]` 引用,或本轮是否有 web / 知识库来源;
+/// - 给出 0-100 的可信度分与证据缺口清单。
+struct AnswerTrustReport: Codable, Hashable, Sendable {
+    struct Claim: Identifiable, Codable, Hashable, Sendable {
+        let id: UUID
+        var text: String
+        var verdict: String
+        var reason: String
+        var citationNumbers: [Int]
+
+        init(id: UUID = UUID(),
+             text: String,
+             verdict: String,
+             reason: String,
+             citationNumbers: [Int] = []) {
+            self.id = id
+            self.text = text
+            self.verdict = verdict
+            self.reason = reason
+            self.citationNumbers = citationNumbers
+        }
+    }
+
+    var score: Int
+    var verdict: String
+    var summary: String
+    var evidenceLocked: Bool
+    var sourceCount: Int
+    var knowledgeSourceCount: Int
+    var claims: [Claim]
+    var createdAt: Date
+
+    init(score: Int,
+         verdict: String,
+         summary: String,
+         evidenceLocked: Bool,
+         sourceCount: Int,
+         knowledgeSourceCount: Int,
+         claims: [Claim],
+         createdAt: Date = Date()) {
+        self.score = score
+        self.verdict = verdict
+        self.summary = summary
+        self.evidenceLocked = evidenceLocked
+        self.sourceCount = sourceCount
+        self.knowledgeSourceCount = knowledgeSourceCount
+        self.claims = claims
+        self.createdAt = createdAt
+    }
+}
+
 /// 红队压测结果:指定一个「对手模型」专门猎杀某条答案的幻觉 / 最弱论断 / 没引用的数据,
 /// 原模型必须逐条辩护或改口。opt-in「红队压测」按钮触发,结果写回 `Turn.redTeamResult`。
 struct RedTeamResult: Codable, Hashable, Sendable {
@@ -494,6 +547,8 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
     var selfRevision: SelfRevision?
     /// 事实核查结果(opt-in「事实核查」按钮触发)。旧会话没有,保持 optional。
     var factCheck: FactCheckResult?
+    /// 回答可信度 / 证据锁定报告(opt-in「可信度」按钮触发)。旧会话没有,保持 optional。
+    var answerTrustReport: AnswerTrustReport?
     /// 本轮注入的知识库片段(带来源元数据),用于「句级溯源」:答案里的 `[n]` 角标
     /// 映射到第 n 条,点开弹出原文。RAG 每次 send 检索一次、跨 provider 共享,故 turn 级即可。
     /// 旧会话没有,保持 optional。
@@ -547,6 +602,7 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
          imageGenErrors: [String: String]? = nil,
          selfRevision: SelfRevision? = nil,
          factCheck: FactCheckResult? = nil,
+         answerTrustReport: AnswerTrustReport? = nil,
          knowledgeSources: [KnowledgeSourceRef]? = nil,
          escalationSuggestion: EscalationSuggestion? = nil,
          toolSteps: [ToolStep]? = nil,
@@ -585,6 +641,7 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
         self.imageGenErrors = imageGenErrors
         self.selfRevision = selfRevision
         self.factCheck = factCheck
+        self.answerTrustReport = answerTrustReport
         self.knowledgeSources = knowledgeSources
         self.escalationSuggestion = escalationSuggestion
         self.toolSteps = toolSteps
@@ -603,7 +660,7 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
         case providerSnapshot, panelOrder, debateRounds, tournamentRounds, appliedWrites, images, sources
         case reasoningByProvider, tokenUsage, councilVotes, sourcesByProvider
         case generatedImages, compareVerdict, consensusAnalysis, generatedImagesByProvider, imageGenErrors
-        case selfRevision, factCheck, knowledgeSources, escalationSuggestion
+        case selfRevision, factCheck, answerTrustReport, knowledgeSources, escalationSuggestion
         case toolSteps, synthesizedConclusion
         case routeNote, autoEscalation
         case redTeamResult, relayResult
@@ -641,6 +698,7 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
         self.imageGenErrors = try c.decodeIfPresent([String: String].self, forKey: .imageGenErrors)
         self.selfRevision = try c.decodeIfPresent(SelfRevision.self, forKey: .selfRevision)
         self.factCheck = try c.decodeIfPresent(FactCheckResult.self, forKey: .factCheck)
+        self.answerTrustReport = try c.decodeIfPresent(AnswerTrustReport.self, forKey: .answerTrustReport)
         self.knowledgeSources = try c.decodeIfPresent([KnowledgeSourceRef].self, forKey: .knowledgeSources)
         self.escalationSuggestion = try c.decodeIfPresent(EscalationSuggestion.self, forKey: .escalationSuggestion)
         self.toolSteps = try c.decodeIfPresent([ToolStep].self, forKey: .toolSteps)
