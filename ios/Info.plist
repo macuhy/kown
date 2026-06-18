@@ -37,6 +37,8 @@
 	<true/>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Kown 可以把你的日程写进系统「日历」,并读取你最近的安排。</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Kown 可以把你的日程写进系统「日历」,并读取你最近的安排。</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Kown 用麦克风把你的语音转成文字,填进输入框。</string>
 	<key>NSPhotoLibraryUsageDescription</key>

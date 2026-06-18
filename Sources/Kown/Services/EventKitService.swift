@@ -11,7 +11,7 @@ import EventKit
 actor EventKitService {
     static let shared = EventKitService()
 
-    private let store = EKEventStore()
+    private var store = EKEventStore()
 
     /// 一次创建结果(给调用方拼工具回执 / UI 提示用)。
     struct CreateResult: Sendable {
@@ -66,16 +66,16 @@ actor EventKitService {
     @discardableResult
     func requestAccess() async -> Bool {
         if Self.hasFullOrLegacyAccess(EKEventStore.authorizationStatus(for: .reminder)) {
-            store.reset()
+            rebuildStore()
             return true
         }
-        do {
-            let granted = try await store.requestFullAccessToReminders()
-            if granted { store.reset() }
-            return granted || Self.hasFullOrLegacyAccess(EKEventStore.authorizationStatus(for: .reminder))
-        } catch {
-            return Self.hasFullOrLegacyAccess(EKEventStore.authorizationStatus(for: .reminder))
+
+        let granted = await EventKitAccessRequester.requestFullAccessToReminders()
+        if granted || Self.hasFullOrLegacyAccess(EKEventStore.authorizationStatus(for: .reminder)) {
+            rebuildStore()
+            return true
         }
+        return false
     }
 
     /// 新建一条提醒。`due` 非空时同时挂一个到点闹钟。
@@ -141,17 +141,21 @@ actor EventKitService {
     /// 请求日历完全访问权限。已授权直接返回 true;被拒/出错返回 false(不抛)。
     @discardableResult
     func requestEventAccess() async -> Bool {
-        if Self.hasFullOrLegacyAccess(EKEventStore.authorizationStatus(for: .event)) {
-            store.reset()
+        let status = EKEventStore.authorizationStatus(for: .event)
+        if Self.hasFullOrLegacyAccess(status) {
+            rebuildStore()
             return true
         }
-        do {
-            let granted = try await store.requestFullAccessToEvents()
-            if granted { store.reset() }
-            return granted || Self.hasFullOrLegacyAccess(EKEventStore.authorizationStatus(for: .event))
-        } catch {
-            return Self.hasFullOrLegacyAccess(EKEventStore.authorizationStatus(for: .event))
+        guard status == .notDetermined else {
+            return false
         }
+
+        let granted = await EventKitAccessRequester.requestFullAccessToEvents()
+        if granted || Self.hasFullOrLegacyAccess(EKEventStore.authorizationStatus(for: .event)) {
+            rebuildStore()
+            return true
+        }
+        return false
     }
 
     /// 请求日历写入权限。只创建新日程时,系统的「仅添加事件」权限也足够。
@@ -159,16 +163,19 @@ actor EventKitService {
     func requestEventWriteAccess() async -> Bool {
         let status = EKEventStore.authorizationStatus(for: .event)
         if Self.canWriteEvents(status) {
-            store.reset()
+            rebuildStore()
             return true
         }
-        do {
-            let granted = try await store.requestFullAccessToEvents()
-            if granted { store.reset() }
-            return granted || Self.canWriteEvents(EKEventStore.authorizationStatus(for: .event))
-        } catch {
-            return Self.canWriteEvents(EKEventStore.authorizationStatus(for: .event))
+        guard status == .notDetermined else {
+            return false
         }
+
+        let granted = await EventKitAccessRequester.requestFullAccessToEvents()
+        if granted || Self.canWriteEvents(EKEventStore.authorizationStatus(for: .event)) {
+            rebuildStore()
+            return true
+        }
+        return false
     }
 
     /// 新建一个日历事件。`end` 为空时默认 1 小时时长。
@@ -335,6 +342,10 @@ actor EventKitService {
         }
     }
 
+    private func rebuildStore() {
+        store = EKEventStore()
+    }
+
     // MARK: - 会议判定(纯函数,不依赖 store 实例外的状态)
 
     /// 常见视频会议域名/关键字(小写)。
@@ -384,6 +395,25 @@ actor EventKitService {
             if meetingKeywords.contains(where: { l.contains($0) }) { return url }
         }
         return nil
+    }
+}
+
+@MainActor
+private enum EventKitAccessRequester {
+    static func requestFullAccessToReminders() async -> Bool {
+        do {
+            return try await EKEventStore().requestFullAccessToReminders()
+        } catch {
+            return false
+        }
+    }
+
+    static func requestFullAccessToEvents() async -> Bool {
+        do {
+            return try await EKEventStore().requestFullAccessToEvents()
+        } catch {
+            return false
+        }
     }
 }
 #endif

@@ -47,6 +47,7 @@ targets:
         # 设备工具:在系统「提醒事项」创建提醒、在「日历」创建/读取日程(备忘录在 iOS 走剪贴板+跳转,无需权限)
         NSRemindersFullAccessUsageDescription: "Kown 可以把你的待办写进系统「提醒事项」。"
         NSCalendarsFullAccessUsageDescription: "Kown 可以把你的日程写进系统「日历」,并读取你最近的安排。"
+        NSCalendarsUsageDescription: "Kown 可以把你的日程写进系统「日历」,并读取你最近的安排。"
         # AI 键盘截图回复:读最近一张截图、识别其中文字生成回复。授权在主 app 完成,键盘扩展才读得到。
         NSPhotoLibraryUsageDescription: "Kown 需要完整照片权限来读取你最近的截图,识别其中文字,在 AI 键盘里帮你生成回复。"
         UIBackgroundModes:
@@ -90,7 +91,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.xiaobo.kown
         # 本地默认版本;CI 用命令行覆盖(发版走 ios-v* tag → MARKETING_VERSION)。
-        MARKETING_VERSION: "0.36.1"
+        MARKETING_VERSION: "0.36.2"
         CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_STYLE: Automatic
         # 仅当 CI 把 CODE_SIGN_STYLE 覆盖成 Manual 时才生效;本地 Automatic 会忽略它。
@@ -147,7 +148,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.xiaobo.kown.watchkitapp
-        MARKETING_VERSION: "0.36.1"
+        MARKETING_VERSION: "0.36.2"
         CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_STYLE: Automatic
         PROVISIONING_PROFILE_SPECIFIER: "Kown Watch AppStore"
@@ -192,7 +193,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.xiaobo.kown.watchkitapp.widgets
-        MARKETING_VERSION: "0.36.1"
+        MARKETING_VERSION: "0.36.2"
         CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_STYLE: Automatic
         PROVISIONING_PROFILE_SPECIFIER: "Kown Watch Widgets AppStore"
@@ -243,7 +244,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.xiaobo.kown.Keyboard
-        MARKETING_VERSION: "0.36.1"
+        MARKETING_VERSION: "0.36.2"
         CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_STYLE: Automatic
         PROVISIONING_PROFILE_SPECIFIER: "Kown Keyboard AppStore"
@@ -283,7 +284,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.xiaobo.kown.Share
-        MARKETING_VERSION: "0.36.1"
+        MARKETING_VERSION: "0.36.2"
         CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_STYLE: Automatic
         PROVISIONING_PROFILE_SPECIFIER: "Kown Share AppStore"
@@ -326,7 +327,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.xiaobo.kown.widgets
-        MARKETING_VERSION: "0.36.1"
+        MARKETING_VERSION: "0.36.2"
         CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_STYLE: Automatic
         # 仅当 CI 把 CODE_SIGN_STYLE 覆盖成 Manual 时才生效;本地 Automatic 会忽略它。

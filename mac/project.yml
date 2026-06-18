@@ -41,6 +41,7 @@ targets:
         # 设备工具:在系统「提醒事项」创建提醒、在「日历」创建/读取日程、用 AppleScript 控制「备忘录」
         NSRemindersFullAccessUsageDescription: "Kown 可以把你的待办写进系统「提醒事项」。"
         NSCalendarsFullAccessUsageDescription: "Kown 可以把你的日程写进系统「日历」,并读取你最近的安排。"
+        NSCalendarsUsageDescription: "Kown 可以把你的日程写进系统「日历」,并读取你最近的安排。"
         NSAppleEventsUsageDescription: "Kown 用自动化把整理好的内容写进「备忘录」。"
         # ── Sparkle 自动更新（feed/公钥;频率与自动安装由 UpdaterService 经 UserDefaults 管理）──
         SUFeedURL: https://raw.githubusercontent.com/macuhy/kown-mac/main/appcast.xml
@@ -91,6 +92,9 @@ targets:
         com.apple.security.app-sandbox: false
         com.apple.security.network.client: true
         com.apple.security.files.user-selected.read-write: true
+        # EventKit 日历 TCC 权限。参考 macuhy/menubar-calendar:缺少该 entitlement 时,
+        # Developer ID 包可能被系统静默拒绝,表现为点击授权没有弹窗。
+        com.apple.security.personal-information.calendars: true
         # 语音听写需要麦克风(hardened runtime 下的资源访问例外)
         com.apple.security.device.audio-input: true
         # 用 AppleScript 控制「备忘录」发 Apple Event,hardened runtime 下必需
@@ -99,7 +103,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.xiaobo.kown
         # 本地构建的默认版本;CI 用命令行覆盖(CURRENT_PROJECT_VERSION=git 提交数)。
-        MARKETING_VERSION: "0.36.1"
+        MARKETING_VERSION: "0.36.2"
         CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: 4257SFGRFK   # 写死付费 Team,Archive 不再每次让人选

@@ -503,7 +503,7 @@ struct DeviceToolsSettingsView: View {
 
     private var calendarNeedsSettings: Bool {
         #if canImport(EventKit)
-        return calendarAccessState.isDeniedOrRestricted
+        return calendarAccessState.requiresSystemSettingsForFullAccess
         #else
         return false
         #endif
@@ -575,7 +575,23 @@ struct DeviceToolsSettingsView: View {
         #if canImport(EventKit)
         requestingCalendar = true
         Task {
+            let initialState = EventKitService.shared.eventAccessState
+            #if os(macOS)
+            if initialState == .notDetermined {
+                await CalendarPermissionPromptCoordinator.shared.prepare(showAnchorWindow: true)
+            }
+            #endif
+
             let granted = await EventKitService.shared.requestEventAccess()
+
+            #if os(macOS)
+            await CalendarPermissionPromptCoordinator.shared.closeAnchorWindow()
+            if !granted {
+                await CalendarPermissionPromptCoordinator.shared.openCalendarPrivacySettings()
+            }
+            await CalendarPermissionPromptCoordinator.shared.restoreActivationPolicy()
+            #endif
+
             await MainActor.run {
                 calendarAccessState = EventKitService.shared.eventAccessState
                 calendarAuthorized = granted || EventKitService.shared.isEventAuthorized
@@ -586,8 +602,11 @@ struct DeviceToolsSettingsView: View {
     }
     private func openCalendarSettings() {
         #if os(macOS)
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars") {
-            NSWorkspace.shared.open(url)
+        Task { @MainActor in
+            await CalendarPermissionPromptCoordinator.shared.prepare(showAnchorWindow: false)
+            await CalendarPermissionPromptCoordinator.shared.openCalendarPrivacySettings()
+            try? await Task.sleep(for: .milliseconds(300))
+            await CalendarPermissionPromptCoordinator.shared.restoreActivationPolicy()
         }
         #elseif os(iOS)
         if let url = URL(string: UIApplication.openSettingsURLString) {
@@ -596,3 +615,124 @@ struct DeviceToolsSettingsView: View {
         #endif
     }
 }
+
+#if canImport(EventKit)
+extension EventKitService.AccessState {
+    var requiresSystemSettingsForFullAccess: Bool {
+        switch self {
+        case .writeOnly, .denied, .restricted:
+            return true
+        case .notDetermined, .fullAccess, .unknown:
+            return false
+        }
+    }
+}
+#endif
+
+#if os(macOS)
+@MainActor
+private final class CalendarPermissionPromptCoordinator {
+    static let shared = CalendarPermissionPromptCoordinator()
+
+    private var previousActivationPolicy: NSApplication.ActivationPolicy?
+    private var authorizationWindow: NSWindow?
+
+    func prepare(showAnchorWindow: Bool) async {
+        if previousActivationPolicy == nil {
+            previousActivationPolicy = NSApp.activationPolicy()
+        }
+        NSApp.setActivationPolicy(.regular)
+        NSApp.unhide(nil)
+        if showAnchorWindow {
+            showAuthorizationAnchorWindow()
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        authorizationWindow?.makeKeyAndOrderFront(nil)
+        try? await Task.sleep(for: .milliseconds(500))
+    }
+
+    func closeAnchorWindow() async {
+        closeAnchorWindowNow()
+    }
+
+    func restoreActivationPolicy() async {
+        closeAnchorWindowNow()
+        if let previousActivationPolicy {
+            NSApp.setActivationPolicy(previousActivationPolicy)
+        }
+        previousActivationPolicy = nil
+    }
+
+    func openCalendarPrivacySettings() async {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars") else {
+            return
+        }
+        NSWorkspace.shared.open(url)
+    }
+
+    private func closeAnchorWindowNow() {
+        authorizationWindow?.close()
+        authorizationWindow = nil
+    }
+
+    private func showAuthorizationAnchorWindow() {
+        if let authorizationWindow {
+            authorizationWindow.makeKeyAndOrderFront(nil)
+            return
+        }
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 152),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "日历权限"
+        window.isReleasedWhenClosed = false
+        window.level = .floating
+        window.collectionBehavior = [.moveToActiveSpace]
+
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+
+        let spinner = NSProgressIndicator()
+        spinner.style = .spinning
+        spinner.controlSize = .regular
+        spinner.translatesAutoresizingMaskIntoConstraints = false
+        spinner.startAnimation(nil)
+
+        let title = NSTextField(labelWithString: "正在请求系统日历权限")
+        title.font = .systemFont(ofSize: 14, weight: .semibold)
+        title.translatesAutoresizingMaskIntoConstraints = false
+
+        let detail = NSTextField(wrappingLabelWithString: "请在系统弹窗中允许完整访问。若没有看到弹窗,Kown 会打开系统设置供你手动开启。")
+        detail.font = .systemFont(ofSize: 12)
+        detail.textColor = .secondaryLabelColor
+        detail.translatesAutoresizingMaskIntoConstraints = false
+
+        container.addSubview(spinner)
+        container.addSubview(title)
+        container.addSubview(detail)
+        window.contentView = container
+
+        NSLayoutConstraint.activate([
+            spinner.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 22),
+            spinner.topAnchor.constraint(equalTo: container.topAnchor, constant: 28),
+            spinner.widthAnchor.constraint(equalToConstant: 24),
+            spinner.heightAnchor.constraint(equalToConstant: 24),
+
+            title.leadingAnchor.constraint(equalTo: spinner.trailingAnchor, constant: 14),
+            title.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -22),
+            title.topAnchor.constraint(equalTo: container.topAnchor, constant: 26),
+
+            detail.leadingAnchor.constraint(equalTo: title.leadingAnchor),
+            detail.trailingAnchor.constraint(equalTo: title.trailingAnchor),
+            detail.topAnchor.constraint(equalTo: title.bottomAnchor, constant: 10)
+        ])
+
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        authorizationWindow = window
+    }
+}
+#endif
