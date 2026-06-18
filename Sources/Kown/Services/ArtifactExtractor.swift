@@ -11,10 +11,10 @@ enum ArtifactExtractor {
         var blocks: [ArtifactBlock] = []
         var inFence = false
         var fenceKind: ArtifactKind?
-        var buffer: [String] = []
+        var buffer: [Substring] = []
         var nextID = 0
 
-        for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init) {
+        for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false) {
             let trimmed = rawLine.trimmingCharacters(in: .whitespaces)
             if !inFence {
                 if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
@@ -26,7 +26,7 @@ enum ArtifactExtractor {
             } else {
                 if trimmed == "```" || trimmed == "~~~" || trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
                     if let k = fenceKind {
-                        let src = buffer.joined(separator: "\n").trimmingCharacters(in: .newlines)
+                        let src = buffer.map(String.init).joined(separator: "\n").trimmingCharacters(in: .newlines)
                         if !src.isEmpty {
                             blocks.append(ArtifactBlock(id: nextID, kind: k, source: src, isClosed: true))
                             nextID += 1
@@ -42,7 +42,7 @@ enum ArtifactExtractor {
         }
         // 流式中途:围栏还没闭合,但已有内容 → 当作未闭合 artifact 先预览。
         if inFence, let k = fenceKind {
-            let src = buffer.joined(separator: "\n").trimmingCharacters(in: .newlines)
+            let src = buffer.map(String.init).joined(separator: "\n").trimmingCharacters(in: .newlines)
             if !src.isEmpty {
                 blocks.append(ArtifactBlock(id: nextID, kind: k, source: src, isClosed: false))
             }
@@ -113,14 +113,14 @@ enum ArtifactExtractor {
     private static func firstFencedBlock(in text: String) -> String? {
         guard text.contains("```") else { return nil }
         var inFence = false
-        var buffer: [String] = []
-        for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init) {
+        var buffer: [Substring] = []
+        for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false) {
             let trimmed = rawLine.trimmingCharacters(in: .whitespaces)
             if !inFence {
                 if trimmed.hasPrefix("```") { inFence = true; buffer = [] }
             } else {
                 if trimmed.hasPrefix("```") {
-                    let src = buffer.joined(separator: "\n").trimmingCharacters(in: .newlines)
+                    let src = buffer.map(String.init).joined(separator: "\n").trimmingCharacters(in: .newlines)
                     return src.isEmpty ? nil : src
                 }
                 buffer.append(rawLine)
@@ -154,8 +154,8 @@ enum ArtifactExtractor {
         guard text.contains("```") else { return nil }
         var inFence = false
         var isToolFence = false
-        var buffer: [String] = []
-        for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init) {
+        var buffer: [Substring] = []
+        for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false) {
             let trimmed = rawLine.trimmingCharacters(in: .whitespaces)
             if !inFence {
                 if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
@@ -167,7 +167,7 @@ enum ArtifactExtractor {
             } else {
                 if trimmed == "```" || trimmed == "~~~" || trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
                     if isToolFence {
-                        let src = buffer.joined(separator: "\n").trimmingCharacters(in: .newlines)
+                        let src = buffer.map(String.init).joined(separator: "\n").trimmingCharacters(in: .newlines)
                         if !src.isEmpty { return src }
                     }
                     inFence = false

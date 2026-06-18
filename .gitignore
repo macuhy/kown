@@ -11,3 +11,8 @@ xcuserdata/
 
 # macOS
 .DS_Store
+
+# Local agent worktrees / generated app build outputs
+.claude/
+mac/build*/
+.idea/

@@ -3,6 +3,7 @@ import SwiftUI
 /// Standalone MVP screen for monitoring and controlling agent runs.
 struct AgentRunCenterView: View {
     let store: AgentRunStore
+    let embeddedInSettings: Bool
     var onPause: (@MainActor (AgentRun) -> Void)?
     var onCancel: (@MainActor (AgentRun) -> Void)?
     var onRerun: (@MainActor (AgentRun) -> Void)?
@@ -17,6 +18,7 @@ struct AgentRunCenterView: View {
 
     init(
         store: AgentRunStore = .shared,
+        embeddedInSettings: Bool = false,
         onPause: (@MainActor (AgentRun) -> Void)? = nil,
         onCancel: (@MainActor (AgentRun) -> Void)? = nil,
         onRerun: (@MainActor (AgentRun) -> Void)? = nil,
@@ -25,6 +27,7 @@ struct AgentRunCenterView: View {
         onReject: (@MainActor (AgentRun) -> Void)? = nil
     ) {
         self.store = store
+        self.embeddedInSettings = embeddedInSettings
         self.onPause = onPause
         self.onCancel = onCancel
         self.onRerun = onRerun
@@ -65,7 +68,7 @@ struct AgentRunCenterView: View {
             }
         }
         #if os(macOS)
-        .frame(minWidth: 880, minHeight: 560)
+        .frame(minWidth: embeddedInSettings ? 0 : 880, minHeight: embeddedInSettings ? 0 : 560)
         #endif
         .onAppear {
             if selectedRunID == nil {

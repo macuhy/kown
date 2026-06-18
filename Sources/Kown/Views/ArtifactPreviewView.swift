@@ -151,6 +151,14 @@ struct ArtifactPreviewPanel: View {
         var displayName: String { self == .preview ? "预览" : "源码" }
     }
 
+    private struct SourceToken: Equatable {
+        let conversationID: UUID?
+        let turnID: UUID?
+        let providerID: UUID?
+        let charCount: Int
+        let isRunning: Bool
+    }
+
     @State private var blocks: [ArtifactBlock] = []
     @State private var selectedID: Int?
     @State private var renderedHTML: String = ""
@@ -171,7 +179,9 @@ struct ArtifactPreviewPanel: View {
     @State private var reviseError: String?
     @State private var publishPayload: ArtifactPublishPayload?   // 非 nil 时弹「发布到 GitHub Pages」sheet
 
-    private let tick = Timer.publish(every: 0.30, on: .main, in: .common).autoconnect()
+    @State private var refreshTask: Task<Void, Never>?
+    @State private var lastRefreshAt: Date = .distantPast
+    private static let refreshInterval: TimeInterval = 0.30
 
     var body: some View {
         VStack(spacing: 0) {
@@ -196,9 +206,13 @@ struct ArtifactPreviewPanel: View {
         }
         .frame(minWidth: 280)
         .onAppear { refresh(force: true) }
-        .onReceive(tick) { _ in refresh(force: false) }
-        .onChange(of: viewModel.selectedConversationID) { _, _ in refresh(force: true) }
-        .onDisappear { renderDebounce?.cancel() }
+        .onChange(of: sourceToken) { _, _ in scheduleRefresh(force: false) }
+        .onChange(of: viewModel.isRunning) { _, _ in scheduleRefresh(force: true) }
+        .onChange(of: viewModel.selectedConversationID) { _, _ in scheduleRefresh(force: true) }
+        .onDisappear {
+            refreshTask?.cancel()
+            renderDebounce?.cancel()
+        }
         .sheet(item: $publishPayload) { payload in
             ArtifactPublishSheet(payload: payload)
         }
@@ -506,7 +520,26 @@ struct ArtifactPreviewPanel: View {
         return ""
     }
 
+    /// `onChange` 用轻量 token 触发,避免每次 live flush 都让 SwiftUI 对整段回答做 String 等值比较。
+    private var sourceToken: SourceToken {
+        let convID = viewModel.selectedConversationID
+        if let cfg = viewModel.providersForCurrentSend().panel.first,
+           let state = viewModel.liveStates[cfg.id], !state.text.isEmpty {
+            return SourceToken(conversationID: convID, turnID: nil, providerID: cfg.id,
+                               charCount: state.charCount, isRunning: viewModel.isRunning)
+        }
+        if let turn = viewModel.selectedConversation?.turns.last,
+           let cfg = turn.orderedPanelConfigs.first {
+            let text = turn.responses[cfg.id.uuidString] ?? ""
+            return SourceToken(conversationID: convID, turnID: turn.id, providerID: cfg.id,
+                               charCount: text.utf16.count, isRunning: viewModel.isRunning)
+        }
+        return SourceToken(conversationID: convID, turnID: nil, providerID: nil,
+                           charCount: 0, isRunning: viewModel.isRunning)
+    }
+
     private func refresh(force: Bool) {
+        lastRefreshAt = Date()
         let text = sourceText
         let hash = text.hashValue
         guard force || hash != lastSourceHash else {
@@ -529,6 +562,33 @@ struct ArtifactPreviewPanel: View {
         }
         syncArtifactState()
         rebuildHTML()
+    }
+
+    /// 事件驱动节流:只有源文本真的变化时才抽取 artifact;空闲时不再靠 0.3s Timer 常驻唤醒主线程。
+    private func scheduleRefresh(force: Bool) {
+        if force {
+            refreshTask?.cancel()
+            refreshTask = nil
+            refresh(force: true)
+            return
+        }
+
+        let elapsed = Date().timeIntervalSince(lastRefreshAt)
+        guard elapsed < Self.refreshInterval else {
+            refreshTask?.cancel()
+            refreshTask = nil
+            refresh(force: false)
+            return
+        }
+        guard refreshTask == nil else { return }
+
+        let delay = Self.refreshInterval - elapsed
+        refreshTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            refresh(force: false)
+            refreshTask = nil
+        }
     }
 
     /// 让编辑 / 版本状态跟上「当前指向的 artifact」:

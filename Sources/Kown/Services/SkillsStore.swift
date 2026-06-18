@@ -62,6 +62,24 @@ final class SkillsStore {
         return skill
     }
 
+    @discardableResult
+    func upsert(_ skill: Skill) -> Skill {
+        guard let idx = skills.firstIndex(where: { $0.id == skill.id }) else {
+            return add(skill)
+        }
+        let old = skills[idx]
+        var updated = skill
+        updated.createdAt = old.createdAt
+        updated.updatedAt = Date()
+        skills[idx] = updated
+        save()
+        if old.name != updated.name || old.summary != updated.summary
+            || old.keywords != updated.keywords || old.instructions != updated.instructions {
+            scheduleTriggerPhraseSynthesis(for: updated)
+        }
+        return updated
+    }
+
     func update(_ skill: Skill) {
         guard let idx = skills.firstIndex(where: { $0.id == skill.id }) else { return }
         let old = skills[idx]

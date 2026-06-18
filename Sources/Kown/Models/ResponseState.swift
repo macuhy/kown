@@ -44,12 +44,14 @@ final class ResponseState: Identifiable {
     @ObservationIgnored private var pendingChunks: String = ""
     /// 思考文本的同款缓冲,与 `pendingChunks` 共用同一个 flushTask 一起提交。
     @ObservationIgnored private var pendingReasoning: String = ""
+    @ObservationIgnored private var reasoningCharCount: Int = 0
     @ObservationIgnored private var flushTask: Task<Void, Never>?
 
     /// UserDefaults 里存的刷新间隔(毫秒)。Settings → 性能 可调。
-    /// 默认 50ms ≈ 20Hz;低性能机器可以调到 100 / 200ms 以进一步降负载。
+    /// 默认 100ms ≈ 10Hz;比逐 chunk 刷新轻很多,视觉上仍保持流式感。
+    /// 低性能机器可以调到 200 / 500ms 以进一步降负载。
     static let flushIntervalKey = "kown.stream.flushIntervalMs.v1"
-    static let defaultFlushIntervalMs: Int = 50
+    static let defaultFlushIntervalMs: Int = 100
     static let allowedFlushIntervalsMs: [Int] = [30, 50, 100, 200, 500]
 
     /// 当前生效的刷新间隔(纳秒),每次 scheduleFlush 时实时从 UserDefaults 取,
@@ -72,6 +74,7 @@ final class ResponseState: Identifiable {
         text = ""
         charCount = 0
         reasoning = ""
+        reasoningCharCount = 0
         events = []
         toolSteps = []
         inputTokens = 0
@@ -111,18 +114,22 @@ final class ResponseState: Identifiable {
     private func flushPending() {
         if !pendingReasoning.isEmpty {
             // 到顶后只清空缓冲、不再追加,避免 reasoning 无限增长 + 每次 flush 重测整段。
-            if reasoning.count < Self.maxReasoningChars {
+            if reasoningCharCount < Self.maxReasoningChars {
+                let appendedCount = pendingReasoning.count
                 reasoning += pendingReasoning
-                if reasoning.count > Self.maxReasoningChars {
+                reasoningCharCount += appendedCount
+                if reasoningCharCount > Self.maxReasoningChars {
                     reasoning = String(reasoning.prefix(Self.maxReasoningChars)) + "\n\n[思考内容过长,已截断]"
+                    reasoningCharCount = reasoning.count
                 }
             }
             pendingReasoning = ""
         }
         guard !pendingChunks.isEmpty else { return }
+        let appendedCount = pendingChunks.count
         text += pendingChunks
         pendingChunks = ""
-        charCount = text.count
+        charCount += appendedCount
     }
 
     func logEvent(_ message: String) {
@@ -168,6 +175,7 @@ final class ResponseState: Identifiable {
         s.text = text
         s.charCount = text.count
         s.reasoning = reasoning
+        s.reasoningCharCount = reasoning.count
         if let error, !error.isEmpty {
             s.phase = .failed(error)
         } else {

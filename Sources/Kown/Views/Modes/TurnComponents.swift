@@ -548,7 +548,8 @@ struct HistoricalResponseCard: View {
                 .padding(.vertical, 12)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else {
-            let isLong = text.count > Self.collapseThreshold
+            let displayCount = text.utf16.count
+            let isLong = displayCount > Self.collapseThreshold
             VStack(alignment: .leading, spacing: 8) {
                 MarkdownText(text: citationLinkified(text, sources: sources, knowledgeSources: knowledgeSources))
                     .knowledgeCitationHost(knowledgeSources)
@@ -564,7 +565,7 @@ struct HistoricalResponseCard: View {
                         }
                     }
                 if isLong {
-                    Button(expanded ? "收起" : "展开全部(\(text.count) 字)") {
+                    Button(expanded ? "收起" : "展开全部(\(displayCount) 字)") {
                         withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
                     }
                     .font(.caption.weight(.semibold))
@@ -591,7 +592,7 @@ struct HistoricalResponseCard: View {
     @ViewBuilder
     private var footerMetrics: some View {
         if !text.isEmpty {
-            metricPill("\(text.count) 字", icon: "text.alignleft")
+            metricPill("\(text.utf16.count) 字", icon: "text.alignleft")
         }
         if let tokenUsage, tokenUsage.input > 0 || tokenUsage.output > 0 {
             TokenCostPill(usage: tokenUsage, model: config.model, providerKind: config.kind)

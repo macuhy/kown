@@ -181,6 +181,52 @@ final class SkillPackageStore {
 // MARK: - 内置推荐包
 
 extension SkillPackageStore {
+    static let examplePackage: SkillPackage = {
+        let epoch = Date(timeIntervalSince1970: 1_700_000_000)
+        return SkillPackage(
+            id: UUID(uuidString: "44444444-4444-4444-8444-444444444444")!,
+            metadata: .init(
+                name: "示例技能包-需求澄清助手",
+                summary: "把模糊需求整理成目标、用户、边界、风险和待确认问题。",
+                author: "Kown",
+                version: "1.0.0",
+                tags: ["示例", "需求", "PRD", "澄清"],
+                minKownVersion: "0.1.0",
+                createdAt: epoch,
+                updatedAt: epoch
+            ),
+            prompts: [
+                .init(title: "需求澄清系统提示词", template: """
+                你是产品需求澄清助手。围绕用户提供的「{{需求描述}}」输出结构化分析:
+                1. 用一句话重述目标;
+                2. 列出目标用户、核心场景和非目标边界;
+                3. 提取已知约束、潜在风险和依赖;
+                4. 给出 5 个最应该追问的问题;
+                5. 最后整理成可复制到 PRD 的 Markdown 小节。
+                不要编造用户没有提供的事实;缺失信息放到「待确认」。
+                """)
+            ],
+            variables: [
+                .init(name: "需求描述", summary: "用户原始需求、会议记录或想法草稿")
+            ],
+            examples: [
+                .init(
+                    title: "模糊需求澄清",
+                    input: "需求描述 = 我想做一个能自动整理客户访谈的功能",
+                    output: "输出目标、场景、边界、风险和待确认问题。"
+                )
+            ],
+            requiredToolPermissions: [],
+            personaReferences: [
+                .init(name: "产品经理", summary: "适合产品规划、需求拆解和 PRD 初稿。")
+            ],
+            promptChainReferences: [
+                .init(name: "澄清 → 拆解 → PRD", summary: "先追问关键缺口,再拆成功能范围。", stepTitles: ["澄清", "拆解", "PRD"])
+            ],
+            source: .local
+        )
+    }()
+
     static let recommendedPackages: [SkillPackage] = {
         let epoch = Date(timeIntervalSince1970: 1_700_000_000)
         return [

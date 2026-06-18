@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// 功能 5 独立 MVP:技能包市场 / 导入导出。
 ///
@@ -17,6 +18,11 @@ struct SkillPackageMarketView: View {
     @State private var selectedPackageID: UUID?
     @State private var statusMessage: String = "选择一个技能包查看详情。"
     @State private var lastExportPreview: String = ""
+    @State private var pendingExportDocument: SkillPackageDocument?
+    @State private var pendingExportFilename: String = ""
+    @State private var pendingExportName: String = ""
+    @State private var showExporter = false
+    @State private var showImporter = false
 
     @Environment(\.horizontalSizeClass) private var hSizeClass
 
@@ -40,6 +46,27 @@ struct SkillPackageMarketView: View {
             if selectedPackageID == nil {
                 selectedPackageID = store.marketPackages.first?.id
             }
+        }
+        .fileExporter(
+            isPresented: $showExporter,
+            document: pendingExportDocument,
+            contentType: .kownSkillPackage,
+            defaultFilename: pendingExportFilename
+        ) { result in
+            switch result {
+            case .success(let url):
+                statusMessage = "已导出 \(pendingExportName) 到 \(url.lastPathComponent)"
+            case .failure(let error):
+                statusMessage = "导出失败: \(error.localizedDescription)"
+            }
+            pendingExportDocument = nil
+            pendingExportName = ""
+        }
+        .fileImporter(
+            isPresented: $showImporter,
+            allowedContentTypes: [.kownSkillPackage, .json, .data]
+        ) { result in
+            handleImportResult(result)
         }
     }
 
@@ -136,6 +163,13 @@ struct SkillPackageMarketView: View {
                     }
                     .buttonStyle(.bordered)
                 }
+
+                Button {
+                    exportExampleTapped()
+                } label: {
+                    Label("导出示例", systemImage: "doc.badge.plus")
+                }
+                .buttonStyle(.bordered)
             }
 
             Text(statusMessage)
@@ -516,12 +550,17 @@ struct SkillPackageMarketView: View {
     }
 
     private func importTapped() {
-        if let package = onImportRequested?() {
+        if let onImportRequested {
+            guard let package = onImportRequested() else {
+                statusMessage = "导入按钮已触发,但没有返回可导入的技能包。"
+                return
+            }
             let installed = store.install(package)
             selectedPackageID = installed.id
-            statusMessage = "已导入 \(installed.displayName)"
+            onInstallPackage?(installed)
+            statusMessage = installedMessage(for: installed)
         } else {
-            statusMessage = "导入按钮已触发。集成时在 onImportRequested 中接入文件选择器。"
+            showImporter = true
         }
     }
 
@@ -530,9 +569,48 @@ struct SkillPackageMarketView: View {
             let data = try store.exportData(for: package)
             onExportPackage?(package, data)
             lastExportPreview = String(data: data.prefix(1_200), encoding: .utf8) ?? "\(data.count) bytes"
-            statusMessage = "已生成 \(SkillPackageStore.suggestedExportFilename(for: package)) (\(data.count) bytes)"
+            prepareFileExport(package: package, data: data)
         } catch {
             statusMessage = "导出失败: \(error.localizedDescription)"
+        }
+    }
+
+    private func exportExampleTapped() {
+        let package = SkillPackageStore.examplePackage
+        do {
+            let data = try SkillPackageStore.encode(package)
+            onExportPackage?(package, data)
+            lastExportPreview = String(data: data.prefix(1_200), encoding: .utf8) ?? "\(data.count) bytes"
+            prepareFileExport(package: package, data: data)
+        } catch {
+            statusMessage = "导出示例失败: \(error.localizedDescription)"
+        }
+    }
+
+    private func prepareFileExport(package: SkillPackage, data: Data) {
+        let filename = SkillPackageStore.suggestedExportFilename(for: package)
+        pendingExportDocument = SkillPackageDocument(data: data)
+        pendingExportFilename = filename
+        pendingExportName = package.displayName
+        statusMessage = "已生成 \(filename) (\(data.count) bytes),请选择保存位置。"
+        showExporter = true
+    }
+
+    private func handleImportResult(_ result: Result<URL, Error>) {
+        switch result {
+        case .failure(let error):
+            statusMessage = "选择文件失败: \(error.localizedDescription)"
+        case .success(let url):
+            do {
+                let needsScope = url.startAccessingSecurityScopedResource()
+                defer { if needsScope { url.stopAccessingSecurityScopedResource() } }
+                let installed = try store.importPackage(from: url)
+                selectedPackageID = installed.id
+                onInstallPackage?(installed)
+                statusMessage = installedMessage(for: installed)
+            } catch {
+                statusMessage = "导入失败: \(error.localizedDescription)"
+            }
         }
     }
 
@@ -540,7 +618,14 @@ struct SkillPackageMarketView: View {
         let installed = store.install(package)
         selectedPackageID = installed.id
         onInstallPackage?(installed)
-        statusMessage = "已导入 \(installed.displayName),主代理可调用 makeSkill() 接入技能库。"
+        statusMessage = installedMessage(for: installed)
+    }
+
+    private func installedMessage(for package: SkillPackage) -> String {
+        if onInstallPackage != nil {
+            return "已导入 \(package.displayName),并加入「设置 → 技能」。"
+        }
+        return "已导入 \(package.displayName)"
     }
 
     private func sourceTitle(_ package: SkillPackage) -> String {
@@ -578,5 +663,33 @@ struct SkillPackageMarketView: View {
         case .medium: return .orange
         case .high: return .red
         }
+    }
+}
+
+private struct SkillPackageDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.kownSkillPackage] }
+    static var writableContentTypes: [UTType] { [.kownSkillPackage] }
+
+    var data: Data
+
+    init(data: Data) {
+        self.data = data
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        guard let data = configuration.file.regularFileContents else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        self.data = data
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: data)
+    }
+}
+
+private extension UTType {
+    static var kownSkillPackage: UTType {
+        UTType(filenameExtension: SkillPackage.fileExtension, conformingTo: .json) ?? .json
     }
 }

@@ -53,6 +53,15 @@ final class SkillPackageStoreTests: XCTestCase {
         XCTAssertEqual(store.marketPackages.count, store.recommendedPackages.count)
     }
 
+    func testExamplePackageExportsAsValidKownSkill() throws {
+        let data = try SkillPackageStore.encode(SkillPackageStore.examplePackage)
+        let decoded = try SkillPackageStore.decodePackage(from: data)
+
+        XCTAssertEqual(decoded.displayName, "示例技能包-需求澄清助手")
+        XCTAssertEqual(decoded.variableNames, ["需求描述"])
+        XCTAssertTrue(decoded.promptText.contains("PRD"))
+    }
+
     private func samplePackage() -> SkillPackage {
         SkillPackage(
             id: UUID(uuidString: "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA")!,

@@ -207,7 +207,7 @@ struct SettingsView: View {
             }
             .background(SettingsBackdrop())
         }
-        .frame(width: Self.desktopWidth, height: Self.desktopHeight)
+        .frame(width: Self.desktopWidth, height: Self.desktopHeight, alignment: .topLeading)
     }
 
     #if os(iOS)
@@ -229,13 +229,18 @@ struct SettingsView: View {
                     case .connectorHub:
                         ConnectorHubView()
                     case .agentRuns:
-                        AgentRunCenterView()
+                        AgentRunCenterView(embeddedInSettings: true)
                     case .meetingWorkflow:
-                        MeetingWorkflowView(title: "会议闭环示例", attendees: ["我", "团队"], transcript: "我们决定先上线连接器中心。下周三前补齐 Agent 运行中心。风险是入口太分散,需要统一到设置页。")
+                        MeetingWorkflowView(
+                            title: "会议闭环示例",
+                            attendees: ["我", "团队"],
+                            transcript: "我们决定先上线连接器中心。下周三前补齐 Agent 运行中心。风险是入口太分散,需要统一到设置页。",
+                            embeddedInSettings: true
+                        )
                     case .deliverables:
                         DeliverableStudioView(request: DeliverableRequest(title: "路线图交付物", sourceKind: .research, sourceText: "# 结论\nKown 下一步应把连接器、Agent 运行、会议闭环、交付物和技能包串成闭环。"))
                     case .skillPackages:
-                        SkillPackageMarketView()
+                        SkillPackageMarketView(onInstallPackage: installSkillPackage)
                     case .personas:
                         PersonaSettingsView(viewModel: viewModel)
                     case .deviceTools:
@@ -844,13 +849,18 @@ struct SettingsView: View {
             case .connectorHub:
                 ConnectorHubView()
             case .agentRuns:
-                AgentRunCenterView()
+                AgentRunCenterView(embeddedInSettings: true)
             case .meetingWorkflow:
-                MeetingWorkflowView(title: "会议闭环示例", attendees: ["我", "团队"], transcript: "我们决定先上线连接器中心。下周三前补齐 Agent 运行中心。风险是入口太分散,需要统一到设置页。")
+                MeetingWorkflowView(
+                    title: "会议闭环示例",
+                    attendees: ["我", "团队"],
+                    transcript: "我们决定先上线连接器中心。下周三前补齐 Agent 运行中心。风险是入口太分散,需要统一到设置页。",
+                    embeddedInSettings: true
+                )
             case .deliverables:
                 DeliverableStudioView(request: DeliverableRequest(title: "路线图交付物", sourceKind: .research, sourceText: "# 结论\nKown 下一步应把连接器、Agent 运行、会议闭环、交付物和技能包串成闭环。"))
             case .skillPackages:
-                SkillPackageMarketView()
+                SkillPackageMarketView(onInstallPackage: installSkillPackage)
             case .personas:
                 PersonaSettingsView(viewModel: viewModel)
             case .deviceTools:
@@ -1304,6 +1314,10 @@ struct SettingsView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
         .background((active == 0 ? Color.orange : Color.green).opacity(0.10), in: Capsule())
+    }
+
+    private func installSkillPackage(_ package: SkillPackage) {
+        viewModel.skillsStore.upsert(package.makeSkill(enabled: true, isPreset: false))
     }
 
     private var addProviderMenu: some View {

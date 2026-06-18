@@ -27,6 +27,24 @@ struct ConversationRowView: View {
     @State private var confirmPurge = false
     @FocusState private var renameFocused: Bool
 
+    private static let timeFormatter: DateFormatter = {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "HH:mm"
+        return fmt
+    }()
+
+    private static let monthDayTimeFormatter: DateFormatter = {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "MMM d, HH:mm"
+        return fmt
+    }()
+
+    private static let fullDateFormatter: DateFormatter = {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd"
+        return fmt
+    }()
+
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             KownModeMark(mode: conversation.mode, size: iconSize, selected: isSelected)
@@ -304,15 +322,13 @@ struct ConversationRowView: View {
     }
 
     private var formattedDate: String {
-        let fmt = DateFormatter()
         let cal = Calendar.current
         if cal.isDateInToday(conversation.updatedAt) {
-            fmt.dateFormat = "HH:mm"
+            return Self.timeFormatter.string(from: conversation.updatedAt)
         } else if cal.isDate(conversation.updatedAt, equalTo: Date(), toGranularity: .year) {
-            fmt.dateFormat = "MMM d, HH:mm"
+            return Self.monthDayTimeFormatter.string(from: conversation.updatedAt)
         } else {
-            fmt.dateFormat = "yyyy-MM-dd"
+            return Self.fullDateFormatter.string(from: conversation.updatedAt)
         }
-        return fmt.string(from: conversation.updatedAt)
     }
 }

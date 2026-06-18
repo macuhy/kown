@@ -6,21 +6,24 @@ import SwiftUI
 /// app can embed it later from any sheet, inspector, or detail route.
 struct MeetingWorkflowView: View {
     let workflow: MeetingWorkflow
+    let embeddedInSettings: Bool
     @State private var showingDeliverable = false
 
     private let preTint = Color(red: 0.18, green: 0.48, blue: 0.74)
     private let inTint = Color(red: 0.85, green: 0.42, blue: 0.18)
     private let postTint = Color(red: 0.24, green: 0.58, blue: 0.35)
 
-    init(workflow: MeetingWorkflow) {
+    init(workflow: MeetingWorkflow, embeddedInSettings: Bool = false) {
         self.workflow = workflow
+        self.embeddedInSettings = embeddedInSettings
     }
 
     init(
         title: String,
         attendees: [String] = [],
         transcript: String? = nil,
-        notes: MeetingNotes? = nil
+        notes: MeetingNotes? = nil,
+        embeddedInSettings: Bool = false
     ) {
         self.workflow = MeetingWorkflowService.generate(
             title: title,
@@ -28,6 +31,7 @@ struct MeetingWorkflowView: View {
             transcript: transcript,
             notes: notes
         )
+        self.embeddedInSettings = embeddedInSettings
     }
 
     var body: some View {
@@ -53,7 +57,7 @@ struct MeetingWorkflowView: View {
             ))
         }
         #if os(macOS)
-        .frame(minWidth: 580, minHeight: 680)
+        .frame(minWidth: 580, minHeight: embeddedInSettings ? 0 : 680)
         #endif
     }
 }

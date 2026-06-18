@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kown — 功能总览</title>
+<style>
+  :root{
+    --bg:#0b0d12; --card:#161a24; --card2:#1c2230; --line:#262d3d;
+    --txt:#e7ebf3; --mut:#97a1b5; --dim:#6c7689;
+    --acc:#7c8cff; --acc2:#52d6c8; --acc3:#ffb454;
+    --grad:linear-gradient(135deg,#7c8cff 0%,#52d6c8 100%);
+    --grad2:linear-gradient(135deg,#ff8db4 0%,#ffb454 100%);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--txt);line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+    background-image:radial-gradient(900px 600px at 82% -5%,rgba(124,140,255,.18),transparent 60%),
+                     radial-gradient(720px 520px at 0% 8%,rgba(82,214,200,.12),transparent 55%);
+    background-attachment:fixed;
+  }
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+  a{color:var(--acc2);text-decoration:none}
+
+  header.hero{padding:80px 0 40px;text-align:center}
+  .logo{
+    width:78px;height:78px;border-radius:20px;margin:0 auto 22px;
+    background:var(--grad);display:flex;align-items:center;justify-content:center;
+    font-size:38px;font-weight:800;color:#0b0d12;
+    box-shadow:0 18px 50px -12px rgba(124,140,255,.55);
+  }
+  .hero h1{font-size:clamp(34px,6vw,56px);font-weight:850;letter-spacing:-.03em;line-height:1.05}
+  .hero h1 .g{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .hero .tag{margin-top:16px;font-size:clamp(16px,2.2vw,20px);color:var(--mut);font-weight:500;max-width:620px;margin-left:auto;margin-right:auto}
+  .pills{display:flex;flex-wrap:wrap;gap:9px;justify-content:center;margin-top:28px}
+  .pill{border:1px solid var(--line);background:rgba(255,255,255,.03);padding:7px 15px;border-radius:999px;font-size:13px;color:var(--mut)}
+  .pill b{color:var(--txt);font-weight:600}
+
+  section{padding:30px 0}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px}
+  .card{
+    background:linear-gradient(180deg,var(--card),var(--card2));
+    border:1px solid var(--line);border-radius:18px;padding:22px 22px 18px;
+    position:relative;overflow:hidden;
+  }
+  .card::before{content:"";position:absolute;inset:0 0 auto 0;height:3px;background:var(--grad)}
+  .card.alt::before{background:var(--grad2)}
+  .card .ic{font-size:22px;margin-bottom:10px;display:block}
+  .card h3{font-size:18px;font-weight:750;letter-spacing:-.01em;margin-bottom:4px}
+  .card .lead{font-size:13px;color:var(--dim);margin-bottom:12px}
+  .card ul{list-style:none;display:flex;flex-direction:column;gap:7px}
+  .card li{font-size:14px;color:var(--mut);padding-left:18px;position:relative}
+  .card li::before{content:"";position:absolute;left:0;top:8px;width:6px;height:6px;border-radius:50%;background:var(--acc2)}
+  .card.alt li::before{background:var(--acc3)}
+  .card li b{color:var(--txt);font-weight:600}
+
+  .eyebrow{font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+    background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;
+    margin:0 0 16px;text-align:center}
+
+  footer{padding:48px 0 64px;text-align:center;color:var(--dim);font-size:13px;border-top:1px solid var(--line);margin-top:24px}
+  footer b{color:var(--mut)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <div class="logo">玄</div>
+    <h1>Kown <span class="g">功能总览</span></h1>
+    <p class="tag">一个 macOS + iOS 的多模型 AI 对话客户端 —— 同一个问题,让多个模型一起答、并排比、互相辩。</p>
+    <div class="pills">
+      <span class="pill"><b>4</b> 种对话模式</span>
+      <span class="pill">OpenAI 兼容 · Claude · Gemini · CLI</span>
+      <span class="pill">联网 · 知识库 · 视觉 · 出图</span>
+      <span class="pill">iCloud 同步 · 双端</span>
+    </div>
+  </header>
+
+  <p class="eyebrow">核心 · 多模型协作</p>
+  <section><div class="grid">
+    <div class="card">
+      <span class="ic">🧠</span><h3>议会 Council</h3>
+      <p class="lead">多脑同答 + 主席综合</p>
+      <ul>
+        <li>所有启用的模型各自作答</li>
+        <li>主席模型再做一轮<b>综合</b></li>
+        <li>可选<b>投票打分</b>:准确 / 完整 / 可执行 / 清晰四维排名</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="ic">💬</span><h3>直接 Direct</h3>
+      <p class="lead">专注单模型</p>
+      <ul>
+        <li>跟一个模型一对一对话</li>
+        <li>可<b>按难度自动选档</b>(便宜↔旗舰)</li>
+        <li>答卡随时<b>换模型</b>续聊</li>
+      </ul>
+    </div>
+    <div class="card alt">
+      <span class="ic">⚖️</span><h3>对比 Compare</h3>
+      <p class="lead">并排看差异</p>
+      <ul>
+        <li>同一问题发给<b>两个模型</b></li>
+        <li>左右并排对照回答</li>
+        <li>可加<b>裁判</b>模型评高下</li>
+      </ul>
+    </div>
+    <div class="card alt">
+      <span class="ic">🗣️</span><h3>辩论 Debate</h3>
+      <p class="lead">立论→反驳→总结</p>
+      <ul>
+        <li>多模型<b>多轮互相反驳</b></li>
+        <li>可调辩论轮数</li>
+        <li>主持人模型最后<b>总结裁定</b></li>
+      </ul>
+    </div>
+  </div></section>
+
+  <p class="eyebrow">接入 · 模型与能力</p>
+  <section><div class="grid">
+    <div class="card">
+      <span class="ic">🔌</span><h3>多家模型</h3>
+      <p class="lead">自带 Key,随意混搭</p>
+      <ul>
+        <li><b>OpenAI 兼容</b>:GPT / DeepSeek / GLM / Qwen / Moonshot / OpenRouter…</li>
+        <li><b>Anthropic Claude</b>(扩展思考 · 提示缓存)</li>
+        <li><b>Google Gemini</b> · 本地 <b>CLI</b>(claude/gemini/codex)</li>
+        <li>每个 provider 可配模型 / 温度 / top-p / 最大 tokens</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="ic">🌐</span><h3>联网搜索</h3>
+      <p class="lead">Firecrawl 实时检索</p>
+      <ul>
+        <li>回答带<b>来源</b>,正文 <b>[n] 角标可点</b>跳原文</li>
+        <li>可<b>抓取网页正文</b>进上下文</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="ic">📚</span><h3>知识库 / 本地 RAG</h3>
+      <p class="lead">全程离线 · 零成本</p>
+      <ul>
+        <li>Apple 句向量 + <b>BM25 混合检索</b></li>
+        <li>绑定资料夹,发送时按问题检索注入</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="ic">🖼️</span><h3>视觉 / 出图 / 附件</h3>
+      <p class="lead">不止文字</p>
+      <ul>
+        <li>图片<b>识图</b> · <b>图像生成</b></li>
+        <li>拖拽<b>文件 / PDF</b> 当附件</li>
+        <li>macOS <b>工作目录</b>:注入内容 + 写回文件</li>
+      </ul>
+    </div>
+  </div></section>
+
+  <p class="eyebrow">日常 · 管理与效率</p>
+  <section><div class="grid">
+    <div class="card">
+      <span class="ic">🗂️</span><h3>对话管理</h3>
+      <p class="lead">井井有条</p>
+      <ul>
+        <li>文件夹 / 标签 / 置顶 / <b>回收站</b>(可恢复)</li>
+        <li>草稿自动保存 · <b>接续生成 / 重答 / 编辑某轮</b></li>
+        <li><b>每会话</b>独立系统提示 + 生成参数(温度/top-p/最大tokens)</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="ic">⌨️</span><h3>效率工具</h3>
+      <p class="lead">键盘流</p>
+      <ul>
+        <li><b>命令面板 ⌘K</b>:跳会话 / 切模式 / 切模型</li>
+        <li><b>跨会话全局搜索</b>(直达命中那一轮)</li>
+        <li>提示词库({{变量}}) · 场景模板 · 收藏夹</li>
+        <li>每行<b>面板数</b>可调 · 追问建议</li>
+      </ul>
+    </div>
+    <div class="card alt">
+      <span class="ic">🔊</span><h3>语音 / 朗读</h3>
+      <p class="lead">解放双手</p>
+      <ul>
+        <li>TTS <b>逐字高亮</b>朗读(讯飞 + 神经语音)</li>
+        <li><b>语音对话模式</b>(免手连续对话)</li>
+        <li><b>听写</b>输入</li>
+      </ul>
+    </div>
+    <div class="card alt">
+      <span class="ic">💰</span><h3>成本 / 用量</h3>
+      <p class="lead">花得明白</p>
+      <ul>
+        <li>Token 统计(按天/模型 · 成本估算 · 缓存命中)</li>
+        <li><b>月度预算上限 + 发送前超支告警</b></li>
+      </ul>
+    </div>
+  </div></section>
+
+  <p class="eyebrow">平台 · 同步与自动化</p>
+  <section><div class="grid">
+    <div class="card">
+      <span class="ic">☁️</span><h3>双端 + iCloud</h3>
+      <p class="lead">无缝跨设备</p>
+      <ul>
+        <li>macOS + iOS 共享一份体验</li>
+        <li><b>iCloud 同步</b>会话 / 配置 / API Key</li>
+        <li>Sparkle 自动更新(mac) · TestFlight(iOS)</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="ic">📤</span><h3>导出 / 分享</h3>
+      <p class="lead">带得走</p>
+      <ul>
+        <li>导出 <b>PDF</b>(矢量·多页) / Markdown</li>
+        <li>答卡 / 整会话<b>截图分享</b></li>
+        <li>iOS <b>分享扩展</b></li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="ic">⚡</span><h3>自动化 / 进阶</h3>
+      <p class="lead">接入系统</p>
+      <ul>
+        <li><b>URL Scheme 深链</b> kown:// · <b>App Intents</b>(快捷指令/Siri)</li>
+        <li>菜单栏快速提问(mac)</li>
+        <li><b>自动容错切换</b> · 流式刷新节奏调节</li>
+      </ul>
+    </div>
+  </div></section>
+
+  <footer>
+    <b>Kown</b> — 多模型 AI 对话客户端 · macOS &amp; iOS<br>
+    本页为功能总览,具体以 app 内「更新日志」为准。
+  </footer>
+
+</div>
+</body>
+</html>

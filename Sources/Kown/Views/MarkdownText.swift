@@ -63,13 +63,15 @@ struct MarkdownText: View {
         if streaming {
             // 只有正在生成的卡片才进流式分支(它独占一个节流定时器)。
             StreamingMarkdownText(text: text)
-        } else if text.count > MD.maxFinishedChars {
-            MD.rawText(text, selectable: true)  // 防失控:超长走 raw,避开 anchor/布局重路径
+        } else if MD.isLonger(text, than: MD.maxFinishedChars) {
+            MarkdownRawTextView(source: text, selectable: true)
+                .equatable()  // 防失控:超长走 raw,避开 anchor/布局重路径
         } else {
             // 完成态允许系统文本选择:纯文本路径可跨段拖选,块级 Markdown 路径也能选中
             // 代码/表格/标题里的片段;流式分支仍关闭,避免每个 chunk 触发选择层重布局。
             // stylizeMath 走记忆版:静态历史卡的 body 被反复求值时不再重跑数学正则。
-            MD.rendered(for: MD.stylizeMathCached(text), selectable: true)
+            MarkdownRenderView(source: MD.stylizeMathCached(text), selectable: true)
+                .equatable()
         }
     }
 }
@@ -91,13 +93,15 @@ private struct StreamingMarkdownText: View {
     var body: some View {
         let src = snapshot.isEmpty ? text : snapshot
         return Group {
-            if src.count > MD.maxLiveChars {
-                MD.rawText(src, selectable: false)
+            if MD.isLonger(src, than: MD.maxLiveChars) {
+                MarkdownRawTextView(source: src, selectable: false)
+                    .equatable()
             } else {
                 // 节流快照 + 数学样式 + 补全未闭合代码围栏;不开 textSelection 更轻。
                 // styledSnapshot 为空仅出现在 onAppear 之前的首帧,退化为即时计算一次。
-                MD.rendered(for: styledSnapshot.isEmpty ? MD.balancedFences(MD.stylizeMath(src)) : styledSnapshot,
-                            selectable: false)
+                MarkdownRenderView(source: styledSnapshot.isEmpty ? MD.balancedFences(MD.stylizeMath(src)) : styledSnapshot,
+                                   selectable: false)
+                    .equatable()
             }
         }
         .onAppear { commitSnapshot(text) }
@@ -107,9 +111,29 @@ private struct StreamingMarkdownText: View {
     /// 推进快照并同步重算转换结果(仅在事件回调里,不在 body 内改 @State)。
     private func commitSnapshot(_ newText: String) {
         snapshot = newText
-        styledSnapshot = newText.count > MD.maxLiveChars
+        styledSnapshot = MD.isLonger(newText, than: MD.maxLiveChars)
             ? ""    // 超长走 rawText,不需要 styled
             : MD.balancedFences(MD.stylizeMath(newText))
+    }
+}
+
+/// Equatable 包装:父视图仍会跟随 live text 高频刷新,但只要节流后的 source 没变,
+/// SwiftUI 就不用重新跑 `AttributedString(markdown:)` / MarkdownUI 解析。
+private struct MarkdownRenderView: View, Equatable {
+    let source: String
+    let selectable: Bool
+
+    var body: some View {
+        MD.rendered(for: source, selectable: selectable)
+    }
+}
+
+private struct MarkdownRawTextView: View, Equatable {
+    let source: String
+    let selectable: Bool
+
+    var body: some View {
+        MD.rawText(source, selectable: selectable)
     }
 }
 
@@ -120,6 +144,13 @@ enum MD {
     static let maxLiveChars = 6000
     /// 防失控:超长回答即使已完成也只渲 raw,绝不进 anchor/布局重路径(历史上撑出无限布局循环 + 14GB)。
     static let maxFinishedChars = 40000
+
+    static func isLonger(_ text: String, than limit: Int) -> Bool {
+        guard let idx = text.index(text.startIndex, offsetBy: limit, limitedBy: text.endIndex) else {
+            return false
+        }
+        return idx < text.endIndex
+    }
 
     @ViewBuilder
     static func rawText(_ s: String, selectable: Bool) -> some View {

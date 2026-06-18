@@ -11,12 +11,25 @@ struct ReasoningDisclosure: View {
 
     @State private var expanded = false
 
+    /// 流式时只渲染最新一段思考文本。完整 reasoning 仍保存在 ResponseState 里,结束后可展开查看。
+    /// 这样扩展思考模型输出几十 KB 时,不会每次 UI flush 都让单个 Text 重测全文。
+    private static let liveVisibleReasoningChars = 8_000
+
     /// 渲染用文本:实时流式已在 ResponseState.flushPending 封顶,但更早落盘的历史 reasoning 可能超长。
     /// 再兜一层,避免单个 Text(reasoning) 整段测量烧 CPU(与 ResponseState.maxReasoningChars 对齐)。
     private var displayReasoning: String {
-        reasoning.count > ResponseState.maxReasoningChars
-            ? String(reasoning.prefix(ResponseState.maxReasoningChars)) + "…"
-            : reasoning
+        if streaming, Self.isLonger(reasoning, than: Self.liveVisibleReasoningChars) {
+            return "…\n" + String(reasoning.suffix(Self.liveVisibleReasoningChars))
+        }
+        if Self.isLonger(reasoning, than: ResponseState.maxReasoningChars) {
+            return String(reasoning.prefix(ResponseState.maxReasoningChars)) + "…"
+        }
+        return reasoning
+    }
+
+    private var countLabel: String {
+        let count = reasoning.utf16.count
+        return count >= 10_000 ? "\(count / 1000)k 字" : "\(count) 字"
     }
 
     var body: some View {
@@ -33,7 +46,7 @@ struct ReasoningDisclosure: View {
                         if streaming {
                             ProgressView().controlSize(.mini)
                         } else {
-                            Text("\(reasoning.count) 字")
+                            Text(countLabel)
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }
@@ -71,6 +84,13 @@ struct ReasoningDisclosure: View {
                 if !nowStreaming { withAnimation(.easeInOut(duration: 0.18)) { expanded = false } }
             }
         }
+    }
+
+    private static func isLonger(_ text: String, than limit: Int) -> Bool {
+        guard let idx = text.index(text.startIndex, offsetBy: limit, limitedBy: text.endIndex) else {
+            return false
+        }
+        return idx < text.endIndex
     }
 }
 

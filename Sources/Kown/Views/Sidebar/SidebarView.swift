@@ -34,6 +34,13 @@ struct SidebarView: View {
     /// [知识图谱] 是否打开知识↔对话↔记忆关系图。
     @State private var showKnowledgeGraph = false
 
+    private typealias BranchRelative = (id: UUID, title: String, isParent: Bool)
+
+    private struct FolderConversationGroups {
+        let byFolder: [UUID: [Conversation]]
+        let ungrouped: [Conversation]
+    }
+
     /// 当前是否处于搜索态
     private var isSearching: Bool {
         !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -425,7 +432,9 @@ struct SidebarView: View {
 
     @ViewBuilder
     private var list: some View {
-        if isViewingTrash && displayedConversations.isEmpty {
+        let activeConversations = viewModel.activeConversations
+        let displayed = displayedConversations
+        if isViewingTrash && displayed.isEmpty {
             VStack(spacing: 8) {
                 Image(systemName: "trash")
                     .font(.system(size: 30, weight: .semibold))
@@ -437,7 +446,7 @@ struct SidebarView: View {
             }
             .padding(22)
             .frame(maxHeight: .infinity)
-        } else if !isViewingTrash && viewModel.activeConversations.isEmpty {
+        } else if !isViewingTrash && activeConversations.isEmpty {
             VStack(spacing: 8) {
                 Image(systemName: "bubble.left.and.bubble.right")
                     .font(.system(size: 32, weight: .semibold))
@@ -460,7 +469,7 @@ struct SidebarView: View {
             }
             .padding(16)
             .frame(maxHeight: .infinity)
-        } else if isSearching && displayedConversations.isEmpty {
+        } else if isSearching && displayed.isEmpty {
             // 搜索无结果
             VStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
@@ -477,13 +486,26 @@ struct SidebarView: View {
             .padding(22)
             .frame(maxHeight: .infinity)
         } else {
+            let branchRelativesByID = isViewingTrash ? [:] : makeBranchRelativesByID(from: activeConversations)
+            let folderGroups = groupingActive ? groupedConversationsByFolder(from: activeConversations) : FolderConversationGroups(byFolder: [:], ungrouped: [])
             ScrollView {
                 LazyVStack(spacing: 7) {
                     if groupingActive {
-                        ForEach(sortedFolders) { folder in folderSection(folder) }
-                        ungroupedSection
+                        ForEach(sortedFolders) { folder in
+                            folderSection(
+                                folder,
+                                conversations: folderGroups.byFolder[folder.id] ?? [],
+                                branchRelativesByID: branchRelativesByID
+                            )
+                        }
+                        ungroupedSection(
+                            conversations: folderGroups.ungrouped,
+                            branchRelativesByID: branchRelativesByID
+                        )
                     } else {
-                        ForEach(displayedConversations) { conv in conversationRow(conv) }
+                        ForEach(displayed) { conv in
+                            conversationRow(conv, branchRelatives: branchRelativesByID[conv.id] ?? [])
+                        }
                     }
                 }
                 .padding(.horizontal, 10)
@@ -496,31 +518,42 @@ struct SidebarView: View {
     }
 
     /// 分支血缘:与给定会话相关、可一键切换的会话 —— 父会话 + 同源兄弟分支 + 它的子分支。
-    /// 仅在存在血缘关系时返回非空,供行内「切换分支」子菜单使用。
-    private func branchRelatives(of conv: Conversation) -> [(id: UUID, title: String, isParent: Bool)] {
-        var out: [(id: UUID, title: String, isParent: Bool)] = []
-        let all = viewModel.conversations.filter { $0.deletedAt == nil }
+    /// 一次性建索引,避免每个会话行都全表扫描(O(N²))。
+    private func makeBranchRelativesByID(from activeConversations: [Conversation]) -> [UUID: [BranchRelative]] {
+        let byID = Dictionary(uniqueKeysWithValues: activeConversations.map { ($0.id, $0) })
+        var childrenByParent: [UUID: [Conversation]] = [:]
+        for conv in activeConversations {
+            if let parentID = conv.parentConversationID {
+                childrenByParent[parentID, default: []].append(conv)
+            }
+        }
+
         func title(_ c: Conversation) -> String {
             c.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "未命名会话" : c.title
         }
-        // 父会话
-        if let pid = conv.parentConversationID, let parent = all.first(where: { $0.id == pid }) {
-            out.append((parent.id, title(parent), true))
-            // 同源兄弟分支(同一个父,排除自己)
-            for sib in all where sib.parentConversationID == pid && sib.id != conv.id {
-                out.append((sib.id, title(sib), false))
+
+        var result: [UUID: [BranchRelative]] = [:]
+        for conv in activeConversations {
+            var relatives: [BranchRelative] = []
+            if let parentID = conv.parentConversationID {
+                if let parent = byID[parentID] {
+                    relatives.append((parent.id, title(parent), true))
+                }
+                for sibling in childrenByParent[parentID] ?? [] where sibling.id != conv.id {
+                    relatives.append((sibling.id, title(sibling), false))
+                }
             }
+            for child in childrenByParent[conv.id] ?? [] {
+                relatives.append((child.id, title(child), false))
+            }
+            if !relatives.isEmpty { result[conv.id] = relatives }
         }
-        // 它自己的子分支
-        for child in all where child.parentConversationID == conv.id {
-            out.append((child.id, title(child), false))
-        }
-        return out
+        return result
     }
 
     /// 单条会话行(含搜索命中片段)。分组与平铺共用。
     @ViewBuilder
-    private func conversationRow(_ conv: Conversation) -> some View {
+    private func conversationRow(_ conv: Conversation, branchRelatives: [BranchRelative]) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             ConversationRowView(
                 conversation: conv,
@@ -555,7 +588,7 @@ struct SidebarView: View {
                 onPurge: { viewModel.permanentlyDeleteConversation(conv.id) },
                 folders: viewModel.conversationFolders,
                 onMoveToFolder: { viewModel.setFolder(conv.id, folderID: $0) },
-                branchRelatives: isViewingTrash ? [] : branchRelatives(of: conv),
+                branchRelatives: isViewingTrash ? [] : branchRelatives,
                 onSwitchTo: { id in
                     viewModel.selectConversation(id)
                     onSelectConversation()
@@ -590,17 +623,38 @@ struct SidebarView: View {
         viewModel.conversationFolders.sorted { $0.createdAt < $1.createdAt }
     }
 
-    private func conversations(inFolder folderID: UUID?) -> [Conversation] {
-        viewModel.activeConversations
-            .filter { $0.folderID == folderID }
-            .enumerated()
-            .sorted { a, b in a.element.pinned != b.element.pinned ? a.element.pinned : a.offset < b.offset }
-            .map(\.element)
+    private func groupedConversationsByFolder(from activeConversations: [Conversation]) -> FolderConversationGroups {
+        var byFolderEntries: [UUID: [(offset: Int, conversation: Conversation)]] = [:]
+        var ungroupedEntries: [(offset: Int, conversation: Conversation)] = []
+        for (offset, conversation) in activeConversations.enumerated() {
+            if let folderID = conversation.folderID {
+                byFolderEntries[folderID, default: []].append((offset, conversation))
+            } else {
+                ungroupedEntries.append((offset, conversation))
+            }
+        }
+
+        func sorted(_ entries: [(offset: Int, conversation: Conversation)]) -> [Conversation] {
+            entries
+                .sorted { lhs, rhs in
+                    if lhs.conversation.pinned != rhs.conversation.pinned { return lhs.conversation.pinned }
+                    return lhs.offset < rhs.offset
+                }
+                .map(\.conversation)
+        }
+
+        return FolderConversationGroups(
+            byFolder: byFolderEntries.mapValues(sorted),
+            ungrouped: sorted(ungroupedEntries)
+        )
     }
 
     @ViewBuilder
-    private func folderSection(_ folder: ConversationFolder) -> some View {
-        let convs = conversations(inFolder: folder.id)
+    private func folderSection(
+        _ folder: ConversationFolder,
+        conversations convs: [Conversation],
+        branchRelativesByID: [UUID: [BranchRelative]]
+    ) -> some View {
         let collapsed = collapsedFolders.contains(folder.id)
         VStack(spacing: 7) {
             HStack(spacing: 4) {
@@ -623,7 +677,9 @@ struct SidebarView: View {
                 folderActionItems(folder)
             }
             if !collapsed {
-                ForEach(convs) { conv in conversationRow(conv) }
+                ForEach(convs) { conv in
+                    conversationRow(conv, branchRelatives: branchRelativesByID[conv.id] ?? [])
+                }
             }
         }
     }
@@ -667,12 +723,16 @@ struct SidebarView: View {
     #endif
 
     @ViewBuilder
-    private var ungroupedSection: some View {
-        let convs = conversations(inFolder: nil)
+    private func ungroupedSection(
+        conversations convs: [Conversation],
+        branchRelativesByID: [UUID: [BranchRelative]]
+    ) -> some View {
         if !convs.isEmpty {
             VStack(spacing: 7) {
                 groupHeaderLabel(icon: "tray", chevron: nil, name: "未分组", count: convs.count, tint: .secondary)
-                ForEach(convs) { conv in conversationRow(conv) }
+                ForEach(convs) { conv in
+                    conversationRow(conv, branchRelatives: branchRelativesByID[conv.id] ?? [])
+                }
             }
         }
     }

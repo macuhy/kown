@@ -3,7 +3,7 @@ import SwiftUI
 /// Settings → 性能 tab。
 ///
 /// 目前只放一个选项:**流式响应刷新间隔**。
-/// 默认 50ms ≈ 20Hz 已经很丝滑;低性能 / 老 Intel Mac 可调到 100 / 200 / 500ms,
+/// 默认 100ms ≈ 10Hz,优先控制 CPU;低性能 / 老 Intel Mac 可调到 200 / 500ms,
 /// 字会一段一段跳出来但 CPU 占用进一步下降。
 struct PerformanceSettingsView: View {
     @AppStorage(ResponseState.flushIntervalKey) private var intervalRaw: Int = ResponseState.defaultFlushIntervalMs
@@ -389,7 +389,7 @@ struct PerformanceSettingsView: View {
                                  color: performanceColor)
                 compactMetricRow(title: "默认值",
                                  value: "\(ResponseState.defaultFlushIntervalMs) ms",
-                                 detail: "丝滑与省电的平衡点",
+                                 detail: "优先控制 CPU",
                                  icon: "checkmark.seal.fill",
                                  color: .green)
                 compactMetricRow(title: "刷新频率",
@@ -511,11 +511,11 @@ struct PerformanceSettingsView: View {
     private var footerText: String {
         switch current {
         case 30:  return "30ms ≈ 33Hz — 最丝滑,CPU 占用最高。新机器、想看字一个个跳出来。"
-        case 50:  return "50ms ≈ 20Hz — 默认,丝滑 & 省电的平衡点。"
-        case 100: return "100ms = 10Hz — 字会成片出现,CPU 明显下降。一般电脑首选。"
+        case 50:  return "50ms ≈ 20Hz — 更丝滑,CPU 占用比默认更高。"
+        case 100: return "100ms = 10Hz — 默认档,字会成片出现,CPU 明显下降。一般电脑首选。"
         case 200: return "200ms = 5Hz — 节奏明显放缓,但 CPU 大幅下降。Intel Mac / 低配机器。"
         case 500: return "500ms = 2Hz — 极致省电,字会一大段一大段刷。"
-        default:  return "默认 50ms。"
+        default:  return "默认 100ms。"
         }
     }
 
@@ -786,8 +786,8 @@ struct PerformanceSettingsView: View {
     private func intervalTitle(_ ms: Int) -> String {
         switch ms {
         case 30: return "最丝滑"
-        case 50: return "默认平衡"
-        case 100: return "一般电脑首选"
+        case 50: return "高流畅"
+        case 100: return "默认首选"
         case 200: return "低配 / Intel 友好"
         case 500: return "极致省电"
         default: return "自定义"
@@ -797,11 +797,11 @@ struct PerformanceSettingsView: View {
     private func intervalDetail(_ ms: Int) -> String {
         switch ms {
         case 30: return "字更接近逐个出现,CPU 占用最高。"
-        case 50: return "推荐默认值,兼顾观感和能耗。"
+        case 50: return "更接近逐字流式,适合新机器。"
         case 100: return "文字成片刷新,显著降低 UI 更新频率。"
         case 200: return "刷新节奏明显放慢,适合老机器。"
         case 500: return "一大段一大段刷出,最大限度省电。"
-        default: return "默认 50ms。"
+        default: return "默认 100ms。"
         }
     }
 }
