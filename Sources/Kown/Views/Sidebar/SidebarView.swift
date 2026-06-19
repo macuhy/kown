@@ -306,20 +306,12 @@ struct SidebarView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.74)
             }
+            .frame(minWidth: 92, alignment: .leading)
             .layoutPriority(1)
 
-            Spacer(minLength: 6)
+            Spacer(minLength: 8)
 
-            desktopHeaderButton("arrow.triangle.branch", help: "对话树画布(分支血缘)") {
-                showConversationTree = true
-            }
-            desktopHeaderButton("point.3.connected.trianglepath.dotted", help: "知识图谱(发现暗线)") {
-                showKnowledgeGraph = true
-            }
-            desktopHeaderButton("folder.badge.plus", help: "新建文件夹") {
-                newFolderName = ""
-                showNewFolder = true
-            }
+            desktopHeaderMenu
             desktopHeaderButton("square.and.pencil", filled: true, help: "新建会话") {
                 viewModel.newConversation(mode: viewModel.currentMode)
                 onSelectConversation()
@@ -337,6 +329,42 @@ struct SidebarView: View {
                 )
             }
         }
+    }
+
+    private var desktopHeaderMenu: some View {
+        Menu {
+            Button {
+                showConversationTree = true
+            } label: {
+                Label("对话树画布", systemImage: "arrow.triangle.branch")
+            }
+            Button {
+                showKnowledgeGraph = true
+            } label: {
+                Label("知识图谱", systemImage: "point.3.connected.trianglepath.dotted")
+            }
+            Button {
+                newFolderName = ""
+                showNewFolder = true
+            } label: {
+                Label("新建文件夹", systemImage: "folder.badge.plus")
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(currentModeTint)
+                .frame(width: 31, height: 31)
+                .background(Color.platformControlBackground.opacity(0.66), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(currentModeTint.opacity(0.14), lineWidth: 1)
+                }
+                .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .help("更多侧栏操作")
+        .accessibilityLabel("更多侧栏操作")
     }
 
     private func desktopHeaderButton(

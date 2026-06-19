@@ -732,145 +732,291 @@ struct ArtifactPublishSheet: View {
     @State private var result: GitHubPagesPublisher.Result?
     @State private var copied = false
 
+    private let tint = ConversationMode.direct.kownTint
+    private let warmTint = Color(red: 0.95, green: 0.49, blue: 0.16)
+
     init(payload: ArtifactPublishPayload) {
         self.payload = payload
         _slug = State(initialValue: payload.defaultSlug)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 8) {
-                Image(systemName: "globe")
-                    .foregroundStyle(ConversationMode.direct.kownTint)
-                Text("发布到 GitHub Pages")
-                    .font(.headline)
-                Spacer()
-            }
-
-            if let result {
-                successView(result)
-            } else {
-                formView
+        ZStack {
+            publishBackground
+            VStack(spacing: 0) {
+                publishHeader
+                Rectangle()
+                    .fill(Color.primary.opacity(0.07))
+                    .frame(height: 1)
+                Group {
+                    if let result {
+                        successView(result)
+                    } else {
+                        formView
+                    }
+                }
+                .padding(18)
             }
         }
-        .padding(18)
         #if os(macOS)
-        .frame(width: 440)
+        .frame(minWidth: 520, idealWidth: 540)
+        #else
+        .presentationDetents([.medium, .large])
         #endif
+    }
+
+    private var publishBackground: some View {
+        ZStack {
+            Color.platformWindowBackground
+            RadialGradient(colors: [tint.opacity(0.16), Color.clear], center: .topLeading, startRadius: 30, endRadius: 360)
+            RadialGradient(colors: [warmTint.opacity(0.11), Color.clear], center: .bottomTrailing, startRadius: 40, endRadius: 380)
+        }
+        .ignoresSafeArea()
+    }
+
+    private var publishHeader: some View {
+        HStack(alignment: .top, spacing: 13) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(LinearGradient(colors: [tint, warmTint.opacity(0.88)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                Image(systemName: "globe")
+                    .font(.system(size: 20, weight: .black))
+                    .foregroundStyle(.white)
+            }
+            .frame(width: 46, height: 46)
+            .shadow(color: tint.opacity(0.20), radius: 14, x: 0, y: 7)
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text("发布到 GitHub Pages")
+                    .font(.headline.weight(.bold))
+                Text("生成公开网页链接,方便把交付物或 artifact 发给别人查看。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer()
+            Button { dismiss() } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 12, weight: .black))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 32, height: 32)
+                    .background(.regularMaterial, in: Circle())
+                    .overlay { Circle().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1) }
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut(.cancelAction)
+            .accessibilityLabel("关闭发布面板")
+        }
+        .padding(18)
     }
 
     // MARK: 表单
 
     private var formView: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // 目标仓库说明(自动建/复用,公开)。
-            VStack(alignment: .leading, spacing: 4) {
-                Label("目标仓库:你账号下的 \(GitHubPagesPublisher.repoName)(不存在会自动创建)", systemImage: "tray.full")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Label("该仓库及页面是公开的,任何人拿到链接都能访问", systemImage: "exclamationmark.triangle")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-            }
-
-            // 文件名 slug
-            VStack(alignment: .leading, spacing: 4) {
-                Text("文件名")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                HStack(spacing: 4) {
-                    TextField("文件名", text: $slug)
-                        .textFieldStyle(.roundedBorder)
-                        .autocorrectionDisabled()
-                        #if os(iOS)
-                        .textInputAutocapitalization(.never)
-                        #endif
-                    Text(".html")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-                Text("发布路径:pages/\(GitHubPagesPublisher.sanitizeSlug(slug)).html")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-            }
+        VStack(alignment: .leading, spacing: 14) {
+            targetCard
+            slugCard
 
             if let prev = payload.previousSlug, GitHubPagesPublisher.sanitizeSlug(slug) == prev {
-                Label("此内容之前发布过,本次将覆盖更新同一页面", systemImage: "arrow.triangle.2.circlepath")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                inlineNotice(
+                    "此内容之前发布过,本次将覆盖更新同一页面。",
+                    systemImage: "arrow.triangle.2.circlepath",
+                    tint: tint
+                )
             }
 
             if let errorMessage {
-                Text(errorMessage)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .lineLimit(3)
+                inlineNotice(errorMessage, systemImage: "exclamationmark.triangle.fill", tint: .red)
             }
 
-            HStack {
+            HStack(spacing: 10) {
                 Spacer()
                 Button("取消") { dismiss() }
                     .disabled(isPublishing)
                 if isPublishing {
-                    ProgressView()
-                        .controlSize(.small)
-                        .padding(.horizontal, 12)
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text("发布中")
+                            .font(.caption.weight(.bold))
+                    }
+                    .padding(.horizontal, 13)
+                    .padding(.vertical, 8)
+                    .background(tint.opacity(0.10), in: Capsule(style: .continuous))
                 } else {
-                    Button("发布") { publish() }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(GitHubPagesPublisher.sanitizeSlug(slug).isEmpty)
+                    Button {
+                        publish()
+                    } label: {
+                        Label("发布", systemImage: "paperplane.fill")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(GitHubPagesPublisher.sanitizeSlug(slug).isEmpty)
                 }
             }
+        }
+    }
+
+    private var targetCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("发布目标")
+                .font(.caption.weight(.black))
+                .tracking(0.5)
+                .foregroundStyle(.secondary)
+            infoRow("仓库", value: "\(GitHubPagesPublisher.repoName) · 自动创建或复用", systemImage: "tray.full", tint: tint)
+            infoRow("可见性", value: "公开页面,任何拿到链接的人都能访问", systemImage: "exclamationmark.triangle", tint: warmTint)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(tint.opacity(0.14), lineWidth: 1)
+        }
+    }
+
+    private var slugCard: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Text("页面文件名")
+                .font(.caption.weight(.black))
+                .tracking(0.5)
+                .foregroundStyle(.secondary)
+            HStack(spacing: 0) {
+                TextField("文件名", text: $slug)
+                    .textFieldStyle(.plain)
+                    .font(.system(.callout, design: .monospaced))
+                    .autocorrectionDisabled()
+                    #if os(iOS)
+                    .textInputAutocapitalization(.never)
+                    #endif
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                Text(".html")
+                    .font(.system(.callout, design: .monospaced).weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.trailing, 12)
+            }
+            .background(Color.platformTextBackground.opacity(0.74), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.09), lineWidth: 1)
+            }
+
+            Label("pages/\(GitHubPagesPublisher.sanitizeSlug(slug)).html", systemImage: "point.topleft.down.curvedto.point.bottomright.up")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.platformControlBackground.opacity(0.40), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.07), lineWidth: 1)
         }
     }
 
     // MARK: 成功
 
     private func successView(_ result: GitHubPagesPublisher.Result) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label(result.isUpdate ? "已更新页面" : "已发布页面", systemImage: "checkmark.circle.fill")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.green)
-
-            Text(result.pageURL)
-                .font(.system(.caption, design: .monospaced))
-                .textSelection(.enabled)
-                .lineLimit(3)
-                .padding(8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.platformControlBackground, in: RoundedRectangle(cornerRadius: 6))
-
-            if result.pagesJustEnabled {
-                Label("Pages 站点刚开启,页面可能要等几分钟才能访问", systemImage: "clock")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else if result.needsManualPagesSetup {
-                Label("未能自动开启 Pages:请到该仓库的 Settings → Pages 选择默认分支开启一次(只需一次)", systemImage: "exclamationmark.triangle")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-            } else if result.isUpdate {
-                Label("内容已覆盖更新,链接不变(CDN 缓存可能延迟几分钟)", systemImage: "info.circle")
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 8) {
+                Label(result.isUpdate ? "已更新页面" : "已发布页面", systemImage: "checkmark.circle.fill")
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(.green)
+                Text(result.isUpdate ? "链接保持不变,内容已经覆盖更新。" : "页面链接已生成,可以复制或直接打开检查。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.green.opacity(0.09), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(Color.green.opacity(0.18), lineWidth: 1)
+            }
 
-            HStack {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("页面链接")
+                    .font(.caption.weight(.black))
+                    .foregroundStyle(.secondary)
+                Text(result.pageURL)
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                    .lineLimit(3)
+                    .padding(11)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.platformTextBackground.opacity(0.78), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+                    }
+            }
+
+            resultNotice(result)
+
+            HStack(spacing: 10) {
                 Button {
                     Platform.copyText(result.pageURL)
                     copied = true
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .seconds(1.4))
+                        copied = false
+                    }
                 } label: {
                     Label(copied ? "已复制" : "复制链接", systemImage: copied ? "checkmark" : "doc.on.doc")
                 }
                 Button {
                     if let url = URL(string: result.pageURL) { Platform.open(url) }
                 } label: {
-                    Label("在浏览器打开", systemImage: "safari")
+                    Label("打开", systemImage: "safari")
                 }
                 Spacer()
                 Button("完成") { dismiss() }
                     .buttonStyle(.borderedProminent)
             }
         }
+    }
+
+    @ViewBuilder
+    private func resultNotice(_ result: GitHubPagesPublisher.Result) -> some View {
+        if result.pagesJustEnabled {
+            inlineNotice("Pages 站点刚开启,页面可能要等几分钟才能访问。", systemImage: "clock", tint: tint)
+        } else if result.needsManualPagesSetup {
+            inlineNotice("未能自动开启 Pages:请到仓库 Settings → Pages 选择默认分支开启一次。", systemImage: "exclamationmark.triangle", tint: warmTint)
+        } else if result.isUpdate {
+            inlineNotice("CDN 缓存可能延迟几分钟,链接不变。", systemImage: "info.circle", tint: tint)
+        }
+    }
+
+    private func infoRow(_ title: String, value: String, systemImage: String, tint: Color) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: systemImage)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(tint)
+                .frame(width: 18)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.secondary)
+                Text(value)
+                    .font(.caption.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func inlineNotice(_ text: String, systemImage: String, tint: Color) -> some View {
+        Label(text, systemImage: systemImage)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(tint)
+            .padding(11)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(tint.opacity(0.09), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(tint.opacity(0.17), lineWidth: 1)
+            }
     }
 
     // MARK: 动作

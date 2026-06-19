@@ -103,7 +103,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.xiaobo.kown
         # 本地构建的默认版本;CI 用命令行覆盖(CURRENT_PROJECT_VERSION=git 提交数)。
-        MARKETING_VERSION: "0.36.4"
+        MARKETING_VERSION: "0.36.5"
         CURRENT_PROJECT_VERSION: "1"
         # CI 通过命令行传 PROVISIONING_PROFILE_SPECIFIER=$(KOWN_DEVELOPER_ID_PROFILE);
         # 只有 Kown App target 定义该值,Swift Package 资源 bundle 目标会展开为空,避免包目标套用 profile。

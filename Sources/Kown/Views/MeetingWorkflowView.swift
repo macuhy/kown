@@ -54,7 +54,7 @@ struct MeetingWorkflowView: View {
                 sourceText: MeetingWorkflowService.deliverableSource(from: workflow),
                 audience: workflow.attendees.map(\.name).joined(separator: "、"),
                 goal: "把会前准备、会中捕获和会后追踪整理成可分享页面"
-            ))
+            ), showsCloseButton: true)
         }
         #if os(macOS)
         .frame(minWidth: 580, minHeight: embeddedInSettings ? 0 : 680)
@@ -83,9 +83,20 @@ private extension MeetingWorkflowView {
                 } label: {
                     Label("交付/发布", systemImage: "shippingbox.and.arrow.backward")
                         .font(.caption.weight(.bold))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(postTint.opacity(0.12), in: Capsule())
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 7)
+                        .background(
+                            LinearGradient(
+                                colors: [postTint.opacity(0.18), postTint.opacity(0.08)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            in: Capsule(style: .continuous)
+                        )
+                        .overlay {
+                            Capsule(style: .continuous)
+                                .strokeBorder(postTint.opacity(0.24), lineWidth: 1)
+                        }
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(postTint)
