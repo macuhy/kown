@@ -83,9 +83,16 @@ final class AppViewModel {
     /// 接力流水线失败原因,key = turnID。
     var relayErrors: [UUID: String] = [:]
     /// GitHub 集成:是否已连接(token 存在)。连接 / 断开后刷新,驱动 UI 显示。
-    /// 注:init 评估时 iCloud 容器可能没就绪 → 从本地路径误读;与 hasWebSearchKey 同模式,
-    /// 在容器到位 / refreshFromICloud / setICloudSyncEnabled 后调 `refreshGitHubConnected()` 重算。
+    /// GitHub token 走本机 secret store;连接/断开、reload/cold-start refresh 后重算 UI 状态。
     var gitHubConnected: Bool = GitHubAuth.isConnected()
+    /// 当前 API Key / token 的 secret-store 后端。默认 JSON;用户可显式迁移到系统 Keychain。
+    var secretStoreBackendKind: SecretStoreBackendKind = KeychainStore.currentBackendKind
+    /// 当前 secret-store 可读 key 数量。nil 表示读取失败。
+    var secretStoreKeyCount: Int? = try? KeychainStore.keyCountForStatus()
+    /// Secret-store 迁移 / 刷新最近一次成功提示。
+    var secretStoreMessage: String?
+    /// Secret-store 迁移 / 刷新最近一次错误。
+    var secretStoreError: String?
     /// 当前用户的 GitHub 仓库列表(选仓库菜单用,首次打开时按需拉取后缓存)。
     var gitHubRepos: [GitHubRepo] = []
     /// 正在拉取仓库列表。
@@ -401,8 +408,8 @@ final class AppViewModel {
             if self.iCloudSync.isEnabled, self.iCloudSync.isAvailable, !self.iCloudMigrationInFlight {
                 self.refreshFromICloud()
             } else {
-                // 没触发 iCloud 同步全套 reload 时,至少把 hasWebSearchKey / gitHubConnected
-                // 重新从 syncedDataDir 读一次,避免 init 时刻 Container 没就绪导致永久误报 "未设置/未连接"。
+                // 没触发 iCloud 同步全套 reload 时,至少重算 secret-store 派生状态;
+                // 默认 secret store 不跟随 syncedDataDir,但 UI 仍需在冷启动后刷新。
                 self.refreshHasWebSearchKey()
                 self.refreshGitHubConnected()
             }
@@ -1441,10 +1448,12 @@ final class AppViewModel {
             // 切换数据源后,重读三类存储到内存
             self.providers = ProviderConfigStore.load()
             self.webSearchConfig = WebSearchConfigStore.load()
-            self.conversations = ConversationStore.loadAll()
+            KeychainStore.reload()
+            self.refreshSecretStoreStatus()
+            self.conversations = await ConversationStore.loadAllAsync()
             self.conversationFolders = ConversationFolderStore.load()
             self.refreshHasWebSearchKey()
-            // GitHub token 也在 apikeys.json 里,数据源切换后同样要重算连接状态
+            // Secret store 默认固定在本地敏感目录；reload 可导入/清理旧版同步目录里的 JSON 密钥文件。
             self.refreshGitHubConnected()
             // 用量也跟着同步刷新 — 其他设备的 usage-*.json 文件可能刚被 iCloud 拉到本地
             UsageStore.shared.reload()
@@ -1472,13 +1481,13 @@ final class AppViewModel {
             _ = await self.iCloudSync.triggerDownloadsAndWait(in: Platform.syncedDataDir)
             self.providers = ProviderConfigStore.load()
             self.webSearchConfig = WebSearchConfigStore.load()
-            self.conversations = ConversationStore.loadAll()
+            KeychainStore.reload()
+            self.refreshSecretStoreStatus()
+            self.conversations = await ConversationStore.loadAllAsync()
             self.conversationFolders = ConversationFolderStore.load()
-            // Firecrawl key 存在 apikeys.json 里(随 iCloud 同步),但 UI/canEnableWebSearch 看的是
-            // 缓存的 hasWebSearchKey 标志。拉到新 apikeys.json 后必须重算一次,否则另一端填的 key
-            // 同步过来了却一直显示「未设置」(firecrawl key「同步失败」的真因)。
+            // Firecrawl key 固定在本地敏感目录；reload 后重算 UI 缓存的 hasWebSearchKey 标志。
             self.refreshHasWebSearchKey()
-            // GitHub token 同在 apikeys.json:另一端授权后这边要重算,否则一直显示「未连接」
+            // GitHub token 同走本地-only secret store,同样重算连接状态。
             self.refreshGitHubConnected()
             // 用量也要 reload — 别的设备的 usage-*.json 可能刚被 iCloud 拉下来。
             // 启动 2s 后会自动走到这里,所以多端用量累加在 app 启动后短延迟就能看到。
@@ -1592,9 +1601,9 @@ final class AppViewModel {
 
     // MARK: - Web Search 配置
 
-    /// 镜像 KeychainStore 状态;Keychain 自身不可观察,通过 setter/clearer / refreshHasWebSearchKey 维持一致。
-    /// 注:启动时 init 评估这个值时 iCloud 容器可能还没探测到位,导致从错误路径读 → 误报 false。
-    /// 后续在 ICloud 容器到位 / sync 切换 / cold-start refresh 时调 `refreshHasWebSearchKey()` 重算。
+    /// 镜像 KeychainStore secret-store 状态;facade 自身不可观察,通过 setter/clearer / refreshHasWebSearchKey 维持一致。
+    /// 注:旧版本曾让密钥后端受 iCloud 路由影响,init 过早评估可能误报 false。
+    /// 当前默认 JSON 后端固定本机-only;仍在 save/delete/reload / cold-start refresh 后重算 UI 缓存。
     private(set) var hasWebSearchKey: Bool = WebSearchKey.hasKey()
 
     func saveWebSearchConfig() {
@@ -1620,10 +1629,66 @@ final class AppViewModel {
         #endif
     }
 
-    /// 重算 `hasWebSearchKey`,从最新 syncedDataDir 读取实际状态。
-    /// 在 iCloud 容器探测完成 / refreshFromICloud / setICloudSyncEnabled 之后调用。
+    /// 重算 `hasWebSearchKey`,从本机 secret store 读取实际状态。
+    /// 在 save/delete/reload/cold-start refresh 后调用。
     func refreshHasWebSearchKey() {
         hasWebSearchKey = WebSearchKey.hasKey()
+    }
+
+    func refreshSecretStoreStatus() {
+        secretStoreBackendKind = KeychainStore.currentBackendKind
+        do {
+            secretStoreKeyCount = try KeychainStore.keyCountForStatus()
+            secretStoreError = nil
+        } catch {
+            secretStoreKeyCount = nil
+            secretStoreError = error.localizedDescription
+        }
+    }
+
+    @discardableResult
+    func migrateSecretStoreToLocalJSON() throws -> SecretStoreMigrationResult {
+        do {
+            let result = try KeychainStore.migrateCurrentBackendToLocalJSON()
+            secretStoreMessage = "已复制 \(result.copiedKeyCount) 个 key 到本机 JSON,并切回默认 secret store。"
+            secretStoreError = nil
+            refreshSecretStoreDerivedState()
+            return result
+        } catch {
+            secretStoreError = error.localizedDescription
+            throw error
+        }
+    }
+
+    @discardableResult
+    func migrateSecretStoreToSecurityKeychain() throws -> SecretStoreMigrationResult {
+        #if canImport(Security)
+        do {
+            let result = try KeychainStore.migrateCurrentBackendToSecurityAndRemember()
+            secretStoreMessage = "已复制 \(result.copiedKeyCount) 个 key 到系统 Keychain,并启用 Keychain 后端。"
+            secretStoreError = nil
+            refreshSecretStoreDerivedState()
+            return result
+        } catch {
+            secretStoreError = error.localizedDescription
+            throw error
+        }
+        #else
+        let error = KeychainError.saveFailed("当前平台不支持 Security Keychain")
+        secretStoreError = error.localizedDescription
+        throw error
+        #endif
+    }
+
+    private func refreshSecretStoreDerivedState() {
+        KeychainStore.reload()
+        refreshSecretStoreStatus()
+        refreshHasWebSearchKey()
+        refreshGitHubConnected()
+        #if os(iOS)
+        syncWatchProvider()
+        _ = syncKeyboardProvider()
+        #endif
     }
 
     /// 当前能否启用 🌐 — 配置 enabled + 已存 Key。

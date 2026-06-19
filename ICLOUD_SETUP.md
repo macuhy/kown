@@ -1,6 +1,6 @@
 # iCloud 同步 — 配置与发布手册
 
-本应用通过 iCloud Drive Ubiquity Container 在多端同步数据(会话 / Provider 配置 / Web Search 配置 / API Key)。本文档记录完整的实现、配置、发布与故障排查。
+本应用通过 iCloud Drive Ubiquity Container 在多端同步非敏感数据(会话 / Provider 配置 / Web Search 配置等)。API Key 通过 `KeychainStore` secret store facade 管理;当前默认后端是本机-only JSON,固定留在本机,不随 iCloud Drive 同步。设置 ▸ 密钥存储 可显式复制并启用 Security/Keychain Services 后端;迁移会回读校验且不删除原 JSON。本文档记录完整的实现、配置、发布与故障排查。
 
 ## 1. 同步范围
 
@@ -9,18 +9,20 @@
 | 会话(turns + Debate rounds) | `[syncedDataDir]/conversations/*.json` | ✅ |
 | Provider 配置(Base URL / model / temperature) | `[syncedDataDir]/config.json` | ✅ |
 | Web Search 配置(Firecrawl) | `[syncedDataDir]/web_search.json` | ✅ |
-| **API Key**(各 Provider + Firecrawl) | `[syncedDataDir]/apikeys.json` | ✅ |
+| **API Key**(各 Provider + Firecrawl) | `KeychainStore` secret store facade(默认 JSON 后端:`[localDataDir]/apikeys.json`) | ❌(每台独立) |
 | Debate 轮数 / Web Search 开关 / systemPrompt | UserDefaults | ❌(每台独立) |
 | 当前会话选中 ID | 内存 | ❌ |
 
 - `syncedDataDir` 同步开启 + 容器可用时 = iCloud Documents 容器内的 `.kown/`;否则 = 本地 `~/.kown`(macOS)/ App Documents/.kown(iOS)
-- 容器对 Files / iCloud Drive 列表 **不可见**(`NSUbiquitousContainerIsDocumentScopePublic=false`),API Key 不会出现在用户的 iCloud Drive 中
+- `localDataDir` 始终是本机目录:`~/.kown`(macOS)/ App Documents/.kown(iOS)。当前默认 JSON secret store 使用这里;旧版本若曾把 `apikeys.json` 放进同步目录,启动/刷新时会导入本机并尽力移除旧副本。
+- 容器对 Files / iCloud Drive 列表 **不可见**(`NSUbiquitousContainerIsDocumentScopePublic=false`),默认 JSON 密钥文件不会主动复制进 iCloud 容器
 
 ### 安全说明
 
 - iCloud Drive 在 Apple 服务器侧 at-rest 加密(TLS 传输),**不是端到端加密** — Apple 持有 key
 - 同一 Apple ID 登录的设备 + 安装本应用才能读到容器内数据
-- 想要真端到端加密 API Key 同步,可后续把 `KeychainStore` 重写为真 Keychain Services + `kSecAttrSynchronizable=true`
+- `KeychainStore` 已抽象为 `SecretStoreBackend` facade;当前默认是本机-only JSON 后端。用户可在 设置 ▸ 密钥存储 显式迁移到 `SecurityKeychainBackend` / Keychain Services；当前实现仍使用 `kSecAttrSynchronizable=false`,如需跨设备密钥同步,必须另行评估隐私语义
+- 显式迁移/回滚的手工验证清单见 `docs/SECRET_STORE_MIGRATION_CHECKLIST.md`
 
 ---
 
@@ -33,11 +35,11 @@ Sources/Kown/
 ├── Services/
 │   ├── ICloudSync.swift               # 单例 @Observable @MainActor,管理同步状态
 │   ├── ConversationStore.swift        # 走 Platform.syncedDataDir
-│   ├── KeychainStore.swift            # 走 Platform.syncedDataDir(API Key 也同步)
+│   ├── KeychainStore.swift            # secret store facade;默认 JSON 走 Platform.localDataDir,不随 iCloud 同步
 │   └── ConversationSummarizer.swift   # @MainActor
 ├── Models/
 │   ├── Provider.swift                 # ProviderConfigStore: syncedDataDir
-│   └── WebSearch.swift                # WebSearchConfigStore + WebSearchKey: syncedDataDir
+│   └── WebSearch.swift                # WebSearchConfigStore: syncedDataDir;WebSearchKey: KeychainStore/localDataDir
 ├── Platform.swift                     # localDataDir / syncedDataDir 路由
 ├── ViewModels/
 │   └── AppViewModel.swift             # setICloudSyncEnabled(_:),iCloudSync 引用
@@ -53,7 +55,7 @@ Sources/Kown/
    - `migrateLocalToCloud()`(`overwrite: false`,远端为准)
    - 切换 `Platform.syncedDataDir` 路由
    - 重新 `ConversationStore.loadAll() / ProviderConfigStore.load() / WebSearchConfigStore.load()`
-3. **运行时**:所有 Store 通过 `Platform.syncedDataDir` 取目录,系统自动后台同步
+3. **运行时**:非敏感 Store 通过 `Platform.syncedDataDir` 取目录,系统自动后台同步;`KeychainStore` 默认 JSON 后端固定走本机目录
 4. **账号切换**:监听 `NSUbiquityIdentityDidChange`,自动 `refreshContainerURL()`
 5. **关同步**:`mirrorCloudToLocal()`(`overwrite: true`,云端为准)→ 切回本地
 
@@ -511,15 +513,17 @@ macOS 走 Developer ID 直接分发,无此问题(没有 App Store Connect 提交
 
 ---
 
-### 7.13 [共通] Firecrawl key(单值 Keychain key)首次启动看到"未设置"
+### 7.13 [共通] Firecrawl key 缓存刷新(历史坑)
 
 **现象**:Firecrawl API key 保存过了,关掉 app 重开 → Settings 显示"未设置",每次都要重新填一次。Provider 自己的 API Key 没这个问题。
 
-**根因**:用了**只在 init 时计算一次**的缓存属性:
+**当前事实**:`KeychainStore` 是 secret store facade;当前默认 JSON 后端固定走 `localDataDir`,不随 `syncedDataDir` / iCloud 容器切换。`KeychainStore.reload()` 现在主要用于清缓存、导入/清理旧版同步目录里的 `apikeys.json`,或未来切换可选 Security 后端时重新读取。
+
+**历史根因**:旧实现曾让密钥读取受 `syncedDataDir` 影响,同时用了**只在 init 时计算一次**的缓存属性:
 ```swift
 private(set) var hasWebSearchKey: Bool = WebSearchKey.hasKey()
 ```
-AppViewModel.init 跑的时刻 iCloud 容器还在异步后台探测没就绪,`syncedDataDir` fallback 到 local → 读本地 apikeys.json(可能空)→ false。1-2 秒后容器到位 → `syncedDataDir` 切换到 iCloud → 这个缓存值不再刷新,UI 一直显示"未设置"。
+AppViewModel.init 跑的时刻 iCloud 容器还在异步后台探测没就绪,旧密钥路径可能先读本地空值。1-2 秒后容器到位,路径切换,但缓存值不再刷新,UI 一直显示"未设置"。
 
 Provider 那边没问题是因为 `ProviderConfig` 列表每次渲染时都 query `KeychainStore.hasKey(id:)`,没缓存。Firecrawl 走的是**单值 fixed-UUID + cached Bool**,暴露了 race。
 
@@ -527,7 +531,7 @@ Provider 那边没问题是因为 `ProviderConfig` 列表每次渲染时都 quer
 1. 新增 `refreshHasWebSearchKey()` 方法,重读 KeychainStore
 2. 三处挂上:`setICloudSyncEnabled` 切换后、`refreshFromICloud` 刷新后、AppViewModel.init 延迟 2 秒的 cold-start task 里
 
-通用教训:**任何"派生自 KeychainStore / ConversationStore / ProviderConfigStore 的缓存值",都得在 syncedDataDir 可能切换的时机(iCloud 容器就绪 / 用户切换 / 手动刷新)重算**。不要假设 init 时读到的值终生有效。
+通用教训:**任何派生自 ConversationStore / ProviderConfigStore 等 iCloud 同步存储的缓存值,都得在 `syncedDataDir` 可能切换的时机(iCloud 容器就绪 / 用户切换 / 手动刷新)重算**。派生自 `KeychainStore` 的 UI 缓存也要在 save/delete/reload 或后端切换后重算,但默认 JSON 后端不再跟随 iCloud 路由。
 
 ---
 
@@ -593,7 +597,7 @@ Provider 那边没问题是因为 `ProviderConfig` 列表每次渲染时都 quer
 
 ### [共通] Firecrawl key 每次启动显示"未设置"
 - 见 §7.13 — 已修(refreshHasWebSearchKey)
-- 任何派生自 Keychain/Store 的缓存值都要在 syncedDataDir 切换时重算
+- 任何派生自 iCloud 同步 Store 的缓存值都要在 syncedDataDir 切换时重算;KeychainStore 默认本机-only,只需在 save/delete/reload 或后端切换后重算 UI 缓存
 
 ### [iOS] 提交 TestFlight 每次问 encryption
 - 见 §7.11,Info.plist 加 `ITSAppUsesNonExemptEncryption: false`
@@ -639,6 +643,6 @@ Provider 那边没问题是因为 `ProviderConfig` 列表每次渲染时都 quer
 ## 11. 主要决策与缘由
 
 - **iCloud Drive Documents Container** vs CloudKit:前者改动 < 80 行,文件级冲突由系统处理;CloudKit 需重写存储层 5-10x 工作量。
-- **API Key 跟随同步** vs 不同步:用户选了简化(每台手填太麻烦)。容器对 Files app 隐藏作为缓解。
+- **API Key 本机-only** vs 跨设备密钥同步:当前选择隐私优先。`KeychainStore` 只是 secret store facade,默认 JSON 后端本机-only;Keychain Services / Security 后端可作为后续可选项,跨设备密钥同步需另行评估。
 - **不用 SwiftData / Core Data + NSPersistentCloudKitContainer**:现有存储是 JSON 文件,迁移到 ORM 是大工程,且 SwiftData 对多端冲突反而更黑盒。
-- **NSUbiquitousContainerIsDocumentScopePublic=false**:容器内文件不暴露到用户的 iCloud Drive 列表,API Key 不会被用户误删 / 误传 / 看到明文。
+- **NSUbiquitousContainerIsDocumentScopePublic=false**:容器内非敏感同步文件不暴露到用户的 iCloud Drive 列表;API Key 默认根本不进入该容器。

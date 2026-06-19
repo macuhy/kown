@@ -23,6 +23,9 @@ let package = Package(
             ],
             swiftSettings: [
                 .enableUpcomingFeature("StrictConcurrency")
+            ],
+            linkerSettings: [
+                .linkedFramework("Security", .when(platforms: [.iOS, .macOS]))
             ]
         ),
         .testTarget(

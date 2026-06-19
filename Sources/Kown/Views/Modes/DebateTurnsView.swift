@@ -119,7 +119,11 @@ struct DebateTurnsView: View {
                 )
             }
             if let writes = turn.appliedWrites, !writes.isEmpty {
-                AppliedWritesStrip(writes: writes, onUndo: { viewModel.undoWrite(turnID: turn.id, write: $0) })
+                AppliedWritesStrip(
+                    writes: writes,
+                    onApply: { viewModel.applyWrite(turnID: turn.id, write: $0) },
+                    onUndo: { viewModel.undoWrite(turnID: turn.id, write: $0) }
+                )
             }
             TurnSourcesStrip(turn: turn)
         }

@@ -113,6 +113,8 @@ struct KownApp: App {
             // 防止节流期内 app 被 SIGKILL 丢最后一波内容
             if newPhase == .background || newPhase == .inactive {
                 ConversationStore.flushAll()
+                UsageStore.shared.flushPendingWrites()
+                AgentRunStore.shared.flushPendingWrites()
             }
             guard newPhase == .active else { return }
             #if os(iOS)

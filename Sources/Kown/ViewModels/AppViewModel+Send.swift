@@ -886,24 +886,20 @@ extension AppViewModel {
             }
 
             // 2.7) Workspace 写文件:扫所有 provider 响应(包括 chair / summary 文本)里
-            //      的 ```kown:write 代码块,逐个 apply 到 workspace 文件夹。
-            //      默认 auto-apply,UI 里展示结果。仅当 send 时 workspaceURLForSend 存在才跑。
+            //      的 ```kown:write 代码块,先暂存为待确认改动。用户点「应用」后才写盘。
             var appliedWrites: [AppliedWrite]? = nil
+            let orderedResponseTexts: [String] = panelOrder.compactMap { responses[$0] }
             if let workspaceURL = workspaceURLForSend {
-                var allTexts: [String] = []
-                allTexts.append(contentsOf: responses.values)
+                var allTexts = orderedResponseTexts
                 if let cs = chairSummary { allTexts.append(cs) }
                 if let st = summaryText { allTexts.append(st) }
                 var pendings: [PendingWrite] = []
                 for t in allTexts {
                     pendings.append(contentsOf: WorkspaceManager.parseProposedWrites(t))
                 }
-                // 去重(同路径重复时取最后一个 — model 最后输出的认为是最终版本)
-                var seen: [String: PendingWrite] = [:]
-                for p in pendings { seen[p.relativePath] = p }
-                let applied = seen.values.map { WorkspaceManager.apply($0, workspaceURL: workspaceURL) }
-                if !applied.isEmpty {
-                    appliedWrites = applied
+                let prepared = WorkspaceManager.prepareProposedWrites(pendings, workspaceURL: workspaceURL)
+                if !prepared.isEmpty {
+                    appliedWrites = prepared
                 } else {
                     // workspace 设置了但 model 没输出 kown:write 块 —
                     // 检查响应里是否含其他 fenced code(说明 model 想写但用错了格式),
@@ -921,8 +917,7 @@ extension AppViewModel {
                 }
             } else if let gh = gitHubTarget {
                 // 2.7') GitHub 写文件:扫响应里的 kown:write 块,逐个提交到绑定仓库。
-                var allTexts: [String] = []
-                allTexts.append(contentsOf: responses.values)
+                var allTexts = orderedResponseTexts
                 if let cs = chairSummary { allTexts.append(cs) }
                 if let st = summaryText { allTexts.append(st) }
                 var pendings: [PendingWrite] = []
@@ -930,11 +925,15 @@ extension AppViewModel {
                     pendings.append(contentsOf: WorkspaceManager.parseProposedWrites(t))
                 }
                 var seen: [String: PendingWrite] = [:]
-                for p in pendings { seen[p.relativePath] = p }
+                var pathOrder: [String] = []
+                for p in pendings {
+                    if seen[p.relativePath] == nil { pathOrder.append(p.relativePath) }
+                    seen[p.relativePath] = p
+                }
                 if !seen.isEmpty {
                     let client = GitHubClient(token: gh.token)
                     var committed: [AppliedWrite] = []
-                    for w in seen.values {
+                    for w in pathOrder.compactMap({ seen[$0] }) {
                         committed.append(await client.commit(w, owner: gh.owner, repo: gh.repo, branch: gh.branch))
                     }
                     appliedWrites = committed
@@ -1144,6 +1143,47 @@ extension AppViewModel {
             ConversationStore.save(conversations[convIdx])
         }
         return nil
+    }
+
+    /// 应用某轮暂存的 workspace 写入。模型只负责提议;这里由用户确认后才真正落盘。
+    @discardableResult
+    func applyWrite(turnID: UUID, write: AppliedWrite) -> String? {
+        guard write.pendingConfirmation == true else { return nil }
+        guard let convID = selectedConversationID,
+              let convIdx = conversations.firstIndex(where: { $0.id == convID }),
+              let turnIdx = conversations[convIdx].turns.firstIndex(where: { $0.id == turnID }) else {
+            return "找不到对应会话"
+        }
+        guard let url = currentWorkspaceURL else {
+            return "本会话未设置 workspace,无法应用"
+        }
+
+        var result = WorkspaceManager.apply(
+            PendingWrite(relativePath: write.relativePath, content: write.newContent),
+            workspaceURL: url,
+            id: write.id,
+            pendingOnFailure: true
+        )
+        result.warning = write.warning
+        if var writes = conversations[convIdx].turns[turnIdx].appliedWrites,
+           let wIdx = writes.firstIndex(where: { $0.id == write.id }) {
+            writes[wIdx] = result
+            if result.success, write.warning != nil {
+                let appliedPathKey = WorkspaceManager.normalizedRelativePathKey(write.relativePath)
+                for idx in writes.indices where idx != wIdx &&
+                    WorkspaceManager.normalizedRelativePathKey(writes[idx].relativePath) == appliedPathKey &&
+                    writes[idx].pendingConfirmation == true {
+                    writes[idx].success = false
+                    writes[idx].action = .skipped
+                    writes[idx].pendingConfirmation = false
+                    writes[idx].error = "已应用同一路径的另一个版本,此候选已跳过。"
+                }
+            }
+            conversations[convIdx].turns[turnIdx].appliedWrites = writes
+            conversations[convIdx].updatedAt = Date()
+            ConversationStore.save(conversations[convIdx])
+        }
+        return result.success ? nil : (result.error ?? "应用失败")
     }
 
     /// 编辑历史某轮的用户消息并从该轮重新生成:丢弃该轮(含)之后的所有轮,
@@ -1771,13 +1811,17 @@ extension AppViewModel {
 
         var responses: [String: String] = [:]
         var errors: [String: String] = [:]
-        await withTaskGroup(of: (UUID, String, String?).self) { group in
-            for cfg in panel {
+        await withTaskGroup(of: (Int, UUID, String, String?).self) { group in
+            var limiter = PanelConcurrencyLimiter(totalCount: panel.count)
+            var orderedResults = Array<(UUID, String, String?)?>(repeating: nil, count: panel.count)
+
+            func enqueue(_ index: Int) {
+                let cfg = panel[index]
                 let promptForProvider = prompts[cfg.id] ?? defaultPrompt
                 let imagesForProvider = cfg.kind == .openAICompatible ? images : []
                 group.addTask { [weak self] in
-                    guard let self else { return (cfg.id, "", "释放") }
-                    return await self.runOne(
+                    guard let self else { return (index, cfg.id, "", "释放") }
+                    let result = await self.runOne(
                         config: cfg,
                         prompt: promptForProvider,
                         systemPrompt: systemPrompt,
@@ -1794,9 +1838,21 @@ extension AppViewModel {
                         maxToolRounds: maxToolRounds,
                         agentInstruction: agentInstruction
                     )
+                    return (index, result.0, result.1, result.2)
                 }
             }
-            for await (id, text, err) in group {
+
+            for index in limiter.reserveInitialIndices() {
+                enqueue(index)
+            }
+            while let (index, id, text, err) = await group.next() {
+                orderedResults[index] = (id, text, err)
+                if let nextIndex = limiter.reserveNextIndex() {
+                    enqueue(nextIndex)
+                }
+            }
+            for result in orderedResults {
+                guard let (id, text, err) = result else { continue }
                 if let err {
                     errors[id.uuidString] = err
                 }

@@ -297,7 +297,7 @@ enum ToolCatalog {
     }
 }
 
-/// 一次用户发送中,Firecrawl 的配置快照(避免每次工具调用重复读 Keychain)。
+/// 一次用户发送中,Firecrawl 的配置快照(避免每次工具调用重复读 secret store)。
 struct WebSearchSession: Sendable {
     let config: WebSearchConfig
     let apiKey: String

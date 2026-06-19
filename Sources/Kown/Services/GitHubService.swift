@@ -5,7 +5,7 @@ import Foundation
 /// 设计:
 /// - **认证走 Device Flow**(只需 client_id,无 client secret,适合客户端):
 ///   App 显示一个 user_code + 验证链接,用户在浏览器确认后轮询拿到 token。
-/// - **token 存 `KeychainStore`**(固定 UUID),跟其它 API key 一样落 apikeys.json。
+/// - **token 存 `KeychainStore` facade**(固定 UUID),跟其它 API key 一样走本机 secret store。
 /// - **写文件走 Contents API**:PUT /repos/{owner}/{repo}/contents/{path}。更新已有文件需带旧 `sha`,
 ///   所以写前先 GET 一次拿 sha + 旧内容(旧内容也用于在聊天里算 diff 行数)。
 enum GitHubAuth {
@@ -13,7 +13,7 @@ enum GitHubAuth {
     static let clientID = "Ov23li0qCXvbdu8tcru1"
     /// 授权范围:`repo` 才能读写私有仓库(OAuth App 没有更细粒度)。
     static let scope = "repo"
-    /// token 在 KeychainStore 里的固定 key。(必须是合法十六进制 UUID — 历史上误用非 hex 串导致启动崩溃。)
+    /// token 在 secret store 里的固定 key。(必须是合法十六进制 UUID — 历史上误用非 hex 串导致启动崩溃。)
     static let tokenID = UUID(uuidString: "C0FFEE00-0000-4000-8000-000000000001")!
 
     @MainActor static func token() -> String? {

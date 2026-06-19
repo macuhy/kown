@@ -4,6 +4,7 @@ import SwiftUI
 /// Council / Debate 隐藏(用各自的模式内配置,不需要在输入栏上方再选)。
 struct ActiveProviderBar: View {
     @Bindable var viewModel: AppViewModel
+    var onOpenSettings: (() -> Void)?
 
     var body: some View {
         let mode = viewModel.currentMode
@@ -36,13 +37,13 @@ struct ActiveProviderBar: View {
                 label(mode)
                 Spacer(minLength: 12)
                 chips(mode)
-                picker(mode)
+                trailingAction(mode)
             }
             VStack(alignment: .leading, spacing: compactStackSpacing) {
                 HStack {
                     label(mode)
                     Spacer(minLength: 8)
-                    picker(mode)
+                    trailingAction(mode)
                 }
                 chips(mode)
             }
@@ -103,7 +104,7 @@ struct ActiveProviderBar: View {
         // Direct/Compare 的增删 / 换模型走右侧菜单,Structured/Tournament 只读避免误以为能切换。
         let chipList = chipProviders()
         if chipList.isEmpty {
-            statusChip("无可用 provider", icon: "exclamationmark.triangle.fill", tint: .orange)
+            statusChip("无可用模型", icon: "exclamationmark.triangle.fill", tint: .orange)
         } else {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
@@ -115,6 +116,37 @@ struct ActiveProviderBar: View {
             }
             .frame(maxWidth: 520)
         }
+    }
+
+    @ViewBuilder
+    private func trailingAction(_ mode: ConversationMode) -> some View {
+        if chipProviders().isEmpty, let onOpenSettings {
+            configureModelButton(mode: mode, action: onOpenSettings)
+        } else {
+            picker(mode)
+        }
+    }
+
+    private func configureModelButton(mode: ConversationMode, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: 10, weight: .bold))
+                Text("配置模型")
+                    .font(.caption.weight(.bold))
+            }
+            .foregroundStyle(Color.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(mode.kownTint, in: Capsule())
+            .overlay {
+                Capsule().strokeBorder(Color.white.opacity(0.24), lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .fixedSize()
+        .help("打开设置并配置可用模型")
+        .accessibilityLabel("配置模型")
     }
 
     /// chip 列表 = 本轮真正会回答的模型(Direct 1 个 / Compare ≤2 个)。

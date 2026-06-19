@@ -6,9 +6,9 @@ import Photos
 
 /// 主 app → 键盘扩展(KownKeyboard)的配置桥。
 ///
-/// 键盘扩展是独立进程,拿不到主 app 沙盒里的 apikeys.json / UserDefaults,
-/// 只能经 App Group 共享容器传递。工程没配 keychain access group(iOS 上
-/// App Group 不参与 Keychain 共享),所以用 **App Group UserDefaults** 存,
+/// 键盘扩展是独立进程,拿不到主 app 的本地 secret store / UserDefaults,
+/// 只能经 App Group 共享容器传递。工程没配 Keychain access group,也未把
+/// Security backend 当作共享通道启用,所以用 **App Group UserDefaults** 存,
 /// 设置页明确告知「key 会存放在 App 共享容器供键盘扩展使用」。
 ///
 /// 开关关闭时立刻清除共享配置;provider 变更时由 AppViewModel.saveProviders 保持最新。

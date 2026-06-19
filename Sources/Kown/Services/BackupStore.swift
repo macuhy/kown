@@ -290,7 +290,7 @@ enum BackupStore {
         }
 
         guard let data = try? makeData() else { return }
-        try? writeSnapshot(data)
+        _ = try? writeSnapshot(data)
     }
 
     /// 列出 `backups/` 目录下的全部快照(最新在前)。

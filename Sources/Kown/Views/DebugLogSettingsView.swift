@@ -4,12 +4,14 @@ import SwiftUI
 /// 用于排查「空响应」等问题。默认关、仅内存最近 50 条、API Key 已脱敏。
 struct DebugLogSettingsView: View {
     @AppStorage(DebugLogStore.enabledKey) private var enabled = false
+    @AppStorage(ResponseLogger.includeSensitiveContentPrefKey) private var includeSensitiveResponseContent = false
     private var store = DebugLogStore.shared
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 toggleCard
+                responseLoggerPrivacyCard
                 if enabled || !store.entries.isEmpty {
                     toolbar
                     if store.entries.isEmpty {
@@ -33,6 +35,40 @@ struct DebugLogSettingsView: View {
             }
             Text("开启后,下一次对话的每个网络请求会记录完整请求体 + 原始返回。仅保留最近 50 条、存在内存中(重启清空),不会同步到 iCloud。请求体含对话原文;API Key 已脱敏。排查完建议关掉。")
                 .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+        .overlay { RoundedRectangle(cornerRadius: 14).strokeBorder(Color.primary.opacity(0.07), lineWidth: 1) }
+    }
+
+    private var responseLoggerPrivacyCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Toggle(isOn: $includeSensitiveResponseContent) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("响应 Markdown 日志写入正文").font(.headline)
+                    Text("默认 metadata-only: ResponseLogger 只写时间、Provider、模型、端点、耗时、状态和字符数,不把 system prompt / prompt / response 正文落盘。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            Label {
+                Text(includeSensitiveResponseContent
+                     ? "已开启: 新生成的响应日志会包含 system prompt、prompt、response / error 正文,可能含聊天原文或敏感数据。排查完建议关闭。"
+                     : "当前关闭: 新生成的响应日志保持 metadata-only,需要完整正文时再临时开启。")
+                    .fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: includeSensitiveResponseContent ? "exclamationmark.triangle.fill" : "lock.fill")
+            }
+            .font(.caption)
+            .foregroundStyle(includeSensitiveResponseContent ? .orange : .secondary)
+
+            Text("此开关只影响本地 ResponseLogger Markdown 文件;上方内存 HTTP 调试日志仍由「记录请求 / 返回日志」单独控制。")
+                .font(.caption2)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }

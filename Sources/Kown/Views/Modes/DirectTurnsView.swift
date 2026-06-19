@@ -18,6 +18,8 @@ struct DirectTurnsView: View {
     /// 「换模型重答」候选 + 回调(turnID, 新 providerID)。
     var regenerateProviders: [ProviderConfig] = []
     var onRegenerate: ((UUID, UUID) -> Void)? = nil
+    /// 应用某轮的待确认 workspace 写入(turnID, write)。
+    var onApplyWrite: ((UUID, AppliedWrite) -> Void)? = nil
     /// 撤销某轮的 workspace 写入(turnID, write)。
     var onUndoWrite: ((UUID, AppliedWrite) -> Void)? = nil
     /// 自动升级建议:换更强模型重答 / 转议会重答(turnID)。
@@ -103,7 +105,11 @@ struct DirectTurnsView: View {
                 }
             }
             if let writes = turn.appliedWrites, !writes.isEmpty {
-                AppliedWritesStrip(writes: writes, onUndo: onUndoWrite.map { cb in { cb(turn.id, $0) } })
+                AppliedWritesStrip(
+                    writes: writes,
+                    onApply: onApplyWrite.map { cb in { cb(turn.id, $0) } },
+                    onUndo: onUndoWrite.map { cb in { cb(turn.id, $0) } }
+                )
             }
             if let suggestion = turn.escalationSuggestion, onEscalateStronger != nil || onEscalateCouncil != nil {
                 EscalationBanner(

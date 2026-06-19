@@ -43,7 +43,7 @@ struct MainContentView: View {
                 PendingFileWritesView()
                     .padding(.horizontal, 14)
                     .padding(.bottom, 6)
-                ActiveProviderBar(viewModel: viewModel)
+                ActiveProviderBar(viewModel: viewModel, onOpenSettings: { showSettings = true })
                 InputBarView(
                     viewModel: viewModel,
                     showSystemPromptDrawer: $showSystemPromptDrawer,
@@ -736,6 +736,11 @@ struct MainContentView: View {
                     mode: viewModel.currentMode,
                     providers: viewModel.providers,
                     onOpenSettings: { showSettings = true },
+                    onUseSamplePrompt: { prompt in
+                        viewModel.prompt = prompt
+                        inputFocused = true
+                        viewModel.focusInputRequest &+= 1
+                    },
                     onUseScenario: { s in
                         viewModel.startScenario(mode: s.mode, systemPrompt: s.systemPrompt)
                         inputFocused = true
@@ -794,6 +799,7 @@ struct MainContentView: View {
                                 onShareTurn: { shareTurnImage($0) },
                                 regenerateProviders: viewModel.regenerateCandidates,
                                 onRegenerate: { viewModel.regenerateDirectWithModel(turnID: $0, newProviderID: $1) },
+                                onApplyWrite: { viewModel.applyWrite(turnID: $0, write: $1) },
                                 onUndoWrite: { viewModel.undoWrite(turnID: $0, write: $1) },
                                 onEscalateStronger: { viewModel.escalateToStrongerModel(turnID: $0) },
                                 onEscalateCouncil: { viewModel.escalateToCouncil(turnID: $0) },
@@ -873,6 +879,8 @@ struct MainContentView: View {
                                 onFollowUpTurn: { requestFollowUp($0) },
                                 onExportTurn: { exportTurnReport($0) },
                                 onShareTurn: { shareTurnImage($0) },
+                                onApplyWrite: { viewModel.applyWrite(turnID: $0, write: $1) },
+                                onUndoWrite: { viewModel.undoWrite(turnID: $0, write: $1) },
                                 onClearContextCutoff: { viewModel.clearContextCutoff() }
                             )
                         }
@@ -1081,7 +1089,7 @@ struct MainContentView: View {
 
     private var mobileComposerDock: some View {
         VStack(spacing: 0) {
-            ActiveProviderBar(viewModel: viewModel)
+            ActiveProviderBar(viewModel: viewModel, onOpenSettings: { showSettings = true })
             InputBarView(
                 viewModel: viewModel,
                 showSystemPromptDrawer: $showSystemPromptDrawer,

@@ -12,6 +12,9 @@ final class AgentRunStore {
 
     @ObservationIgnored private let fileURL: URL?
     @ObservationIgnored private let fileManager: FileManager
+    @ObservationIgnored private var persistenceTask: Task<Void, Never>?
+
+    private static let persistenceDebounceNanos: UInt64 = 300_000_000
 
     convenience init() {
         self.init(fileURL: Self.defaultFileURL())
@@ -46,6 +49,7 @@ final class AgentRunStore {
     }
 
     func reload() {
+        flushPendingWrites()
         guard let fileURL else { return }
         runs = Self.load(from: fileURL)
     }
@@ -596,7 +600,29 @@ final class AgentRunStore {
         }
     }
 
+    func flushPendingWrites() {
+        guard persistenceTask != nil else { return }
+        persistenceTask?.cancel()
+        persistenceTask = nil
+        persistImmediately()
+    }
+
     private func persist() {
+        guard fileURL != nil else { return }
+        guard persistenceTask == nil else { return }
+        persistenceTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: Self.persistenceDebounceNanos)
+            } catch {
+                return
+            }
+            guard let self else { return }
+            self.persistenceTask = nil
+            self.persistImmediately()
+        }
+    }
+
+    private func persistImmediately() {
         guard let fileURL else { return }
         do {
             try fileManager.createDirectory(

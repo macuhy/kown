@@ -227,7 +227,7 @@ struct WebSearchSettingsView: View {
         cardShell(tint: secondaryTint) {
             VStack(alignment: .leading, spacing: 15) {
                 HStack(alignment: .center, spacing: 10) {
-                    sectionHeader("Firecrawl API Key", subtitle: "Key 存在 Keychain;留空保存不会覆盖已保存的 Key。", icon: "key.fill", color: secondaryTint)
+                    sectionHeader("Firecrawl API Key", subtitle: "Key 存在本机 secret store;留空保存不会覆盖已保存的 Key。", icon: "key.fill", color: secondaryTint)
                     Spacer(minLength: 0)
                     if viewModel.hasWebSearchKey && !keyDirty && apiKey.isEmpty {
                         statusBadge("已保存", icon: "checkmark.circle.fill", color: .green)

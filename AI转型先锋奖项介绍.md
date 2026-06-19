@@ -124,7 +124,7 @@ Kown 集成了语音识别、语音服务和 TTS 能力，包括讯飞 TTS、神
 
 ### 8. 多端与系统能力
 
-Kown 同时包含 macOS、iOS 相关工程结构，并支持 iCloud 同步、备份、Keychain 安全存储、更新服务等能力。
+Kown 同时包含 macOS、iOS 相关工程结构，并支持 iCloud 同步、备份、本机 secret store（默认 JSON，Security Keychain 可选）、更新服务等能力。
 
 这说明工具建设并不只停留在原型层面，而是逐步具备产品化基础：
 

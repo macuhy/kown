@@ -512,7 +512,7 @@ struct Turn: Identifiable, Codable, Hashable, Sendable {
     var debateRounds: [DebateRound]?
     /// Tournament(擂台 / 淘汰赛)模式下的逐轮对决记录。旧会话没有该字段,保持 optional 兼容旧 JSON。
     var tournamentRounds: [TournamentRound]?
-    /// 本轮被 model 提议 + 自动 apply 到 workspace 的文件改动(从 `kown:write` 代码块解析出)。
+    /// 本轮被 model 提议的 workspace / GitHub 文件改动(从 `kown:write` 代码块解析出)。
     /// 仅当 Conversation 设置了 workspaceBookmark 时才会有内容。
     var appliedWrites: [AppliedWrite]?
     /// 用户本轮附带的图片(引用,字节单独存盘)。旧会话没有该字段,保持 optional 兼容旧 JSON。
@@ -1062,8 +1062,8 @@ enum ConversationFolderStore {
     }
 }
 
-/// 一条已应用到 workspace 文件夹的写入记录。
-/// 由 model 输出 ```kown:write 代码块 触发,自动 apply 后归档到 Turn 里。
+/// 一条 workspace / GitHub 写入记录。
+/// 由 model 输出 ```kown:write 代码块触发；本地 workspace 默认先暂存,用户确认后才落盘。
 struct AppliedWrite: Identifiable, Codable, Hashable, Sendable {
     let id: UUID
     /// 相对 workspace 根的路径(永远不带 `/` 开头,永远不能 `..` 出根)
@@ -1083,6 +1083,10 @@ struct AppliedWrite: Identifiable, Codable, Hashable, Sendable {
     var reverted: Bool?
     /// 写入目标是 GitHub 提交时,commit 的网页地址(本地 workspace 写入为 nil)。旧存档无该字段 → optional。
     var remoteURL: String?
+    /// 本地 workspace 写入是否仍在等待用户确认。旧存档无该字段 → 已应用。
+    var pendingConfirmation: Bool?
+    /// 非阻断提示,例如同一路径存在多个模型版本需要用户选择。旧存档无该字段 → nil。
+    var warning: String?
 
     enum Action: String, Codable, Sendable {
         case create     // 文件原本不存在
@@ -1098,7 +1102,9 @@ struct AppliedWrite: Identifiable, Codable, Hashable, Sendable {
          oldContent: String? = nil,
          newContent: String,
          reverted: Bool? = nil,
-         remoteURL: String? = nil) {
+         remoteURL: String? = nil,
+         pendingConfirmation: Bool? = nil,
+         warning: String? = nil) {
         self.id = id
         self.relativePath = relativePath
         self.action = action
@@ -1108,5 +1114,7 @@ struct AppliedWrite: Identifiable, Codable, Hashable, Sendable {
         self.newContent = newContent
         self.reverted = reverted
         self.remoteURL = remoteURL
+        self.pendingConfirmation = pendingConfirmation
+        self.warning = warning
     }
 }

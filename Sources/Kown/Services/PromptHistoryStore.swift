@@ -2,7 +2,7 @@ import Foundation
 
 /// 已发送 prompt 的历史回溯 —— 环形缓冲(最近 N 条)+ JSON 持久化,供输入框 ↑/↓ 调取最近输入。
 ///
-/// 文件放在 `[syncedDataDir]/prompt_history.json`(沿用 ConversationStore / KeychainStore 等同一存盘根,
+/// 文件放在 `[syncedDataDir]/prompt_history.json`(沿用 ConversationStore / ProviderConfigStore 等非敏感存盘根,
 /// 默认本地 `~/.kown`,iCloud 同步开启时随容器走)。
 ///
 /// 设计要点:

@@ -19,7 +19,7 @@ struct ScenarioTemplate: Identifiable, Hashable {
               systemPrompt: "你是耐心的老师。用通俗的例子由浅入深讲解我问的概念,适当类比,最后出一道小练习帮我检验理解。"),
         .init(id: "decision", name: "决策分析", icon: "scalemass.fill", mode: .council,
               systemPrompt: "帮我做决策。先澄清目标与约束,列出可选方案及各自利弊与关键权衡,最后给出有明确理由的建议。"),
-        .init(id: "translate", name: "翻译", icon: "character.book.closed.fill", mode: .direct,
+        .init(id: "translate", name: "翻译", icon: "character.book.closed.fill", mode: .translate,
               systemPrompt: "你是专业译者。在中英之间准确、自然地翻译我给的内容,保留语气、格式与专业术语;只输出译文,必要处可加简短注释。"),
     ]
 }
@@ -513,7 +513,7 @@ struct EmptyStateCard: View {
         VStack(alignment: .leading, spacing: 12) {
             sectionHeader(
                 title: "试试这些提问",
-                subtitle: "点一下即可新建会话并直接开聊",
+                subtitle: "点一下填入输入框,可继续编辑后发送",
                 icon: "bolt.fill",
                 tint: modeTint
             )

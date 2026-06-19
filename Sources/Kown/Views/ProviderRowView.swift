@@ -62,7 +62,7 @@ struct ProviderRowView: View {
             Button("删除", role: .destructive) { onDelete() }
             Button("取消", role: .cancel) { }
         } message: {
-            Text("该厂商配置会被移除, 对应 API Key 也会从 Keychain 删除。")
+            Text("该厂商配置会被移除, 对应 API Key 也会从本机 secret store 删除。")
         }
     }
 
@@ -725,7 +725,8 @@ struct ProviderRowView: View {
             try KeychainStore.save(id: config.id, apiKey: apiKey)
             apiKey = ""
             keyDirty = false
-            flash(success: "API Key 已保存到 Keychain")
+            onSave()
+            flash(success: "API Key 已保存到本机 secret store")
         } catch {
             flash(error: "保存失败: \(error.localizedDescription)")
         }
@@ -743,6 +744,7 @@ struct ProviderRowView: View {
             do {
                 if !apiKey.isEmpty {
                     try KeychainStore.save(id: config.id, apiKey: apiKey)
+                    onSave()
                     resolvedKey = apiKey
                     apiKey = ""
                     keyDirty = false

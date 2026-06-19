@@ -11,6 +11,9 @@ enum ResponseLogger {
     /// 不删空目录(会话还活着的话,目录下次会被重新填),不删非 .md 文件。
     /// 14 天足够回看上下文,又不会让 ~/.kown/logs 无限膨胀。
     static let retentionDays: Int = 14
+    /// 默认只写元数据,不把完整 prompt / response 落盘。
+    /// 需要排查供应商返回正文时,可由高级设置或 `defaults write` 显式打开。
+    static let includeSensitiveContentPrefKey = "kown.responseLogger.includeSensitiveContent.v1"
     // didRotate 只在 writeQueue 这一个串行队列上读写,无并发竞争 — `nonisolated(unsafe)`
     // 是 Swift 6 严格并发下表达"我自己保证序"的标准做法,比加 lock 简单。
     nonisolated(unsafe) private static var didRotate = false
@@ -130,7 +133,12 @@ enum ResponseLogger {
         return "\(ts)_\(slug)_\(e.roundID).md"
     }
 
-    private static func render(_ e: Entry) -> String {
+    static func shouldIncludeSensitiveContent() -> Bool {
+        UserDefaults.standard.bool(forKey: includeSensitiveContentPrefKey)
+    }
+
+    static func render(_ e: Entry) -> String {
+        let includeSensitiveContent = shouldIncludeSensitiveContent()
         let elapsed = e.elapsedSeconds.map { String(format: "%.2fs", $0) } ?? "—"
         let status  = e.error == nil ? "✅ 完成" : "❌ 失败"
         var out = """
@@ -142,22 +150,49 @@ enum ResponseLogger {
         - **类型**: \(e.providerKind)
         - **端点**: `\(e.baseURL)`
         - **Round**: `\(e.roundID)`
+        - **正文日志**: \(includeSensitiveContent ? "已显式开启" : "默认关闭，仅写元数据")
         """
 
         let trimmedSys = e.systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedSys.isEmpty {
-            out += "\n\n## System Prompt\n\n```\n\(trimmedSys)\n```"
+            out += "\n\n## System Prompt\n\n"
+            if includeSensitiveContent {
+                out += "```\n\(trimmedSys)\n```"
+            } else {
+                out += redactedBodyDescription(for: trimmedSys, label: "system prompt")
+            }
         }
 
-        out += "\n\n## Prompt\n\n\(e.prompt)"
+        out += "\n\n## Prompt\n\n"
+        if includeSensitiveContent {
+            out += e.prompt
+        } else {
+            out += redactedBodyDescription(for: e.prompt, label: "prompt")
+        }
 
         if let err = e.error {
-            out += "\n\n## 错误\n\n```\n\(err)\n```"
+            out += "\n\n## 错误\n\n"
+            if includeSensitiveContent {
+                out += "```\n\(err)\n```"
+            } else {
+                out += redactedBodyDescription(for: err, label: "error")
+            }
         } else {
-            out += "\n\n## Response\n\n\(e.response)"
+            out += "\n\n## Response\n\n"
+            if includeSensitiveContent {
+                out += e.response
+            } else {
+                out += redactedBodyDescription(for: e.response, label: "response")
+            }
         }
 
         return out + "\n"
+    }
+
+    private static func redactedBodyDescription(for text: String, label: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "（空）" }
+        return "（默认未写入 \(label) 正文；字符数: \(trimmed.count)。如需调试完整内容,请显式开启 `\(includeSensitiveContentPrefKey)`。）"
     }
 
     private static func filenameTimestamp(_ d: Date) -> String {

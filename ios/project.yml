@@ -69,7 +69,7 @@ targets:
           - UIInterfaceOrientationLandscapeRight
         # iCloud Drive 容器声明 — 与 entitlements 里的 ID 一致。
         # NSUbiquitousContainerIsDocumentScopePublic=false 让 Files app 看不到本应用容器,
-        # 避免 API Key 文件出现在用户 iCloud Drive 列表里(数据仍正常跨设备同步)。
+        # 容器仅用于非敏感同步数据;API Key 默认留在 localDataDir,不复制进 iCloud 容器。
         NSUbiquitousContainers:
           iCloud.com.xiaobo.kown:
             NSUbiquitousContainerIsDocumentScopePublic: false
@@ -107,6 +107,7 @@ targets:
     dependencies:
       - package: Textual
         product: Textual
+      - sdk: Security.framework
       - target: KownShare
         embed: true
       - target: KownKeyboard

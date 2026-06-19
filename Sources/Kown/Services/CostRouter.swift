@@ -136,7 +136,7 @@ enum CostRouter {
     struct CascadePlan: Sendable {
         /// 快速打分用的裁判(chair 优先,否则首个 enabled 非 CLI)。
         var judge: ProviderConfig
-        /// 旗舰档配置(panel 首家的副本,只换 model;同 id → Keychain key 共用)。
+        /// 旗舰档配置(panel 首家的副本,只换 model;同 id → secret-store key 共用)。
         var flagship: ProviderConfig
         /// 评分阈值,初答低于该分触发旗舰重答。
         var threshold: Int

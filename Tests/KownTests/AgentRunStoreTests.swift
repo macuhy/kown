@@ -47,6 +47,7 @@ final class AgentRunStoreTests: XCTestCase {
         XCTAssertEqual(store.run(id: run.id)?.toolCalls.first?.cost.totalTokens, 170)
         XCTAssertEqual(store.run(id: run.id)?.cost.totalTokens, 170)
 
+        store.flushPendingWrites()
         let reloaded = AgentRunStore(fileURL: url)
         XCTAssertEqual(reloaded.runs.count, 1)
         XCTAssertEqual(reloaded.runs.first?.toolCalls.first?.name, "web_search")

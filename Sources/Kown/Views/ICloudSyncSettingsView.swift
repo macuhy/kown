@@ -89,8 +89,8 @@ struct ICloudSyncSettingsView: View {
 
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
                 metricTile(title: "同步范围",
-                           value: "4 项",
-                           detail: "会话 / Provider / Web Search / API Key",
+                           value: "3 项",
+                           detail: "会话 / Provider 配置 / Web Search 配置",
                            icon: "square.stack.3d.up.fill",
                            color: tint)
                 metricTile(title: "本机偏好",
@@ -154,8 +154,8 @@ struct ICloudSyncSettingsView: View {
 
             VStack(spacing: 7) {
                 compactMetricRow(title: "同步范围",
-                                 value: "4 项",
-                                 detail: "会话 / Provider / Web Search / API Key",
+                                 value: "3 项",
+                                 detail: "会话 / Provider 配置 / Web Search 配置",
                                  icon: "square.stack.3d.up.fill",
                                  color: tint)
                 compactMetricRow(title: "本机偏好",
@@ -247,8 +247,8 @@ struct ICloudSyncSettingsView: View {
                     Text("启用 iCloud 同步")
                         .font(.body.weight(.semibold))
                     Text(viewModel.iCloudSync.isEnabled
-                         ? "会话和配置正在通过 iCloud 在你的设备间同步。"
-                         : "打开后,会话和配置将保存到 iCloud,在所有登录同一 Apple ID 的设备上保持一致。")
+                         ? "会话和非密钥配置正在通过 iCloud 在你的设备间同步。"
+                         : "打开后,会话和非密钥配置将保存到 iCloud,在所有登录同一 Apple ID 的设备上保持一致。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -294,8 +294,8 @@ struct ICloudSyncSettingsView: View {
                      synced: true)
             scopeRow(icon: "key.fill",
                      title: "API Key",
-                     detail: "iCloud 容器内同步;对 Files app 隐藏,不会出现在 iCloud Drive 列表里",
-                     synced: true)
+                     detail: "不进入 iCloud 容器;当前本机 secret-store 后端可在「密钥存储」查看或显式迁移",
+                     synced: false)
             Divider().padding(.vertical, 2)
             scopeRow(icon: "slider.horizontal.3",
                      title: "本机偏好",
@@ -309,7 +309,7 @@ struct ICloudSyncSettingsView: View {
             tipRow("首次启用时,本地已有数据会上传到 iCloud(不覆盖云端已存在的)。")
             tipRow("关闭同步会把云端最新内容拉回本地一次,之后修改不再同步。")
             tipRow("如果同步状态显示\"不可用\",请检查 设置 → Apple ID → iCloud → iCloud Drive 是否开启。")
-            tipRow("API Key 跟随同步开关一起进 iCloud 容器,但不会出现在 Files / iCloud Drive 列表里;只有登录同一 Apple ID 的本应用能读到。")
+            tipRow("API Key 不进 iCloud 容器;当前 secret-store 后端留在本机,每台设备独立填写或显式导入。")
         }
     }
 
@@ -362,7 +362,7 @@ struct ICloudSyncSettingsView: View {
     private var toggleCard: some View {
         cardShell(tint: tint) {
             VStack(alignment: .leading, spacing: 14) {
-                sectionHeader("同步开关", subtitle: "开启后把核心数据放入 iCloud 容器,关闭时会先拉回云端最新内容。", icon: "icloud.and.arrow.up", color: tint)
+                sectionHeader("同步开关", subtitle: "开启后把非敏感核心数据放入 iCloud 容器,关闭时会先拉回云端最新内容。", icon: "icloud.and.arrow.up", color: tint)
                 toggleBody
                 if !viewModel.iCloudSync.isAvailable {
                     messageBanner("iCloud 容器不可用 — 请确认已登录 Apple ID 并开启 iCloud Drive。",

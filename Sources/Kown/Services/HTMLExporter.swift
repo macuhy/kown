@@ -295,7 +295,7 @@ enum MiniMarkdown {
         // 1) 行内代码先抠出来占位,避免里面的 * _ 被当强调。
         var placeholders: [String] = []
         var working = ""
-        var chars = Array(text)
+        let chars = Array(text)
         var i = 0
         while i < chars.count {
             if chars[i] == "`" {
@@ -349,7 +349,7 @@ enum MiniMarkdown {
         // 已转义文本里查找 [label](url)。url 不含空格/括号。
         guard text.contains("](") else { return text }
         var result = ""
-        var chars = Array(text)
+        let chars = Array(text)
         var i = 0
         while i < chars.count {
             if chars[i] == "[" {

@@ -32,6 +32,10 @@ final class UsageStore {
     /// 所以缓存合并结果,数据变化(record/reset/reload)时失效。**不要标 @Published / Observation 追踪**。
     @ObservationIgnored
     private var mergedCache: UsageSnapshot?
+    @ObservationIgnored
+    private var persistTask: Task<Void, Never>?
+
+    private static let persistDebounceNanos: UInt64 = 300_000_000
 
     /// 给 UI 用的合并 view(mineSnapshot + othersSnapshot 按 day/model 加总)。命中缓存直接返回。
     var snapshot: UsageSnapshot {
@@ -81,7 +85,7 @@ final class UsageStore {
         dayBucket[key] = modelEntry
         mineSnapshot.days[day] = dayBucket
         mergedCache = nil
-        persistMine()
+        schedulePersistMine()
         // iOS 桌面小组件:把本月花费/预算快照写进 App Group(60s 节流,见 WidgetBridge)。
         WidgetBridge.publishUsage(monthSpendUSD: monthToDateCostUSD())
     }
@@ -90,11 +94,12 @@ final class UsageStore {
     func reset() {
         mineSnapshot = UsageSnapshot()
         mergedCache = nil
-        persistMine()
+        persistMineImmediately()
     }
 
     /// 重新扫盘加载所有设备的数据。AppViewModel 在 iCloud 同步刷新时调用。
     func reload() {
+        flushPendingWrites()
         mineSnapshot = Self.loadMine(deviceID: deviceID) ?? UsageSnapshot()
         othersSnapshot = Self.loadOthers(excludingDeviceID: deviceID)
         mergedCache = nil
@@ -243,6 +248,33 @@ final class UsageStore {
     }
 
     // MARK: - 持久化
+
+    func flushPendingWrites() {
+        guard persistTask != nil else { return }
+        persistTask?.cancel()
+        persistTask = nil
+        persistMine()
+    }
+
+    private func schedulePersistMine() {
+        guard persistTask == nil else { return }
+        persistTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: Self.persistDebounceNanos)
+            } catch {
+                return
+            }
+            guard let self else { return }
+            self.persistTask = nil
+            self.persistMine()
+        }
+    }
+
+    private func persistMineImmediately() {
+        persistTask?.cancel()
+        persistTask = nil
+        persistMine()
+    }
 
     private func persistMine() {
         let url = Self.fileURL(deviceID: deviceID)

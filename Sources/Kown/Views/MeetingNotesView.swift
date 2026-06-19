@@ -433,7 +433,9 @@ struct MeetingNotesView: View {
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             do {
                 let text = try await AudioTranscriptionService.transcribe(url: url) { partial in
-                    transcript = base + partial
+                    Task { @MainActor in
+                        transcript = base + partial
+                    }
                 }
                 await MainActor.run {
                     transcript = base + text

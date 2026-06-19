@@ -35,7 +35,7 @@ enum WebSearchConfigStore {
     }
 }
 
-/// Firecrawl key 走 `KeychainStore`,固定 id,避免与 provider id 冲突。
+/// Firecrawl key 走 `KeychainStore` secret-store facade,固定 id,避免与 provider id 冲突。
 @MainActor
 enum WebSearchKey {
     static let id = UUID(uuidString: "D8A6E1F7-9C4B-4F3A-B521-7E2C18A3F940")!

@@ -123,7 +123,7 @@
     <div class="logo">K</div>
     <h1>Kown<br><span class="g">多模型 AI 议会</span></h1>
     <p class="tag">一个问题,同时问遍 OpenAI · Claude · Gemini · DeepSeek,让模型们并排作答、互相辩论、综合给结论。</p>
-    <p class="sub">原生 SwiftUI 应用 · macOS + iOS 共享一份源码 · 数据 iCloud 跨设备同步 · API Key 存本地 Keychain,不经过任何中转服务器。</p>
+    <p class="sub">原生 SwiftUI 应用 · macOS + iOS 共享一份源码 · 非密钥数据 iCloud 跨设备同步 · API Key 默认保存在本机 JSON secret store,Security Keychain 可显式迁移,不经过任何中转服务器。</p>
     <div class="pills">
       <span class="pill">📅 始于 <b>2026-05-11</b></span>
       <span class="pill">🧩 <b>4</b> 种回答模式</span>
@@ -196,7 +196,7 @@
         <p class="desc">一个原生 macOS SwiftUI 应用:把同一个 prompt 并发发给多家厂商,用 SSE 流式解析器把回答实时并排渲染。每家可单独配 Base URL / Model / Key,每列独立成功失败、可取消。</p>
         <div class="feats">
           <div class="feat"><b>并发流式</b><span>withTaskGroup 同时拉多家,逐字流式并排展示</span></div>
-          <div class="feat"><b>三类厂商接入</b><span>OpenAI 兼容 / Anthropic / Gemini,Key 存 Keychain</span></div>
+          <div class="feat"><b>三类厂商接入</b><span>OpenAI 兼容 / Anthropic / Gemini,Key 走本机 secret-store facade(默认 JSON;Security Keychain 可选)</span></div>
           <div class="feat"><b>每列隔离</b><span>单家失败不影响其他列,可整体取消</span></div>
           <div class="feat"><b>连接测试</b><span>设置里不离页就能验证每家配置</span></div>
         </div>
@@ -210,7 +210,7 @@
         <p class="desc">从「工具」变成「应用」:加上了多平台、对话历史、四种模式、iCloud 同步,以及一条能自我更新的发版链路。这一阶段也踩平了大量 iCloud 冲突与流式性能的坑。</p>
         <div class="feats">
           <div class="feat"><b>iOS 支持 <span class="vt">重构</span></b><span>macOS + iOS 共享一份源码,平台差异条件编译</span></div>
-          <div class="feat"><b>iCloud Drive 同步 <span class="vt">0.4.1</span></b><span>会话 / Provider / Key 跨设备同步,导入导出备份</span></div>
+          <div class="feat"><b>iCloud Drive 同步 <span class="vt">0.4.1</span></b><span>会话 / Provider / Web Search 非密钥配置跨设备同步,Key 本机-only,导入导出备份</span></div>
           <div class="feat"><b>Debate 模式深化 <span class="vt">0.4.0</span></b><span>可配轮数、减少自家锚定、立场变迁维度</span></div>
           <div class="feat"><b>工作目录 <span class="vt">0.5.0</span></b><span>模型读目录树、写文件(严格路径校验)</span></div>
           <div class="feat"><b>更新日志 / What's New <span class="vt">0.5.3</span></b><span>CHANGELOG 随包,升级自动弹新特性</span></div>

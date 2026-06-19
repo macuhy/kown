@@ -14,7 +14,7 @@ extension AppViewModel {
             let text = (turn.responses[key] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { continue }
             // 快照里的配置可能 model 与当前 providers 不同;优先用「当前仍存在的同 id provider」拿可用 key,
-            // 否则直接用快照配置(其 id 对应的 Keychain key 仍在)。
+            // 否则直接用快照配置(其 id 对应的 secret-store key 仍在)。
             if let live = providers.first(where: { $0.id.uuidString == key && !$0.kind.isCLI }) {
                 return live
             }

@@ -2,11 +2,11 @@ import XCTest
 @testable import Kown
 
 /// 覆盖 Workspace 的 `kown:write` 解析与**路径安全校验**(防 `../` 越权写到 workspace 之外、
-/// 防写非文本后缀)。这是会被 LLM 输出直接驱动落盘的路径,必须守住。
+/// 防写非文本后缀)。这是会被 LLM 输出驱动的写入路径,必须先暂存、再由用户确认落盘。
 @MainActor
 final class WorkspaceWriteTests: XCTestCase {
 
-    private var workspace: URL!
+    private nonisolated(unsafe) var workspace: URL!
 
     override func setUpWithError() throws {
         workspace = FileManager.default.temporaryDirectory
@@ -75,5 +75,46 @@ final class WorkspaceWriteTests: XCTestCase {
         XCTAssertEqual(result.action, .create)
         let written = try? String(contentsOf: workspace.appendingPathComponent("notes.md"), encoding: .utf8)
         XCTAssertEqual(written, "hello")
+    }
+
+    func testPrepareDoesNotWriteUntilApplied() {
+        let target = workspace.appendingPathComponent("draft.md")
+
+        let prepared = WorkspaceManager.prepare(
+            PendingWrite(relativePath: "draft.md", content: "staged"),
+            workspaceURL: workspace
+        )
+
+        XCTAssertTrue(prepared.success)
+        XCTAssertEqual(prepared.action, .create)
+        XCTAssertEqual(prepared.pendingConfirmation, true)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: target.path))
+
+        let applied = WorkspaceManager.apply(
+            PendingWrite(relativePath: prepared.relativePath, content: prepared.newContent),
+            workspaceURL: workspace,
+            id: prepared.id
+        )
+
+        XCTAssertTrue(applied.success)
+        XCTAssertEqual(applied.pendingConfirmation, false)
+        let written = try? String(contentsOf: target, encoding: .utf8)
+        XCTAssertEqual(written, "staged")
+    }
+
+    func testUpdatePreparationKeepsFullOldContentForUndo() throws {
+        let target = workspace.appendingPathComponent("notes.md")
+        let old = String(repeating: "old\n", count: 80_000)
+        try old.write(to: target, atomically: true, encoding: .utf8)
+
+        let prepared = WorkspaceManager.prepare(
+            PendingWrite(relativePath: "notes.md", content: "new"),
+            workspaceURL: workspace
+        )
+
+        XCTAssertTrue(prepared.success)
+        XCTAssertEqual(prepared.action, .update)
+        XCTAssertEqual(prepared.oldContent, old)
+        XCTAssertFalse(prepared.reverted == true)
     }
 }

@@ -54,4 +54,66 @@ final class ConversationCodableTests: XCTestCase {
         let back = try dec.decode(Turn.self, from: enc.encode(turn))
         XCTAssertEqual(back.sources?.first?.url, "https://x.com")
     }
+
+    func testLegacyAppliedWriteDecodesWithoutPendingFields() throws {
+        let json = #"""
+        {
+          "id":"\#(UUID().uuidString)",
+          "relativePath":"notes.md",
+          "action":"update",
+          "success":true,
+          "oldContent":"old",
+          "newContent":"new"
+        }
+        """#
+
+        let write = try JSONDecoder().decode(AppliedWrite.self, from: Data(json.utf8))
+
+        XCTAssertEqual(write.relativePath, "notes.md")
+        XCTAssertNil(write.pendingConfirmation)
+        XCTAssertNil(write.warning)
+    }
+}
+
+@MainActor
+final class ConversationSearchIndexTests: XCTestCase {
+    func testSearchResultsFollowRebuildOrder() async {
+        let firstID = UUID()
+        let secondID = UUID()
+        let first = Conversation(
+            id: firstID,
+            title: "最近会话",
+            turns: [Turn(prompt: "Swift 并发优化", systemPrompt: "")]
+        )
+        let second = Conversation(
+            id: secondID,
+            title: "较早会话",
+            turns: [Turn(prompt: "Swift 搜索体验", systemPrompt: "")]
+        )
+
+        let index = ConversationSearchIndex()
+        await index.rebuild([first, second])
+
+        XCTAssertEqual(index.search("Swift").map(\.id), [firstID, secondID])
+    }
+}
+
+@MainActor
+final class BackupStoreTests: XCTestCase {
+    func testBackupOmitsAPIKeysWhenDisabled() throws {
+        let provider = ProviderConfig(displayName: "Test", kind: .openAICompatible)
+        let data = try BackupStore.makeBackup(
+            providers: [provider],
+            webSearchConfig: .defaultConfig,
+            includeAPIKeys: false,
+            preferences: KownBackup.Preferences(
+                systemPrompt: nil,
+                debateRounds: nil,
+                webSearchEnabledForNextSend: nil
+            )
+        )
+
+        let backup = try BackupStore.parseBackup(data)
+        XCTAssertNil(backup.apiKeys)
+    }
 }

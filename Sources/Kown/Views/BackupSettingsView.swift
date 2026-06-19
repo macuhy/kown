@@ -8,7 +8,7 @@ import UniformTypeIdentifiers
 struct BackupSettingsView: View {
     @Bindable var viewModel: AppViewModel
 
-    @State private var includeAPIKeys: Bool = true
+    @State private var includeAPIKeys: Bool = false
     @State private var pendingExportDocument: BackupDocument?
     @State private var pendingExportFilename: String = ""
     @State private var showExporter = false
@@ -81,7 +81,7 @@ struct BackupSettingsView: View {
                     pendingImportData = nil
                 }
             } message: {
-                Text("覆盖:用备份完全替换当前所有 provider / web search / 偏好。\n合并:只新增备份里有而本机没有的 provider,不动现有的。\nAPI Key 两种模式下都会补充进 Keychain。")
+                Text("覆盖:用备份完全替换当前所有 provider / web search / 偏好。\n合并:只新增备份里有而本机没有的 provider,不动现有的。\nAPI Key 两种模式下都会补充进本机 secret store。")
             }
     }
 
@@ -274,11 +274,15 @@ struct BackupSettingsView: View {
             Button {
                 runBackupNow()
             } label: {
-                Label("立即备份", systemImage: "externaldrive.badge.plus")
+                Label("立即备份(不含 Key)", systemImage: "externaldrive.badge.plus")
                     .font(.body.weight(.semibold))
             }
             .buttonStyle(.borderedProminent)
             .tint(secondaryTint)
+            Text("自动备份和立即备份固定不包含明文 Key,避免快照落入 iCloud backups。需要带 Key 的文件请使用下方手动导出。")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             if snapshots.isEmpty {
                 Text("暂无自动备份。开启频率后会在打开本页 / 进入后台时按计划生成。")
@@ -341,8 +345,8 @@ struct BackupSettingsView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("包含 API Key").font(.body.weight(.semibold))
                     Text(includeAPIKeys
-                         ? "导出文件含明文 Key,等同于完整凭据,请妥善保管。"
-                         : "导出后到新设备需要重新填入各家 API Key。")
+                         ? "导出文件含 Provider + Firecrawl 明文 Key;GitHub/TTS 默认仍需重登或重填。"
+                         : "导出后到新设备需要重新填入 Provider / Firecrawl API Key。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -756,10 +760,10 @@ struct BackupSettingsView: View {
     private func onAppearSetup() {
         autoFrequency = BackupStore.autoBackupFrequency
         keepCount = BackupStore.autoBackupKeepCount
-        // 进入设置时:执行到期的自动备份。备份内容用现有导出能力按当前 include 选项生成。
+        // 自动备份永不包含明文 Key;手动导出时用户可显式打开上方开关。
         // App 启动 / 进入后台的钩子见文件底部说明。
         BackupStore.runScheduledBackupIfNeeded {
-            try viewModel.exportBackup(includeAPIKeys: includeAPIKeys)
+            try viewModel.exportBackup(includeAPIKeys: false)
         }
         refreshState()
     }
@@ -775,9 +779,11 @@ struct BackupSettingsView: View {
 
     private func runBackupNow() {
         do {
-            let data = try viewModel.exportBackup(includeAPIKeys: includeAPIKeys)
+            let data = try viewModel.exportBackup(includeAPIKeys: false)
             try BackupStore.writeSnapshot(data)
-            resultMessage = "已创建备份。"
+            resultMessage = includeAPIKeys
+                ? "已创建不含 Key 的备份。若要导出明文 Key,请使用手动导出。"
+                : "已创建备份。"
             errorMessage = nil
             refreshState()
         } catch {
@@ -937,7 +943,7 @@ struct BackupDocument: FileDocument {
 // scenePhase 变化时调用同一方法,例如:
 //   .onChange(of: scenePhase) { _, phase in
 //       if phase == .background {
-//           BackupStore.runScheduledBackupIfNeeded { try viewModel.exportBackup(includeAPIKeys: true) }
+//           BackupStore.runScheduledBackupIfNeeded { try viewModel.exportBackup(includeAPIKeys: false) }
 //       }
 //   }
 // 该接线需改动 App 入口文件,不在本任务的独占文件范围内,故未实施。

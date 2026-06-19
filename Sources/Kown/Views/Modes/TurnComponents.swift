@@ -768,11 +768,12 @@ struct HistoricalResponseCard: View {
     }
 }
 
-/// 一组"已应用到 workspace 的文件写入"卡片。
-/// model 在响应里通过 ```kown:write <path>``` 提议改动,被 WorkspaceManager 自动落盘后,
-/// 在 Turn 下方展示一组小卡片表明已应用,带文件路径 + create/update 标签 + 成功/失败 icon。
+/// 一组 workspace / GitHub 写入卡片。
+/// 本地 workspace 写入先展示为待确认 diff,用户点「应用」后才真正落盘。
 struct AppliedWritesStrip: View {
     let writes: [AppliedWrite]
+    /// 应用某条待确认改动的回调(nil = 不显示应用按钮)。
+    var onApply: ((AppliedWrite) -> Void)? = nil
     /// 撤销某条改动的回调(历史 turn 才传;nil = 不显示撤销按钮)。
     var onUndo: ((AppliedWrite) -> Void)? = nil
     @State private var expandedIDs: Set<UUID> = []
@@ -781,6 +782,8 @@ struct AppliedWritesStrip: View {
 
     /// 写入目标是 GitHub(任一条带 remoteURL)→ 标题/图标/徽标切成 GitHub 提交样式。
     private var isRemote: Bool { writes.contains { $0.remoteURL != nil } }
+    private var hasPending: Bool { writes.contains { $0.pendingConfirmation == true } }
+    private var themeColor: Color { hasPending ? .orange : .teal }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -802,6 +805,7 @@ struct AppliedWritesStrip: View {
                                              expandedIDs.insert(w.id)
                                          }
                                      },
+                                     onApply: onApply.map { cb in { cb(w) } },
                                      onUndo: onUndo.map { cb in { cb(w) } })
                 }
             }
@@ -815,7 +819,7 @@ struct AppliedWritesStrip: View {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .fill(
                         LinearGradient(
-                            colors: [Color.teal.opacity(0.10), Color.clear],
+                            colors: [themeColor.opacity(0.10), Color.clear],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -824,7 +828,7 @@ struct AppliedWritesStrip: View {
         )
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(Color.teal.opacity(0.24), lineWidth: 1)
+                .strokeBorder(themeColor.opacity(0.24), lineWidth: 1)
         }
     }
 
@@ -844,27 +848,27 @@ struct AppliedWritesStrip: View {
 
     private var headerTitle: some View {
         HStack(spacing: 6) {
-            Image(systemName: isRemote ? "arrow.triangle.branch" : "tray.and.arrow.down.fill")
+            Image(systemName: isRemote ? "arrow.triangle.branch" : (hasPending ? "doc.badge.clock" : "tray.and.arrow.down.fill"))
                 .font(.caption.weight(.bold))
-                .foregroundStyle(.teal)
-            Text(isRemote ? "GitHub 提交(\(writes.count))" : "Workspace 写入(\(writes.count))")
+                .foregroundStyle(themeColor)
+            Text(isRemote ? "GitHub 提交(\(writes.count))" : (hasPending ? "Workspace 待确认(\(writes.count))" : "Workspace 写入(\(writes.count))"))
                 .font(.caption.weight(.bold))
-                .foregroundStyle(.teal)
+                .foregroundStyle(themeColor)
                 .lineLimit(1)
             Image(systemName: expanded ? "chevron.up" : "chevron.down")
                 .font(.caption2.weight(.bold))
-                .foregroundStyle(.teal)
+                .foregroundStyle(themeColor)
         }
     }
 
     private var headerStatus: some View {
-        Text(isRemote ? "Committed" : "Applied")
+        Text(isRemote ? "Committed" : (hasPending ? "Review" : "Applied"))
             .font(.caption2.weight(.bold))
-            .foregroundStyle(.teal)
+            .foregroundStyle(themeColor)
             .lineLimit(1)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(Color.teal.opacity(0.11), in: Capsule())
+            .background(themeColor.opacity(0.11), in: Capsule())
             .fixedSize()
     }
 }
@@ -888,6 +892,8 @@ struct AppliedWriteCard: View {
     let write: AppliedWrite
     let expanded: Bool
     let onToggleExpand: () -> Void
+    /// 应用暂存改动(nil = 不显示应用按钮)。
+    var onApply: (() -> Void)? = nil
     /// 撤销回调(nil = 不显示撤销按钮,例如非历史 turn 或无 workspace)。
     var onUndo: (() -> Void)? = nil
     @State private var copied = false
@@ -895,9 +901,11 @@ struct AppliedWriteCard: View {
     @Environment(\.horizontalSizeClass) private var hSizeClass
 
     private var isReverted: Bool { write.reverted == true }
+    private var isPending: Bool { write.pendingConfirmation == true }
     private var canDiff: Bool { write.action == .update && (write.oldContent != nil) }
     // GitHub 提交(remoteURL 非 nil)不走本地 revert,不显示撤销按钮。
-    private var canUndo: Bool { onUndo != nil && write.success && write.action != .skipped && !isReverted && write.remoteURL == nil }
+    private var canUndo: Bool { onUndo != nil && write.success && write.action != .skipped && !isPending && !isReverted && write.remoteURL == nil }
+    private var canApply: Bool { onApply != nil && write.success && isPending && write.action != .skipped && write.remoteURL == nil }
     private var isCompact: Bool {
         #if os(iOS)
         return hSizeClass == .compact
@@ -916,6 +924,12 @@ struct AppliedWriteCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             header
+            if let warning = write.warning, !warning.isEmpty {
+                Label(warning, systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .textSelection(.enabled)
+            }
             if let err = write.error, !write.success {
                 Text(err)
                     .font(.caption)
@@ -1086,11 +1100,13 @@ struct AppliedWriteCard: View {
             HStack(spacing: 8) {
                 previewModeControl
                 Spacer(minLength: 8)
+                applyButton
                 undoButton
                 copyButton
             }
             WrappingHStack(horizontalSpacing: 8, verticalSpacing: 7) {
                 previewModeControl
+                applyButton
                 undoButton
                 copyButton
             }
@@ -1114,6 +1130,22 @@ struct AppliedWriteCard: View {
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
+        }
+    }
+
+    @ViewBuilder
+    private var applyButton: some View {
+        if canApply, let onApply {
+            Button {
+                onApply()
+            } label: {
+                Label("应用", systemImage: "checkmark.circle.fill")
+                    .font(.caption2.weight(.semibold))
+                    .lineLimit(1)
+            }
+            .buttonStyle(.borderless)
+            .fixedSize()
+            .help("确认后写入 workspace 磁盘")
         }
     }
 
@@ -1204,6 +1236,7 @@ struct AppliedWriteCard: View {
     }
 
     private var statusIcon: String {
+        if isPending && write.success { return "clock.fill" }
         if !write.success { return "exclamationmark.triangle.fill" }
         switch write.action {
         case .create:  return "plus.square.fill"
@@ -1212,6 +1245,7 @@ struct AppliedWriteCard: View {
         }
     }
     private var statusColor: Color {
+        if isPending && write.success { return .orange }
         if !write.success { return .red }
         switch write.action {
         case .create:  return .green
@@ -1220,6 +1254,7 @@ struct AppliedWriteCard: View {
         }
     }
     private var actionLabel: String {
+        if isPending { return "pending" }
         switch write.action {
         case .create:  return "create"
         case .update:  return "update"

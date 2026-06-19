@@ -7,7 +7,7 @@ struct SettingsView: View {
     @Bindable var viewModel: AppViewModel
     @Environment(\.dismiss) private var dismiss
 
-    enum Tab: String, CaseIterable, Identifiable {
+    enum Tab: String, CaseIterable, Identifiable, Hashable {
         case providers
         case modelDoctor
         case prompts
@@ -24,6 +24,7 @@ struct SettingsView: View {
         case chains
         case webSearch
         case tts
+        case secretStore
         case sync
         case backup
         case usage
@@ -61,6 +62,7 @@ struct SettingsView: View {
             case .chains:      return "工作流"
             case .webSearch:   return "Web Search"
             case .tts:         return "朗读"
+            case .secretStore:  return "密钥存储"
             case .sync:        return "iCloud 同步"
             case .backup:      return "导入/导出"
             case .usage:       return "Token 用量"
@@ -98,6 +100,7 @@ struct SettingsView: View {
             case .chains:      return "arrow.triangle.branch"
             case .webSearch:   return "globe"
             case .tts:         return "waveform"
+            case .secretStore:  return "key.fill"
             case .sync:        return "icloud"
             case .backup:      return "square.and.arrow.up.on.square"
             case .usage:       return "chart.bar.xaxis"
@@ -135,6 +138,7 @@ struct SettingsView: View {
             case .chains:      return Color(red: 0.30, green: 0.52, blue: 0.88)
             case .webSearch:   return Color(red: 0.16, green: 0.48, blue: 0.94)
             case .tts:         return Color(red: 0.36, green: 0.46, blue: 0.92)
+            case .secretStore:  return Color(red: 0.18, green: 0.54, blue: 0.48)
             case .sync:        return Color(red: 0.18, green: 0.58, blue: 0.92)
             case .backup:      return Color(red: 0.91, green: 0.55, blue: 0.20)
             case .usage:       return Color(red: 0.24, green: 0.63, blue: 0.36)
@@ -158,6 +162,7 @@ struct SettingsView: View {
 
     @State private var tab: Tab = .providers
     @State private var promptLibrary = PromptLibraryStore()
+    @State private var settingsSearchQuery = ""
     #if os(iOS)
     @Namespace private var mobileTabNamespace
     #endif
@@ -184,11 +189,48 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        #if os(iOS)
-        mobileBody
-        #else
-        desktopBody
-        #endif
+        Group {
+            #if os(iOS)
+            mobileBody
+            #else
+            desktopBody
+            #endif
+        }
+        .onChange(of: settingsSearchQuery) { _, _ in
+            selectFirstVisibleTabIfNeeded()
+        }
+    }
+
+    private var normalizedSettingsSearchQuery: String {
+        settingsSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var filteredTabs: [Tab] {
+        let query = normalizedSettingsSearchQuery
+        guard !query.isEmpty else { return availableTabs }
+        return availableTabs.filter { tabMatches($0, query: query) }
+    }
+
+    private var filteredDesktopTabSections: [(title: String, tabs: [Tab])] {
+        let visibleTabs = Set(filteredTabs)
+        return desktopTabSections
+            .map { section in
+                (title: section.title, tabs: section.tabs.filter { visibleTabs.contains($0) })
+            }
+            .filter { !$0.tabs.isEmpty }
+    }
+
+    private func tabMatches(_ candidate: Tab, query: String) -> Bool {
+        let haystack = "\(candidate.label) \(candidate.rawValue) \(candidate.symbol) \(headerSubtitle(for: candidate))"
+        return haystack.localizedCaseInsensitiveContains(query)
+    }
+
+    private func selectFirstVisibleTabIfNeeded() {
+        let tabs = filteredTabs
+        guard !tabs.isEmpty, !tabs.contains(tab) else { return }
+        withAnimation(.easeInOut(duration: 0.16)) {
+            tab = tabs[0]
+        }
     }
 
     private var desktopBody: some View {
@@ -255,6 +297,8 @@ struct SettingsView: View {
                         WebSearchSettingsView(viewModel: viewModel)
                     case .tts:
                         TTSSettingsView()
+                    case .secretStore:
+                        SecretStoreSettingsView(viewModel: viewModel)
                     case .sync:
                         ICloudSyncSettingsView(viewModel: viewModel)
                     case .backup:
@@ -331,17 +375,25 @@ struct SettingsView: View {
 
                     Spacer(minLength: 0)
                 }
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 7) {
-                        ForEach(availableTabs) { t in
-                            mobileTabPill(t)
-                                .id(t.id)
+
+                settingsSearchField
+
+                if filteredTabs.isEmpty {
+                    settingsSearchEmptyState
+                        .padding(.vertical, 4)
+                } else {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 7) {
+                            ForEach(filteredTabs) { t in
+                                mobileTabPill(t)
+                                    .id(t.id)
+                            }
                         }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 2)
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 2)
+                    .padding(.horizontal, -14)
                 }
-                .padding(.horizontal, -14)
             }
             .padding(.horizontal, 14)
             .padding(.top, 4)
@@ -645,12 +697,60 @@ struct SettingsView: View {
     }
     #endif
 
+    private var settingsSearchField: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            TextField("搜索设置或输入关键字", text: $settingsSearchQuery)
+                .textFieldStyle(.plain)
+                #if os(iOS)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                #endif
+            if !settingsSearchQuery.isEmpty {
+                Button {
+                    settingsSearchQuery = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("清空设置搜索")
+            }
+        }
+        .font(.callout)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(Color.platformControlBackground.opacity(0.62), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+        }
+        .accessibilityLabel("搜索设置")
+    }
+
+    private var settingsSearchEmptyState: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            Text("没有匹配的设置项")
+                .foregroundStyle(.secondary)
+        }
+        .font(.caption.weight(.semibold))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
     private var desktopTabSections: [(title: String, tabs: [Tab])] {
         [
             ("基础", [.providers, .modelDoctor, .prompts, .skills, .skillPackages, .deviceTools, .github]),
             ("工作台", [.connectorHub, .agentRuns, .meetingWorkflow, .deliverables]),
             ("工作流", [.personas, .chains, .mcp, .webSearch, .tts, .scheduler, .performance]),
-            ("数据", [.sync, .backup, .memory, .favorites, .privacy]),
+            ("数据", [.secretStore, .sync, .backup, .memory, .favorites, .privacy]),
             ("洞察", [.usage, .dashboard, .leaderboard, .eval]),
             ("版本", [.updates, .changelog, .debugLog])
         ]
@@ -676,10 +776,16 @@ struct SettingsView: View {
                 }
             }
 
+            settingsSearchField
+
             ScrollView {
                 VStack(alignment: .leading, spacing: 13) {
-                    ForEach(Array(desktopTabSections.enumerated()), id: \.offset) { _, section in
-                        desktopTabSection(title: section.title, tabs: section.tabs)
+                    if filteredDesktopTabSections.isEmpty {
+                        settingsSearchEmptyState
+                    } else {
+                        ForEach(Array(filteredDesktopTabSections.enumerated()), id: \.offset) { _, section in
+                            desktopTabSection(title: section.title, tabs: section.tabs)
+                        }
                     }
 
                     sidebarStatusCard
@@ -875,6 +981,8 @@ struct SettingsView: View {
                 WebSearchSettingsView(viewModel: viewModel)
             case .tts:
                 TTSSettingsView()
+            case .secretStore:
+                SecretStoreSettingsView(viewModel: viewModel)
             case .sync:
                 ICloudSyncSettingsView(viewModel: viewModel)
             case .backup:
@@ -1264,7 +1372,9 @@ struct SettingsView: View {
         .scrollIndicators(.automatic)
     }
 
-    private var headerSubtitle: String {
+    private var headerSubtitle: String { headerSubtitle(for: tab) }
+
+    private func headerSubtitle(for tab: Tab) -> String {
         switch tab {
         case .providers:   return "管理连接、密钥和每个模型的默认生成参数。"
         case .modelDoctor: return "批量检测模型是否真能用,并给出 Key、模型名、Base URL、限流和 CLI 的修复建议。"
@@ -1282,7 +1392,8 @@ struct SettingsView: View {
         case .chains:      return "把多个「模型 + 指示」步骤串成流水线,用 {{prev}} / {{input}} 接力,逐步执行。"
         case .webSearch:   return "配置 Firecrawl 让模型在需要时调用 web_search。"
         case .tts:         return "选择朗读引擎与音色:硅基流动 CosyVoice、讯飞语音(均国内直连)或系统语音。"
-        case .sync:        return "iCloud 同步 会话、Provider 配置、Web Search 配置 与 API Key。容器对 Files app 隐藏。"
+        case .secretStore: return "显式迁移 API Key / token 的本机存储后端;默认 JSON,可选择系统 Keychain。"
+        case .sync:        return "iCloud 同步会话、Provider 配置与 Web Search 配置;API Key 留在本机 secret store。"
         case .backup:      return "把当前配置(不含会话)导出成 JSON 文件,或从备份恢复。可作为多设备同步的离线备选。"
         case .usage:       return "按天 + 模型查看 token 用量。input / output 分别计,辅助估算成本。"
         case .dashboard:   return "用图表对比各模型的用量与成本:成本排行、每日 token 走势与输入/输出内訳。"
@@ -1943,6 +2054,7 @@ private struct MobileProviderEditorView: View {
             try KeychainStore.save(id: config.id, apiKey: apiKey)
             apiKey = ""
             keyDirty = false
+            onSave()
             flash(success: "API Key 已保存")
         } catch {
             flash(error: "保存失败: \(error.localizedDescription)")
@@ -1961,6 +2073,7 @@ private struct MobileProviderEditorView: View {
             do {
                 if !apiKey.isEmpty {
                     try KeychainStore.save(id: config.id, apiKey: apiKey)
+                    onSave()
                     resolvedKey = apiKey
                     apiKey = ""
                     keyDirty = false

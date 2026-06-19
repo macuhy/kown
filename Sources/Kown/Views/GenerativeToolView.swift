@@ -145,8 +145,8 @@ final class GenerativeToolWebCoordinator: NSObject, WKScriptMessageHandler, WKNa
 
     // MARK: WKScriptMessageHandler
 
-    nonisolated func userContentController(_ userContentController: WKUserContentController,
-                                           didReceive message: WKScriptMessage) {
+    func userContentController(_ userContentController: WKUserContentController,
+                               didReceive message: WKScriptMessage) {
         // WebKit 在主线程派发;桥到 MainActor 安全地解析 + 处理。
         let body = message.body
         Task { @MainActor [weak self] in

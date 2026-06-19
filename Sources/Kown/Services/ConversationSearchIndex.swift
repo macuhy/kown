@@ -23,6 +23,8 @@ final class ConversationSearchIndex {
     private var inverted: [String: Set<UUID>] = [:]
     /// 每个会话的可搜索全文(用于二次校验 + 提取片段)
     private var documents: [UUID: String] = [:]
+    /// 会话在输入数组里的顺序(通常已按 updatedAt 倒序),用于让搜索结果稳定且符合侧栏顺序。
+    private var documentOrder: [UUID: Int] = [:]
 
     init() {}
 
@@ -37,34 +39,40 @@ final class ConversationSearchIndex {
         }.value
         inverted = built.inverted
         documents = built.documents
+        documentOrder = built.order
     }
 
     /// 纯函数版全量构建(可在后台线程跑):只用局部字典 + nonisolated 的 searchableText/tokenize,
     /// 不碰 self 的 @MainActor 倒排表。
     nonisolated private func buildIndex(
         _ conversations: [Conversation]
-    ) -> (inverted: [String: Set<UUID>], documents: [UUID: String]) {
+    ) -> (inverted: [String: Set<UUID>], documents: [UUID: String], order: [UUID: Int]) {
         var inverted: [String: Set<UUID>] = [:]
         var documents: [UUID: String] = [:]
-        for conv in conversations where conv.deletedAt == nil {
+        var order: [UUID: Int] = [:]
+        for (offset, conv) in conversations.enumerated() where conv.deletedAt == nil {
             let doc = searchableText(conv)
             documents[conv.id] = doc
+            order[conv.id] = offset
             for token in tokenize(doc) {
                 inverted[token, default: []].insert(conv.id)
             }
         }
-        return (inverted, documents)
+        return (inverted, documents, order)
     }
 
     /// 增量更新单个会话(新增或覆盖)
     func update(_ conversation: Conversation) {
         remove(conversation.id)
-        index(conversation)
+        guard conversation.deletedAt == nil else { return }
+        let frontOrder = (documentOrder.values.min() ?? 0) - 1
+        index(conversation, order: frontOrder)
     }
 
     /// 从索引中移除某个会话
     func remove(_ id: UUID) {
         guard let oldDoc = documents.removeValue(forKey: id) else { return }
+        documentOrder.removeValue(forKey: id)
         for token in tokenize(oldDoc) {
             inverted[token]?.remove(id)
             if inverted[token]?.isEmpty == true {
@@ -109,7 +117,12 @@ final class ConversationSearchIndex {
             guard allPresent else { continue }
             hits.append(makeHit(id: id, doc: doc, term: firstTerm))
         }
-        return hits
+        return hits.sorted { lhs, rhs in
+            let left = documentOrder[lhs.id] ?? Int.max
+            let right = documentOrder[rhs.id] ?? Int.max
+            if left != right { return left < right }
+            return lhs.id.uuidString < rhs.id.uuidString
+        }
     }
 
     // MARK: - 内部:索引构建
@@ -131,9 +144,14 @@ final class ConversationSearchIndex {
         return parts.joined(separator: "\n")
     }
 
-    private func index(_ conv: Conversation) {
+    private func index(_ conv: Conversation, order: Int? = nil) {
         let doc = searchableText(conv)
         documents[conv.id] = doc
+        if let order {
+            documentOrder[conv.id] = order
+        } else if documentOrder[conv.id] == nil {
+            documentOrder[conv.id] = documentOrder.count
+        }
         for token in tokenize(doc) {
             inverted[token, default: []].insert(conv.id)
         }

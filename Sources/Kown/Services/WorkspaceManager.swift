@@ -1,6 +1,6 @@
 import Foundation
 
-/// 会话 "Working Folder" 管理:bookmark / 文件树扫描 / 上下文打包 / 写代码块解析 / 自动写盘。
+/// 会话 "Working Folder" 管理:bookmark / 文件树扫描 / 上下文打包 / 写代码块解析 / 用户确认后写盘。
 ///
 /// 设计要点:
 /// - **写入边界严控**:`apply` 时 normalize 路径,再校验 `target.resolvingSymlinksInPath().path.hasPrefix(root.path)`,
@@ -192,7 +192,7 @@ enum WorkspaceManager {
         - 路径相对 workspace 根,不能有前导 `/`,不能用 `..` 越界
         - 块里写的是 **整个文件的完整新内容**,不是 diff、不是片段
         - 多个文件 = 多个块
-        - 系统会自动落盘,你不需要做任何额外操作
+        - 系统会先暂存改动,用户确认后才会写入磁盘,你不需要做任何额外操作
 
         ✅ 正确示例(创建文件):
         ```kown:write README.md
@@ -264,92 +264,113 @@ enum WorkspaceManager {
         return out
     }
 
-    // MARK: - 应用写入
+    // MARK: - 暂存 / 应用写入
 
-    /// 把 model 提议的 write 直接写到 workspace。路径必须在 workspace 内,后缀必须允许写。
-    /// 返回 AppliedWrite 记录(无论成功失败都返回一条)。
-    static func apply(_ write: PendingWrite, workspaceURL: URL) -> AppliedWrite {
+    /// 把 model 提议的 write 校验并转成待用户确认的记录,但不写磁盘。
+    /// 路径必须在 workspace 内,后缀必须允许写;旧内容保留完整文本用于 diff / undo。
+    static func prepare(_ write: PendingWrite, workspaceURL: URL, id: UUID = UUID()) -> AppliedWrite {
         let scoped = workspaceURL.startAccessingSecurityScopedResource()
         defer { if scoped { workspaceURL.stopAccessingSecurityScopedResource() } }
 
-        // 1) 路径规范化 + 越界校验
-        let cleanRel = write.relativePath
-            .trimmingCharacters(in: CharacterSet(charactersIn: "/ \t\n"))
-        guard !cleanRel.isEmpty, !cleanRel.contains("..") else {
+        switch validate(write, workspaceURL: workspaceURL, id: id, pendingOnFailure: false) {
+        case .failure(let failure):
+            return failure
+        case .success(let target):
             return AppliedWrite(
-                relativePath: write.relativePath,
-                action: .skipped, success: false,
-                error: "路径包含 .. 或为空,拒绝",
-                newContent: write.content
+                id: id,
+                relativePath: target.cleanRel,
+                action: target.preexists ? .update : .create,
+                success: true,
+                oldContent: target.oldContent,
+                newContent: write.content,
+                pendingConfirmation: true
             )
         }
+    }
 
-        let target = workspaceURL.appendingPathComponent(cleanRel)
-        // 解析绝对路径,确保还在 workspace 内
-        let workspaceRoot = workspaceURL.standardizedFileURL.resolvingSymlinksInPath()
-        let resolvedTarget = target.standardizedFileURL.resolvingSymlinksInPath()
-        guard resolvedTarget.path.hasPrefix(workspaceRoot.path + "/") ||
-              resolvedTarget.path == workspaceRoot.path else {
-            return AppliedWrite(
-                relativePath: cleanRel,
-                action: .skipped, success: false,
-                error: "路径越出 workspace 根,拒绝",
-                newContent: write.content
-            )
+    /// 批量暂存 model 提议的 writes。
+    /// - 同一路径同内容:合并成一条;
+    /// - 同一路径不同内容:保留多个候选并加 warning,让用户展开后选择应用一个。
+    static func prepareProposedWrites(_ writes: [PendingWrite], workspaceURL: URL) -> [AppliedWrite] {
+        var pathOrder: [String] = []
+        var grouped: [String: [PendingWrite]] = [:]
+        for write in writes {
+            let key = normalizedRelativePathKey(write.relativePath)
+            if grouped[key] == nil { pathOrder.append(key) }
+            grouped[key, default: []].append(write)
         }
 
-        // 2) 后缀白名单
-        guard isTextExtensionAllowed(resolvedTarget) else {
-            return AppliedWrite(
-                relativePath: cleanRel,
-                action: .skipped, success: false,
-                error: "文件后缀不在文本白名单内,拒绝写入",
-                newContent: write.content
-            )
+        var prepared: [AppliedWrite] = []
+        for key in pathOrder {
+            guard let variants = grouped[key] else { continue }
+            var seenContents: Set<String> = []
+            let uniqueVariants = variants.filter { variant in
+                guard !seenContents.contains(variant.content) else { return false }
+                seenContents.insert(variant.content)
+                return true
+            }
+            let warning = uniqueVariants.count > 1
+                ? "检测到同一路径的 \(uniqueVariants.count) 个不同版本；请展开比较后只应用其中一个。"
+                : nil
+            prepared.append(contentsOf: uniqueVariants.map { variant in
+                var item = prepare(variant, workspaceURL: workspaceURL)
+                item.warning = warning
+                return item
+            })
+        }
+        return prepared
+    }
+
+    /// 把已经确认的 write 写到 workspace。路径必须在 workspace 内,后缀必须允许写。
+    /// 返回 AppliedWrite 记录(无论成功失败都返回一条)。
+    static func apply(
+        _ write: PendingWrite,
+        workspaceURL: URL,
+        id: UUID = UUID(),
+        pendingOnFailure: Bool = false
+    ) -> AppliedWrite {
+        let scoped = workspaceURL.startAccessingSecurityScopedResource()
+        defer { if scoped { workspaceURL.stopAccessingSecurityScopedResource() } }
+
+        let validated = validate(
+            write,
+            workspaceURL: workspaceURL,
+            id: id,
+            pendingOnFailure: pendingOnFailure
+        )
+        let target: PreparedWriteTarget
+        switch validated {
+        case .failure(let failure):
+            return failure
+        case .success(let value):
+            target = value
         }
 
-        // 3) 内容大小校验
-        guard let data = write.content.data(using: .utf8), data.count <= perFileMaxSize else {
-            return AppliedWrite(
-                relativePath: cleanRel,
-                action: .skipped, success: false,
-                error: "新内容超过 \(perFileMaxSize / 1024) KB 单文件上限",
-                newContent: write.content
-            )
-        }
-
-        // 4) 读旧内容(用于 update 标识 + diff)
-        let fm = FileManager.default
-        let preexists = fm.fileExists(atPath: resolvedTarget.path)
-        var oldContent: String? = nil
-        if preexists,
-           let oldData = try? Data(contentsOf: resolvedTarget),
-           let s = String(data: oldData, encoding: .utf8) {
-            oldContent = s.count > 200_000 ? String(s.prefix(200_000)) : s
-        }
-
-        // 5) 真正写入(原子写,父目录不存在先建)
         do {
-            try fm.createDirectory(
-                at: resolvedTarget.deletingLastPathComponent(),
+            try FileManager.default.createDirectory(
+                at: target.resolvedTarget.deletingLastPathComponent(),
                 withIntermediateDirectories: true
             )
-            try data.write(to: resolvedTarget, options: .atomic)
+            try target.data.write(to: target.resolvedTarget, options: .atomic)
             return AppliedWrite(
-                relativePath: cleanRel,
-                action: preexists ? .update : .create,
+                id: id,
+                relativePath: target.cleanRel,
+                action: target.preexists ? .update : .create,
                 success: true,
-                oldContent: oldContent,
-                newContent: write.content
+                oldContent: target.oldContent,
+                newContent: write.content,
+                pendingConfirmation: false
             )
         } catch {
             return AppliedWrite(
-                relativePath: cleanRel,
-                action: preexists ? .update : .create,
+                id: id,
+                relativePath: target.cleanRel,
+                action: target.preexists ? .update : .create,
                 success: false,
                 error: error.localizedDescription,
-                oldContent: oldContent,
-                newContent: write.content
+                oldContent: target.oldContent,
+                newContent: write.content,
+                pendingConfirmation: pendingOnFailure ? true : nil
             )
         }
     }
@@ -402,6 +423,125 @@ enum WorkspaceManager {
     }
 
     // MARK: - 内部
+
+    private enum WriteValidationResult {
+        case success(PreparedWriteTarget)
+        case failure(AppliedWrite)
+    }
+
+    private struct PreparedWriteTarget {
+        let cleanRel: String
+        let resolvedTarget: URL
+        let data: Data
+        let preexists: Bool
+        let oldContent: String?
+    }
+
+    private static func validate(
+        _ write: PendingWrite,
+        workspaceURL: URL,
+        id: UUID,
+        pendingOnFailure: Bool
+    ) -> WriteValidationResult {
+        let cleanRel = write.relativePath
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/ \t\n"))
+        guard !cleanRel.isEmpty, !cleanRel.contains("..") else {
+            return .failure(AppliedWrite(
+                id: id,
+                relativePath: write.relativePath,
+                action: .skipped, success: false,
+                error: "路径包含 .. 或为空,拒绝",
+                newContent: write.content,
+                pendingConfirmation: pendingOnFailure ? true : nil
+            ))
+        }
+
+        let target = workspaceURL.appendingPathComponent(cleanRel)
+        let workspaceRoot = workspaceURL.standardizedFileURL.resolvingSymlinksInPath()
+        let resolvedTarget = target.standardizedFileURL.resolvingSymlinksInPath()
+        guard resolvedTarget.path.hasPrefix(workspaceRoot.path + "/") ||
+              resolvedTarget.path == workspaceRoot.path else {
+            return .failure(AppliedWrite(
+                id: id,
+                relativePath: cleanRel,
+                action: .skipped, success: false,
+                error: "路径越出 workspace 根,拒绝",
+                newContent: write.content,
+                pendingConfirmation: pendingOnFailure ? true : nil
+            ))
+        }
+
+        guard isTextExtensionAllowed(resolvedTarget) else {
+            return .failure(AppliedWrite(
+                id: id,
+                relativePath: cleanRel,
+                action: .skipped, success: false,
+                error: "文件后缀不在文本白名单内,拒绝写入",
+                newContent: write.content,
+                pendingConfirmation: pendingOnFailure ? true : nil
+            ))
+        }
+
+        guard let data = write.content.data(using: .utf8), data.count <= perFileMaxSize else {
+            return .failure(AppliedWrite(
+                id: id,
+                relativePath: cleanRel,
+                action: .skipped, success: false,
+                error: "新内容超过 \(perFileMaxSize / 1024) KB 单文件上限",
+                newContent: write.content,
+                pendingConfirmation: pendingOnFailure ? true : nil
+            ))
+        }
+
+        let fm = FileManager.default
+        let preexists = fm.fileExists(atPath: resolvedTarget.path)
+        var oldContent: String? = nil
+        if preexists {
+            guard let oldData = try? Data(contentsOf: resolvedTarget) else {
+                return .failure(AppliedWrite(
+                    id: id,
+                    relativePath: cleanRel,
+                    action: .skipped, success: false,
+                    error: "无法读取旧内容,拒绝覆盖",
+                    newContent: write.content,
+                    pendingConfirmation: pendingOnFailure ? true : nil
+                ))
+            }
+            guard oldData.count <= perFileMaxSize else {
+                return .failure(AppliedWrite(
+                    id: id,
+                    relativePath: cleanRel,
+                    action: .skipped, success: false,
+                    error: "旧文件超过 \(perFileMaxSize / 1024) KB 单文件上限,拒绝覆盖",
+                    newContent: write.content,
+                    pendingConfirmation: pendingOnFailure ? true : nil
+                ))
+            }
+            guard let s = String(data: oldData, encoding: .utf8) else {
+                return .failure(AppliedWrite(
+                    id: id,
+                    relativePath: cleanRel,
+                    action: .skipped, success: false,
+                    error: "旧文件不是 UTF-8 文本,拒绝覆盖",
+                    newContent: write.content,
+                    pendingConfirmation: pendingOnFailure ? true : nil
+                ))
+            }
+            oldContent = s
+        }
+
+        return .success(PreparedWriteTarget(
+            cleanRel: cleanRel,
+            resolvedTarget: resolvedTarget,
+            data: data,
+            preexists: preexists,
+            oldContent: oldContent
+        ))
+    }
+
+    nonisolated static func normalizedRelativePathKey(_ path: String) -> String {
+        path.trimmingCharacters(in: CharacterSet(charactersIn: "/ \t\n"))
+    }
 
     nonisolated private static func isTextExtensionAllowed(_ url: URL) -> Bool {
         let ext = url.pathExtension.lowercased()

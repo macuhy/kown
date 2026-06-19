@@ -66,6 +66,24 @@ struct InputBarView: View {
                             .strokeBorder(Color.red.opacity(0.18), lineWidth: 1)
                     }
             }
+            if scraping {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("正在抓取网页正文…")
+                        .font(.caption.weight(.semibold))
+                    Spacer(minLength: 0)
+                }
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+                }
+            }
             #if os(iOS)
             if hasIOSContextChips && !iOSKeyboardCompact {
                 iOSContextChips
@@ -126,22 +144,8 @@ struct InputBarView: View {
                 .textInputAutocapitalization(.never)
                 .keyboardType(.URL)
                 #endif
-            Button("抓取并总结") {
-                let u = urlDraft
-                scraping = true
-                Task {
-                    let err = await viewModel.summarizeURL(u)
-                    await MainActor.run { scraping = false; pickerError = err }
-                }
-            }
-            Button("仅抓取入上下文") {
-                let u = urlDraft
-                scraping = true
-                Task {
-                    let err = await viewModel.attachScrapedURL(u)
-                    await MainActor.run { scraping = false; pickerError = err }
-                }
-            }
+            Button("抓取并总结") { startURLScrape(summarize: true) }
+            Button("仅抓取入上下文") { startURLScrape(summarize: false) }
             Button("取消", role: .cancel) {}
         } message: {
             Text("用 Firecrawl 抓取该网页正文。「抓取并总结」会直接发问并生成总结;「仅抓取」只作为附件并入上下文。")
@@ -1640,6 +1644,45 @@ struct InputBarView: View {
         }
     }
     #endif
+
+    private func startURLScrape(summarize: Bool) {
+        guard let normalized = normalizedWebURLString(from: urlDraft) else {
+            pickerError = "请输入有效的 http(s) 网页链接"
+            return
+        }
+
+        pickerError = nil
+        scraping = true
+        Task {
+            let err: String?
+            if summarize {
+                err = await viewModel.summarizeURL(normalized)
+            } else {
+                err = await viewModel.attachScrapedURL(normalized)
+            }
+            await MainActor.run {
+                scraping = false
+                pickerError = err
+            }
+        }
+    }
+
+    private func normalizedWebURLString(from draft: String) -> String? {
+        var text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return nil }
+        if !text.contains("://") {
+            text = "https://" + text
+        }
+        guard var components = URLComponents(string: text),
+              let scheme = components.scheme?.lowercased(),
+              scheme == "http" || scheme == "https",
+              let host = components.host,
+              !host.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+        components.scheme = scheme
+        return components.url?.absoluteString
+    }
 
     private var shellSpacing: CGFloat {
         #if os(iOS)

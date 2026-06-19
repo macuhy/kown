@@ -7,7 +7,8 @@ import Observation
 /// `~/.kown` / `<Documents>/.kown` 切换到 iCloud Ubiquity Container 的 Documents
 /// 子目录里。系统自动跨设备同步,Foundation 处理后台上传 / 拉取 / 冲突。
 ///
-/// API Key (`apikeys.json`) 不参与同步,继续留在本地敏感目录。
+/// API Key 通过 `KeychainStore` secret-store facade 管理;当前默认 JSON 后端
+/// (`apikeys.json`) 不参与同步,继续留在本地敏感目录。
 ///
 /// 容器可用性 + 用户偏好共同决定 `activeDataDirectory`;Store 们只问这一个 URL。
 @Observable
@@ -20,6 +21,9 @@ final class ICloudSync {
     nonisolated static let containerIdentifier = "iCloud.com.xiaobo.kown"
 
     nonisolated private static let prefKey = "kown.iCloudSync.enabled.v1"
+    /// Default JSON secret-store file is local-sensitive data; never copy it during
+    /// iCloud migration, mirror, or conflict reconciliation.
+    nonisolated static let sensitiveFilenamesExcludedFromCloudCopy: Set<String> = ["apikeys.json"]
 
     /// 用户的开关偏好(持久化到 UserDefaults)。
     /// 即使容器临时不可用(账号登出),偏好本身不丢 — 重新登录后自动恢复同步。
@@ -221,7 +225,12 @@ final class ICloudSync {
         try? fm.createDirectory(at: mainKown, withIntermediateDirectories: true)
 
         for sibling in siblings {
-            let merged = copyTree(from: sibling, to: mainKown, overwrite: false, excluding: [])
+            let merged = copyTree(
+                from: sibling,
+                to: mainKown,
+                overwrite: false,
+                excluding: sensitiveFilenamesExcludedFromCloudCopy
+            )
             NSLog("Kown: iCloud reconcile — merged %d files from \(sibling.lastPathComponent) into .kown", merged)
         }
     }
@@ -242,13 +251,11 @@ final class ICloudSync {
 
     // MARK: - 迁移
 
-    /// 一次性把本地数据(会话 + provider + web search + API Key)复制到 iCloud 容器。
+    /// 一次性把本地数据(会话 + provider + web search 等非敏感 JSON)复制到 iCloud 容器。
+    /// 默认 JSON secret-store 文件不复制,继续留在本地敏感目录。
     /// 不删除本地副本 — 关闭同步时仍能 fallback 回来。
     /// 已存在的 iCloud 文件不覆盖,以"远端为准"(用户在另一设备上的最新版本)。
     /// 返回拷贝的文件数。
-    /// 注:API Key 文件(apikeys.json)也一起同步。iCloud Drive at-rest 加密 +
-    /// 容器对 Files app 隐藏(NSUbiquitousContainerIsDocumentScopePublic=false),
-    /// 数据不会出现在用户的 Files / iCloud Drive 列表里。
     @discardableResult
     func migrateLocalToCloud() async -> Int {
         guard let cloud = containerDocumentsURL else { return 0 }
@@ -258,19 +265,30 @@ final class ICloudSync {
         // 关键:把文件拷贝派到 detached 后台 task,不阻 main thread
         // (会话多时 copyTree 同步遍历 + 复制可能耗时,占 main 会让 UI 看起来卡死)
         return await Task.detached(priority: .utility) {
-            Self.copyTree(from: local, to: cloudKown, overwrite: false, excluding: [])
+            Self.copyTree(
+                from: local,
+                to: cloudKown,
+                overwrite: false,
+                excluding: Self.sensitiveFilenamesExcludedFromCloudCopy
+            )
         }.value
     }
 
     /// 把 iCloud 上的内容拉回本地(用户关闭同步时)。
     /// 远端为准:本地老文件直接覆盖,避免下次开启时反向覆盖云端。
+    /// 已有旧版本同步到云端的默认 JSON secret-store 文件会被跳过,避免覆盖本机密钥。
     @discardableResult
     func mirrorCloudToLocal() async -> Int {
         guard let cloud = containerDocumentsURL else { return 0 }
         let cloudKown = cloud.appendingPathComponent(".kown", isDirectory: true)
         let local = Platform.localDataDir
         return await Task.detached(priority: .utility) {
-            Self.copyTree(from: cloudKown, to: local, overwrite: true, excluding: [])
+            Self.copyTree(
+                from: cloudKown,
+                to: local,
+                overwrite: true,
+                excluding: Self.sensitiveFilenamesExcludedFromCloudCopy
+            )
         }.value
     }
 
@@ -319,13 +337,15 @@ final class ICloudSync {
 
     /// 递归拷贝目录树。`overwrite=false` 时已存在的目标文件跳过。
     /// `excluding` 指定不参与拷贝的文件名(API Key 走单独路径)。
-    private nonisolated static func copyTree(
+    nonisolated static func copyTree(
         from source: URL,
         to dest: URL,
         overwrite: Bool,
         excluding: Set<String>
     ) -> Int {
         let fm = FileManager.default
+        try? fm.createDirectory(at: dest, withIntermediateDirectories: true)
+        let sourceRootPath = source.resolvingSymlinksInPath().path
         guard let enumerator = fm.enumerator(
             at: source,
             includingPropertiesForKeys: [.isDirectoryKey],
@@ -336,8 +356,16 @@ final class ICloudSync {
         for case let url as URL in enumerator {
             if excluding.contains(url.lastPathComponent) { continue }
             let isDir = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
-            let rel = url.path.replacingOccurrences(of: source.path, with: "")
-                .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            let path = url.resolvingSymlinksInPath().path
+            let rel: String
+            if path == sourceRootPath {
+                rel = ""
+            } else if path.hasPrefix(sourceRootPath + "/") {
+                rel = String(path.dropFirst(sourceRootPath.count + 1))
+            } else {
+                rel = url.lastPathComponent
+            }
+            guard !rel.isEmpty else { continue }
             let target = dest.appendingPathComponent(rel)
             if isDir {
                 try? fm.createDirectory(at: target, withIntermediateDirectories: true)

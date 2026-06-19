@@ -34,7 +34,7 @@ struct TTSVoice: Identifiable, Hashable, Sendable {
     let label: String    // 如 "晓晓 · 女声(温柔)"
 }
 
-/// 朗读相关的持久化配置(UserDefaults + Keychain)。
+/// 朗读相关的持久化配置(UserDefaults + KeychainStore secret store)。
 @MainActor
 enum TTSConfig {
     private static let engineKey = "kown.tts.engine.v1"
@@ -46,9 +46,9 @@ enum TTSConfig {
     private static let xfAppIDKey = "kown.tts.xf.appid.v1"
     private static let xfVoiceKey = "kown.tts.xf.voice.v1"
 
-    /// 硅基流动 key 的 Keychain id。
+    /// 硅基流动 key 的 secret-store id。
     static let siliconflowKeyID = UUID(uuidString: "7A5C0DE0-0000-4000-A000-000000000A2F")!
-    /// 讯飞 APIKey / APISecret 的 Keychain id(APPID 不算密钥,存 UserDefaults)。
+    /// 讯飞 APIKey / APISecret 的 secret-store id(APPID 不算密钥,存 UserDefaults)。
     static let xunfeiAPIKeyID = UUID(uuidString: "7A5C0DE0-0000-4000-A000-000000000A30")!
     static let xunfeiAPISecretID = UUID(uuidString: "7A5C0DE0-0000-4000-A000-000000000A31")!
 
@@ -91,7 +91,7 @@ enum TTSConfig {
 
     static let defaultVoice = "zh-CN-XiaoxiaoNeural"
 
-    // MARK: - 偏好持久化(放同步目录 tts.json → 随 iCloud 同步;密钥另在 apikeys.json 同步)
+    // MARK: - 偏好持久化(放同步目录 tts.json → 随 iCloud 同步;密钥另走本地-only secret store)
 
     private struct Prefs: Codable {
         var engine, voice, sfVoice, sfModel, sfBaseURL, xfAppID, xfVoice: String?

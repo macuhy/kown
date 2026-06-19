@@ -9,7 +9,7 @@ import UIKit
 /// 跨平台路径 / 剪贴板 / "在系统里打开" / 颜色等 shim。
 /// 让上层 Service / View 不直接依赖 AppKit / UIKit。
 enum Platform {
-    /// **本地**敏感数据根目录(API Key 等不参与 iCloud 同步的文件)。
+    /// **本地**敏感数据根目录(API Key 默认 JSON secret store 等不参与 iCloud 同步的文件)。
     /// macOS: `~/.kown`(沿用历史路径,老用户配置无缝)。
     /// iOS:   `<App Documents>/.kown`(应用沙箱)。
     static var localDataDir: URL {
@@ -34,7 +34,7 @@ enum Platform {
         ICloudSync.shared.activeDataDirectory
     }
 
-    /// 旧引用兼容 — 一律走本地路径(KeychainStore / apikeys.json 在用)。
+    /// 旧引用兼容 — 一律走本地非同步路径;KeychainStore 默认 JSON 后端也使用这里。
     static var appDataDir: URL { localDataDir }
 
     /// 用户文档目录;响应日志写这里(用户可见)。macOS = ~/Documents,iOS = App Documents。

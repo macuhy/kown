@@ -24,7 +24,7 @@ iOS 端差异:
 - Council 模式 panel 改成**垂直堆叠**(iPhone 屏不够并排)
 - Compare 模式 panel 改成**横向滑动(swipe)的 pager**,两家答复一屏一家
 - 文件 / 图片附件走 SwiftUI `.fileImporter`(底部上滑面板)
-- API key / 会话 / 日志存到 App Documents 沙箱(`Documents/.kown/`)而不是 `~/.kown/`
+- 会话 / 日志存到 App Documents 沙箱(`Documents/.kown/`)而不是 `~/.kown/`;API Key 由 `KeychainStore` secret store facade 管理,当前默认 JSON 后端也只留本机,不随 iCloud Drive 同步
 
 ## 配置
 
@@ -50,7 +50,8 @@ iOS 端差异:
 
 ## 安全
 
-- API Key 存 macOS Keychain(service: `app.kown.apikey`,account: 厂商 UUID)
+- API Key 通过 `KeychainStore` secret store facade 管理;当前默认后端是本机-only JSON(`apikeys.json`,权限 0600),不随 iCloud Drive 同步
+- 设置 ▸ 密钥存储 可显式复制并启用 Keychain Services / `SecurityKeychainBackend`;迁移会回读校验,不会删除原 JSON
 - 非密钥配置存 UserDefaults(key: `kown.providers.v1`)
 
 ## 发版打包(DMG)

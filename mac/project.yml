@@ -122,6 +122,7 @@ targets:
         product: Textual
       - package: Sparkle
         product: Sparkle
+      - sdk: Security.framework
 
 schemes:
   Kown:
