@@ -79,6 +79,7 @@
 		375CA7A62E1D320E3AD58CE7 /* ICloudSyncSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B29360ED33194AE1781A5D7 /* ICloudSyncSettingsView.swift */; };
 		37CD58330EE8ABF1A385C962 /* MCPSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 024CBFE5F4874DACF9F38D7E /* MCPSettingsView.swift */; };
 		38123390632F07ACF834D2E5 /* DirectTurnsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C593599EB8BDECA69569492 /* DirectTurnsView.swift */; };
+		38202A539142D9C6966C1DAD /* TaskInboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42087E96E2A64FCAC43BC90A /* TaskInboxView.swift */; };
 		38E1FA3FBDDEE6453BDD9A11 /* DeepTaskActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99B6E7709BCA05B958E8D0EB /* DeepTaskActivityAttributes.swift */; };
 		3ADE5E91AB659407BD4C82C3 /* XunfeiTTSEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 873F7E37B2B95E3CCF589112 /* XunfeiTTSEngine.swift */; };
 		3C609C826C8988471A7BA27D /* CalendarMeetingWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58592F3466DC2C2E145FF328 /* CalendarMeetingWatcher.swift */; };
@@ -87,6 +88,7 @@
 		3F238EA7537C7192CFF5C84E /* KownKeyboard.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 15D0C046F529DCD6B7F2817E /* KownKeyboard.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		3FB80A308D4B4D4D37F322CE /* RealtimeVoiceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28B287BE9F195E6B44A4829E /* RealtimeVoiceView.swift */; };
 		3FBF4569C76A065A37E5F123 /* AppViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74FECDB1C53A73FB4AD2834E /* AppViewModel.swift */; };
+		4086C767FD7EE14CEF6ABA26 /* WorkflowTemplateMarketView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 037EFE76EE0FB67145565970 /* WorkflowTemplateMarketView.swift */; };
 		40F35937B86707BBB5CEE7E0 /* MemorySettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CB350AD24EA8294A96ECF89 /* MemorySettingsView.swift */; };
 		4190815BBC53D0D0AAD0A328 /* GenerativeTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 158C096A6F1D0862211360EE /* GenerativeTool.swift */; };
 		43A39E9EB50C8D9DD6878E8B /* AgentRunCenterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC1AB8291746394FC03012C6 /* AgentRunCenterView.swift */; };
@@ -129,6 +131,7 @@
 		650D4D60D095E09183FD249A /* GenerativeToolService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F3AF15209A35D55AB6F5FE3 /* GenerativeToolService.swift */; };
 		6639D356EDE76C0C80638A62 /* EvalSuite.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB798BE3CBF42C77E3822A8E /* EvalSuite.swift */; };
 		668ACD0FF4C11574A2436CD0 /* CrashLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7001CD7173A6003309E0338A /* CrashLogger.swift */; };
+		66A1F52A67D8ED80518C8CFC /* MemoryAuditView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36EC1A04A007B179E31646ED /* MemoryAuditView.swift */; };
 		6772477AA987E55FBAEF8C7D /* WebSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB64A12EBE235CC880ADEBA4 /* WebSearch.swift */; };
 		6847559821CBF6966E14C15A /* ArtifactVersionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AC73FA88E40DA6DB0902EE2 /* ArtifactVersionStore.swift */; };
 		68C639244FD9C1FB4B2CE551 /* SpeechService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54326FD74E1BB58DB142BD41 /* SpeechService.swift */; };
@@ -381,6 +384,7 @@
 		01F0748A455A4C341408D64E /* MeetingNotes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingNotes.swift; sourceTree = "<group>"; };
 		024CBFE5F4874DACF9F38D7E /* MCPSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPSettingsView.swift; sourceTree = "<group>"; };
 		02C875BDFCA73C76165D3005 /* KnowledgeGraphService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnowledgeGraphService.swift; sourceTree = "<group>"; };
+		037EFE76EE0FB67145565970 /* WorkflowTemplateMarketView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowTemplateMarketView.swift; sourceTree = "<group>"; };
 		04A1D89FDE418310F86252CD /* TTSConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSConfig.swift; sourceTree = "<group>"; };
 		04CEE855B57F844FAE5C0B10 /* AppViewModel+Consensus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppViewModel+Consensus.swift"; sourceTree = "<group>"; };
 		05A8F081BDEB4322EE872674 /* ConversationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationStore.swift; sourceTree = "<group>"; };
@@ -439,6 +443,7 @@
 		34C72CDAE2197001F9B3E4B0 /* GeminiClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiClient.swift; sourceTree = "<group>"; };
 		36065466AD8C208809889A45 /* ConnectorHubService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectorHubService.swift; sourceTree = "<group>"; };
 		36C5104ACA9056302A041634 /* RealtimeVoiceSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealtimeVoiceSession.swift; sourceTree = "<group>"; };
+		36EC1A04A007B179E31646ED /* MemoryAuditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryAuditView.swift; sourceTree = "<group>"; };
 		388EA7D29142973723D271A4 /* CHANGELOG.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = CHANGELOG.md; sourceTree = "<group>"; };
 		3A5F5BAD2F62C8C7C0774F5A /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
 		3AF0B73E94B3B2509FB1EBAF /* mermaid.min.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = mermaid.min.js; sourceTree = "<group>"; };
@@ -453,6 +458,7 @@
 		4002AE6D6734BD9318D7809C /* ContextUsageBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContextUsageBadge.swift; sourceTree = "<group>"; };
 		403F8EA2658D0DEA36432D1C /* AgentRun.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentRun.swift; sourceTree = "<group>"; };
 		413813311A24C7F55B0B1C3D /* EventKitService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitService.swift; sourceTree = "<group>"; };
+		42087E96E2A64FCAC43BC90A /* TaskInboxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskInboxView.swift; sourceTree = "<group>"; };
 		420FF2930F0FAD150168F93A /* ChainView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChainView.swift; sourceTree = "<group>"; };
 		42775EDE891788EC6007019D /* SynthesisService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynthesisService.swift; sourceTree = "<group>"; };
 		441D5A468D715610DB7B8912 /* SkillPackageStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkillPackageStore.swift; sourceTree = "<group>"; };
@@ -761,6 +767,7 @@
 				1AD4A12813F4D4847DAD7A4E /* MeetingCaptureView.swift */,
 				0F26532279DCE60DD3217C65 /* MeetingNotesView.swift */,
 				7D8E4CA767E7ACA32EBAA7ED /* MeetingWorkflowView.swift */,
+				36EC1A04A007B179E31646ED /* MemoryAuditView.swift */,
 				2CB350AD24EA8294A96ECF89 /* MemorySettingsView.swift */,
 				3CEBBC4C0FFBF63B1EB7CC12 /* ModelDoctorView.swift */,
 				B2C6F7C2EA6E07FF2CE4CB12 /* ModelRoutingSettingsView.swift */,
@@ -789,6 +796,7 @@
 				54B67667B508E117497DA079 /* SkillsLibraryView.swift */,
 				48E9B8329F5CC2F2805D1192 /* SourcesStrip.swift */,
 				4E4E094E41276DCD5885F54E /* SyntaxHighlighter.swift */,
+				42087E96E2A64FCAC43BC90A /* TaskInboxView.swift */,
 				3F60BE66437B5D098307D029 /* TrendDigestView.swift */,
 				55807471674193550205CB3F /* TTSSettingsView.swift */,
 				0EB39177D9D2AFD88D8C099E /* UpdateSettingsView.swift */,
@@ -798,6 +806,7 @@
 				A449442F832F2A3F18B28115 /* VoiceJournalView.swift */,
 				98E7319E6BE7F6B2EC8EA43A /* VoteResultsCard.swift */,
 				8DEFC40E9873DEDC8D163DAF /* WebSearchSettingsView.swift */,
+				037EFE76EE0FB67145565970 /* WorkflowTemplateMarketView.swift */,
 				D025C7805F828C5A7D33766C /* WrappingHStack.swift */,
 				9549264CF8B3DED2676049CD /* Design */,
 				5DFC0ABA6C11D5872102C8AF /* Mac */,
@@ -1503,6 +1512,7 @@
 				8F6BDCE79EE306B11A0F3678 /* MeetingWorkflow.swift in Sources */,
 				14DB2AD09F3B304059E14E30 /* MeetingWorkflowService.swift in Sources */,
 				A3381D0F355F51E24B0E31ED /* MeetingWorkflowView.swift in Sources */,
+				66A1F52A67D8ED80518C8CFC /* MemoryAuditView.swift in Sources */,
 				CFF9005E44B1ED1F91895360 /* MemoryExtractor.swift in Sources */,
 				40F35937B86707BBB5CEE7E0 /* MemorySettingsView.swift in Sources */,
 				4757EB2D8C778E22DF9DED26 /* MemoryStore.swift in Sources */,
@@ -1586,6 +1596,7 @@
 				8C1A4B53E5CFB8E67CC03F38 /* SystemAudioCaptureService.swift in Sources */,
 				D45CCB09544429246689C809 /* TTSConfig.swift in Sources */,
 				795E0160543754AD650C1B99 /* TTSSettingsView.swift in Sources */,
+				38202A539142D9C6966C1DAD /* TaskInboxView.swift in Sources */,
 				789E3B1E3DDB0DF057B9FAEC /* TextDiff.swift in Sources */,
 				71738E8A12A923DA0011C926 /* ToolDefinition.swift in Sources */,
 				D7CFCCB6B48B7C5B8C1BD753 /* ToolRouter.swift in Sources */,
@@ -1608,6 +1619,7 @@
 				6772477AA987E55FBAEF8C7D /* WebSearch.swift in Sources */,
 				9660B6092B9E1F719FA98A61 /* WebSearchSettingsView.swift in Sources */,
 				4B32A169FEFB7991535E838A /* WidgetBridge.swift in Sources */,
+				4086C767FD7EE14CEF6ABA26 /* WorkflowTemplateMarketView.swift in Sources */,
 				885C193991424F3917955116 /* WorkspaceManager.swift in Sources */,
 				B065092D931DC5DBF4453BA9 /* WrappingHStack.swift in Sources */,
 				3ADE5E91AB659407BD4C82C3 /* XunfeiTTSEngine.swift in Sources */,
@@ -1717,7 +1729,7 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "KownWatch-Info.plist";
-				MARKETING_VERSION = 0.36.5;
+				MARKETING_VERSION = 0.36.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown.watchkitapp;
 				PROVISIONING_PROFILE_SPECIFIER = "Kown Watch AppStore";
 				SDKROOT = watchos;
@@ -1745,7 +1757,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.36.5;
+				MARKETING_VERSION = 0.36.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown.Share;
 				PROVISIONING_PROFILE_SPECIFIER = "Kown Share AppStore";
 				SDKROOT = iphoneos;
@@ -1771,7 +1783,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.36.5;
+				MARKETING_VERSION = 0.36.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown.watchkitapp.widgets;
 				PROVISIONING_PROFILE_SPECIFIER = "Kown Watch Widgets AppStore";
 				SDKROOT = watchos;
@@ -1916,7 +1928,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.36.5;
+				MARKETING_VERSION = 0.36.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown.widgets;
 				PROVISIONING_PROFILE_SPECIFIER = "Kown Widgets AppStore";
 				SDKROOT = iphoneos;
@@ -1942,7 +1954,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.36.5;
+				MARKETING_VERSION = 0.36.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown.Keyboard;
 				PROVISIONING_PROFILE_SPECIFIER = "Kown Keyboard AppStore";
 				SDKROOT = iphoneos;
@@ -1968,7 +1980,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.36.5;
+				MARKETING_VERSION = 0.36.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown.Share;
 				PROVISIONING_PROFILE_SPECIFIER = "Kown Share AppStore";
 				SDKROOT = iphoneos;
@@ -1994,7 +2006,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.36.5;
+				MARKETING_VERSION = 0.36.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown.widgets;
 				PROVISIONING_PROFILE_SPECIFIER = "Kown Widgets AppStore";
 				SDKROOT = iphoneos;
@@ -2020,7 +2032,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.36.5;
+				MARKETING_VERSION = 0.36.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown.Keyboard;
 				PROVISIONING_PROFILE_SPECIFIER = "Kown Keyboard AppStore";
 				SDKROOT = iphoneos;
@@ -2047,7 +2059,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.36.5;
+				MARKETING_VERSION = 0.36.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown;
 				PROVISIONING_PROFILE_SPECIFIER = "Kown AppStore";
 				SDKROOT = iphoneos;
@@ -2068,7 +2080,7 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "KownWatch-Info.plist";
-				MARKETING_VERSION = 0.36.5;
+				MARKETING_VERSION = 0.36.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown.watchkitapp;
 				PROVISIONING_PROFILE_SPECIFIER = "Kown Watch AppStore";
 				SDKROOT = watchos;
@@ -2096,7 +2108,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.36.5;
+				MARKETING_VERSION = 0.36.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown.watchkitapp.widgets;
 				PROVISIONING_PROFILE_SPECIFIER = "Kown Watch Widgets AppStore";
 				SDKROOT = watchos;
@@ -2125,7 +2137,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.36.5;
+				MARKETING_VERSION = 0.36.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xiaobo.kown;
 				PROVISIONING_PROFILE_SPECIFIER = "Kown AppStore";
 				SDKROOT = iphoneos;

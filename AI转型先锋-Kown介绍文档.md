@@ -111,6 +111,27 @@ Kown 内置了基于语法树的代码语法高亮（SyntaxHighlighter），支�
 - **UsageStore** — Token 使用量追踪和统计
 - **多个 LLM 客户端** — 每种供应商都有专用的 SSE 流式解析实现
 
+### 2.12 Agent 化长任务与深度研究
+
+Kown 已经从"多模型聊天"进一步演进为可追踪的 AI Agent 工作台：
+
+- **DeepResearchEngine** — 自动执行"搜索 → 抓取 → 提炼 → 查缺口"的研究流程，生成带引用来源的结构化长报告。
+- **AgentRunStore / AgentRunCenterView** — 记录长任务的每一步，包括工具调用、模型选择、耗时、成本、失败原因和审批状态。
+- **SchedulerService / TrendDigestService** — 支持订阅式定时任务与趋势洞察，让 AI 不只是被动回答，也能主动追踪变化。
+- **ToolRouter / MCPClient / KownMCPServerService** — 让 Kown 可以调用外部工具，也能反过来成为外部 AI 工具可读取的上下文和记忆服务。
+
+这让 AI 工作从"问一次、答一次"升级为"可执行、可复盘、可分叉、可持续运行"的任务系统。
+
+### 2.13 交付、会议与可信治理
+
+为了让 AI 产出真正进入工作流，Kown 补齐了从内容生成到交付发布的闭环：
+
+- **DeliverableStudioService** — 将回答、深度研究或会议内容整理成 Markdown、HTML、网页、Word、PPTX、PDF 等交付物。
+- **GitHubPagesPublisher** — 将交付物发布为可分享网页链接，方便汇报、协作和传播。
+- **MeetingWorkflowService / MeetingCaptureService** — 覆盖会前准备、会中捕获、会后行动项与跟进草稿。
+- **AnswerTrustService / FactCheckService** — 分析事实句是否有来源支撑，输出可信度分数、证据缺口和来源覆盖情况。
+- **ModelHealthService / ConnectorHubService** — 诊断模型配置、API Key、CLI 命令与外部连接器状态，降低复杂系统的维护成本。
+
 ---
 
 ## 三、我是如何通过 Kown 实现 AI 转型的
@@ -161,6 +182,12 @@ Kown 虽然目前是个人项目，但其设计哲学已经开始影响我的团
 - **多模型对比**的实践让团队在选择 AI 服务时更有依据
 - **对话可导出、可分享**的特性让 AI 辅助的讨论成果可以在团队内传播
 
+### 3.6 从对话助手到可交付工作流
+
+随着深度研究、Agent 运行中心、交付物工作台和会议闭环的加入，Kown 对我的意义已经不只是"更方便地问 AI"。它开始承接完整工作流程：收集资料、形成判断、记录过程、生成文档、发布结果、沉淀为知识资产。
+
+这也是我对 AI 转型的新理解：真正的转型不是把 AI 插进某个环节，而是让 AI 成为流程本身的一部分，并且让流程可追踪、可治理、可复用。
+
 ---
 
 ## 四、Kown 的技术架构亮点
@@ -170,8 +197,44 @@ Kown 虽然目前是个人项目，但其设计哲学已经开始影响我的团
 Kown 完全使用 Swift + SwiftUI 构建，充分利用 Apple 平台的原生能力：
 
 - SwiftUI 声明式 UI，响应迅速
-- MarkdownUI 渲染富文本回答
+- Textual 原生文本管线渲染富文本回答、代码块、表格与列表
 - NetworkImage 异步图片加载
 - **原生 macOS 桌面应用**，而非 Electron 套壳
 
 ### 4.2 模块化架构
+
+Kown 的工程结构围绕 Models、Services、ViewModels、Views 拆分，核心能力以服务模块独立演进：
+
+- **Models**：定义 Provider、Conversation、Attachment、AgentRun、Deliverable、MeetingWorkflow、SkillPackage 等核心数据结构。
+- **Services**：承载模型调用、RAG、搜索、会议、导出、同步、MCP、成本统计、隐私脱敏、工具路由等业务能力。
+- **ViewModels**：将发送、共识分析、知识库、Persona、Graph、Relay、RedTeam 等复杂状态分离到扩展文件中，避免主视图膨胀。
+- **Views**：按工作台页面拆分，包括主对话、设置、知识图谱、Agent 运行中心、交付物工作台、会议闭环、模型体检等界面。
+- **Tests**：覆盖 SSE 解析、Prompt 构建、RAG、工作区写入、MCP schema、隐私脱敏、导出、会议、技能包等关键路径。
+
+### 4.3 本地优先与隐私保护
+
+Kown 的安全设计坚持"本地优先"：
+
+- API Key、GitHub token、TTS 凭据默认保存在本机 secret store，必要时可显式迁移到系统 Keychain。
+- iCloud 同步只覆盖会话、Provider 配置和 Web Search 非密钥配置，不把密钥跟随云端同步。
+- 隐私脱敏在本机识别手机号、邮箱、证件号以及可选的人名、地名、机构名，云端调用前替换占位符，返回后再还原。
+- 本地知识库、OCR、语音识别、屏幕副驾等能力尽量优先使用 Apple 本地能力，减少敏感内容外传。
+
+### 4.4 可扩展的 AI 工作流底座
+
+Kown 的价值不只在于已经实现的功能，还在于它形成了一套可扩展底座：
+
+- 新模型可以通过 Provider 抽象接入。
+- 新工具可以通过 ToolDefinition / ToolRouter 接入。
+- 新业务流程可以沉淀为 SkillPackage、PromptChain 或 Agent 任务。
+- 外部 AI 工具可以通过 Kown MCP Server 读取 Kown 的会话、上下文和长期记忆。
+
+这使 Kown 从一个个人客户端，逐步具备了 AI 工作流平台的形态。
+
+---
+
+## 五、总结
+
+Kown 展示了一条个人 AI 转型路径：先用 AI 提效，再用工程能力把提效方式产品化，最后把零散能力组织成可复用、可治理、可交付的工作流系统。
+
+对我而言，Kown 不只是一个工具项目，而是一次完整的工作方式重构。它把多模型协作、本地知识、语音交互、Agent 任务、交付发布和可信治理放进同一个原生应用里，让 AI 真正成为日常工作的基础设施。

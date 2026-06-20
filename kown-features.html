@@ -71,11 +71,14 @@
   <header class="hero">
     <div class="logo">玄</div>
     <h1>Kown <span class="g">功能总览</span></h1>
-    <p class="tag">一个 macOS + iOS 的多模型 AI 对话客户端 —— 同一个问题,让多个模型一起答、并排比、互相辩。</p>
+    <p class="tag">一个 macOS + iOS 的多模型 AI 工作台 —— 同一个问题,让多个模型一起答、并排比、互相辩,再把结果沉淀成研究、会议与交付物。</p>
     <div class="pills">
       <span class="pill"><b>4</b> 种对话模式</span>
       <span class="pill">OpenAI 兼容 · Claude · Gemini · CLI</span>
       <span class="pill">联网 · 知识库 · 视觉 · 出图</span>
+      <span class="pill">深度研究 · Agent · 交付物</span>
+      <span class="pill">AI 待办 · 流程模板 · 记忆审计</span>
+      <span class="pill">可信度 · 模型体检 · MCP</span>
       <span class="pill">iCloud 同步 · 双端</span>
     </div>
   </header>
@@ -159,6 +162,47 @@
     </div>
   </div></section>
 
+  <p class="eyebrow">工作流 · 研究 Agent 交付</p>
+  <section><div class="grid">
+    <div class="card">
+      <span class="ic">🔎</span><h3>深度研究</h3>
+      <p class="lead">搜索→抓取→提炼→自查</p>
+      <ul>
+        <li>自动多轮联网搜索、抓取正文、提炼要点</li>
+        <li>生成带<b>引用角标</b>和参考来源的结构化长报告</li>
+        <li>过程实时可见,可随时停止或转成交付物</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="ic">🧭</span><h3>Agent 运行中心</h3>
+      <p class="lead">长任务有记录、有回放</p>
+      <ul>
+        <li>记录任务步骤、工具调用、模型、耗时和成本</li>
+        <li>支持<b>搜索 / 筛选 / 审批 / 重跑</b></li>
+        <li>任意步骤可复制 Markdown 回放或分叉继续</li>
+        <li><b>AI 待办收件箱</b>聚合审批、失败、运行中和记忆提醒</li>
+      </ul>
+    </div>
+    <div class="card alt">
+      <span class="ic">📦</span><h3>交付物工作台</h3>
+      <p class="lead">把回答变成可交付文件</p>
+      <ul>
+        <li>回答、研究、会议可一键整理成 Markdown / HTML / 网页</li>
+        <li>导出 <b>Word / PPTX / PDF</b> 真文件</li>
+        <li>可发布到 <b>GitHub Pages</b> 生成分享链接</li>
+      </ul>
+    </div>
+    <div class="card alt">
+      <span class="ic">📋</span><h3>会议闭环</h3>
+      <p class="lead">会前、会中、会后连起来</p>
+      <ul>
+        <li>从日历会议生成议程和准备材料</li>
+        <li>双轨捕获系统声音 + 麦克风并生成纪要</li>
+        <li>自动提炼决策、风险、行动项和跟进草稿</li>
+      </ul>
+    </div>
+  </div></section>
+
   <p class="eyebrow">日常 · 管理与效率</p>
   <section><div class="grid">
     <div class="card">
@@ -195,6 +239,48 @@
       <ul>
         <li>Token 统计(按天/模型 · 成本估算 · 缓存命中)</li>
         <li><b>月度预算上限 + 发送前超支告警</b></li>
+      </ul>
+    </div>
+  </div></section>
+
+  <p class="eyebrow">可信 · 个性化与扩展</p>
+  <section><div class="grid">
+    <div class="card">
+      <span class="ic">🛡️</span><h3>回答可信度</h3>
+      <p class="lead">事实句绑定来源</p>
+      <ul>
+        <li>一键分析回答里的事实句是否有来源支撑</li>
+        <li>输出<b>可信度分数</b>、证据缺口和来源覆盖统计</li>
+        <li>适合研究报告、行业判断和重要决策前复核</li>
+        <li><b>记忆审计</b>检查长期记忆来源、重复、过期和 Persona 归属</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="ic">🩺</span><h3>模型体检 / 路由</h3>
+      <p class="lead">配置坏了能定位,模型好坏能学习</p>
+      <ul>
+        <li>批量检查 Base URL、API Key、CLI 命令和延迟</li>
+        <li><b>盲测</b>积累个人模型偏好,按任务类别推荐</li>
+        <li>省钱级联:便宜模型先答,不达标再升级</li>
+      </ul>
+    </div>
+    <div class="card alt">
+      <span class="ic">🎯</span><h3>分歧 / 红队 / 接力</h3>
+      <p class="lead">不只生成答案,还会拆答案</p>
+      <ul>
+        <li><b>分歧雷达</b>找出多模型真正不一致的点</li>
+        <li><b>红队压测</b>专挑幻觉、弱论断和无出处数据</li>
+        <li><b>接力精炼</b>:起草、批判、润色跨厂商流水线</li>
+      </ul>
+    </div>
+    <div class="card alt">
+      <span class="ic">🧩</span><h3>连接器 / MCP / 技能包</h3>
+      <p class="lead">把 Kown 接进外部工具链</p>
+      <ul>
+        <li>连接器中心统一看 GitHub、Firecrawl、MCP、日历等状态</li>
+        <li>Kown MCP Server 让外部 AI 工具读取会话和长期记忆</li>
+        <li>.kownskill 技能包可导入、导出、预览权限和变量</li>
+        <li><b>流程模板市场</b>一键安装调研、会议、红队、竞品和代码审查流水线</li>
       </ul>
     </div>
   </div></section>

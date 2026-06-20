@@ -163,7 +163,7 @@
   <div class="wrap">
     <div class="eyebrow">现在能做什么</div>
     <h2>从一次提问到完整的知识工作流</h2>
-    <p class="lead">三周密集迭代下来,Kown 早已不只是「并排聊天」。它围绕「问—答—整理—沉淀」长出了一整套能力。</p>
+    <p class="lead">五周多密集迭代下来,Kown 早已不只是「并排聊天」。它围绕「问—答—研究—交付—沉淀」长出了一整套能力。</p>
 
     <div class="grid">
       <div class="cap"><div class="e">🌐</div><h4>联网搜索 / 抓网页</h4><p>接 Firecrawl 做 web_search,回答正文内联可点来源;也能抓取整页正文入上下文。</p></div>
@@ -184,7 +184,7 @@
   <div class="wrap">
     <div class="eyebrow">从 0 到 1 · 功能演进史</div>
     <h2>它是怎么一步步长出来的</h2>
-    <p class="lead">从 2026-05-11 第一行代码到今天,不到三周时间。下面按时间顺序还原了 Kown 的成长轨迹——从一个「并发问多家」的 macOS 小工具,到跨平台、能联网、有记忆、会说话的 AI 工作台。每个里程碑标注了首次落地的版本。</p>
+    <p class="lead">从 2026-05-11 第一行代码到今天,一个多月时间。下面按时间顺序还原了 Kown 的成长轨迹——从一个「并发问多家」的 macOS 小工具,到跨平台、能联网、有记忆、会说话、能研究并交付的 AI 工作台。每个里程碑标注了首次落地的版本。</p>
 
     <div class="tl">
 
@@ -304,10 +304,10 @@
 
       <!-- ERA 8 -->
       <div class="era c2">
-        <div class="ver">v0.12.0 及以后 · 当前形态</div>
+        <div class="ver">v0.12.0 – v0.23.x · 沉淀与集成</div>
         <h3>⑧ 沉淀、整理与更深的集成</h3>
-        <div class="when">2026-06-02 · 最新</div>
-        <p class="desc">最近一批围绕「长期使用的舒适度」:更好的导出与组织、不怕误删、能接续、有模板、能被自动化调用,以及图像生成与答案收藏。</p>
+        <div class="when">2026-06-02 → 06-08</div>
+        <p class="desc">这一批围绕「长期使用的舒适度」:更好的导出与组织、不怕误删、能接续、有模板、能被自动化调用,以及图像生成与答案收藏。</p>
         <div class="feats">
           <div class="feat"><b>会话导出 PDF</b><span>多页矢量、文字可选中、按块分页不截断</span></div>
           <div class="feat"><b>会话回收站</b><span>软删除可恢复,超 30 天自动清理</span></div>
@@ -324,6 +324,28 @@
         </div>
       </div>
 
+      <!-- ERA 9 -->
+      <div class="era c3">
+        <div class="ver">v0.24.0 – v0.36.6 · 当前生产力工作台</div>
+        <h3>⑨ 从对话到 Agent 工作流</h3>
+        <div class="when">2026-06-09 → 06-19</div>
+        <p class="desc">最近十天 Kown 完成了第二次形态跃迁:不再只围绕「聊天体验」打磨,而是把研究、会议、交付物、外部连接器、可信度复核和模型治理串成闭环,更像一个个人 AI 操作台。</p>
+        <div class="feats">
+          <div class="feat"><b>Artifacts 实时预览 / 发布</b><span>HTML / SVG / Mermaid 边生成边渲染,可编辑版本历史,一键发布到 GitHub Pages</span></div>
+          <div class="feat"><b>Apple Watch / AI 键盘 / 小组件</b><span>手表语音提问、系统键盘润色回复、桌面和锁屏入口把 Kown 放进日常系统层</span></div>
+          <div class="feat"><b>Apple 本地模型与深度研究</b><span>端侧免 Key 推理;深度研究自动搜索、抓取、提炼、查缺口并生成带引用长报告</span></div>
+          <div class="feat"><b>项目空间与上下文治理</b><span>项目级系统提示、知识库和默认模型;上下文用量条、压缩历史和全新上下文避免长会话失忆</span></div>
+          <div class="feat"><b>会议与语音闭环</b><span>双轨会议捕获、日历到点自动开会、语音随手记、实时双工语音对话</span></div>
+          <div class="feat"><b>分歧雷达 / 红队 / 接力</b><span>找出模型分歧、压测单条答案、跨厂商起草→批判→润色,把质量控制产品化</span></div>
+          <div class="feat"><b>连接器中心与 Agent 运行中心</b><span>集中查看 GitHub / Firecrawl / MCP / 日历等连接状态,长任务步骤、审批、成本、错误全留痕</span></div>
+          <div class="feat"><b>交付物工作台</b><span>回答、研究和会议内容可整理成 Markdown / HTML / 网页 / Word / PPTX / PDF,并发布分享</span></div>
+          <div class="feat"><b>模型体检与可信度分析</b><span>批量诊断 Base URL / API Key / CLI;回答事实句可做来源绑定、可信度评分和证据缺口分析</span></div>
+          <div class="feat"><b>Kown MCP Server / 技能包</b><span>外部 AI 工具可搜索会话、读取上下文和长期记忆;.kownskill 可导入导出并声明变量与权限</span></div>
+          <div class="feat"><b>Keychain 显式迁移</b><span>API Key 默认本机 JSON secret store,可手动迁移到系统 Keychain,回读校验成功后才启用</span></div>
+          <div class="feat"><b>原生 Textual 渲染管线</b><span>回答、代码块、表格、列表和分享图切到原生文本管线,长会话滚动更稳</span></div>
+        </div>
+      </div>
+
     </div>
   </div>
 </section>
@@ -332,12 +354,12 @@
 <section>
   <div class="wrap">
     <div class="eyebrow">数字一览</div>
-    <h2>三周走过的路</h2>
+    <h2>从第一行代码到 AI 工作台</h2>
     <div class="stats">
-      <div class="stat"><div class="n">8</div><div class="l">个能力里程碑阶段</div></div>
-      <div class="stat"><div class="n">50+</div><div class="l">个对用户可见的功能</div></div>
+      <div class="stat"><div class="n">9</div><div class="l">个能力里程碑阶段</div></div>
+      <div class="stat"><div class="n">90+</div><div class="l">个对用户可见的功能</div></div>
       <div class="stat"><div class="n">4</div><div class="l">种回答模式</div></div>
-      <div class="stat"><div class="n">2</div><div class="l">个平台 · 一份源码</div></div>
+      <div class="stat"><div class="n">4</div><div class="l">个 Apple 系统入口</div></div>
     </div>
   </div>
 </section>
@@ -346,7 +368,7 @@
   <div class="wrap">
     <p><b>Kown</b> · 多模型 AI 议会 — 让模型们一起为你思考。</p>
     <p style="margin-top:8px">macOS 走 Sparkle 自动更新 · iOS 走 TestFlight · 数据本地优先 + iCloud 同步</p>
-    <p style="margin-top:14px;color:#525b6e">本页根据项目 CHANGELOG 与 git 历史自动整理 · 截至 2026-06-02</p>
+    <p style="margin-top:14px;color:#525b6e">本页根据项目 CHANGELOG 与 git 历史整理 · 截至 2026-06-19</p>
   </div>
 </footer>
 

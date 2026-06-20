@@ -13,11 +13,13 @@ struct SettingsView: View {
         case prompts
         case skills
         case connectorHub
+        case taskInbox
         case agentRuns
         case meetingWorkflow
         case deliverables
         case skillPackages
         case personas
+        case workflowTemplates
         case deviceTools
         case mcp
         case github
@@ -30,6 +32,7 @@ struct SettingsView: View {
         case usage
         case dashboard
         case memory
+        case memoryAudit
         case favorites
         case leaderboard
         case routing
@@ -51,11 +54,13 @@ struct SettingsView: View {
             case .prompts:     return "Prompt 库"
             case .skills:      return "技能"
             case .connectorHub: return "连接器"
+            case .taskInbox:   return "AI 待办"
             case .agentRuns:    return "Agent 运行"
             case .meetingWorkflow: return "会议闭环"
             case .deliverables: return "交付物"
             case .skillPackages: return "技能包"
             case .personas:    return "Persona"
+            case .workflowTemplates: return "流程模板"
             case .deviceTools: return "设备工具"
             case .mcp:         return "MCP"
             case .github:      return "GitHub"
@@ -68,6 +73,7 @@ struct SettingsView: View {
             case .usage:       return "Token 用量"
             case .dashboard:   return "仪表盘"
             case .memory:      return "记忆"
+            case .memoryAudit: return "记忆审计"
             case .favorites:   return "收藏"
             case .leaderboard: return "排行榜"
             case .routing:     return "模型路由"
@@ -89,11 +95,13 @@ struct SettingsView: View {
             case .prompts:     return "text.badge.plus"
             case .skills:      return "wand.and.stars"
             case .connectorHub: return "point.3.connected.trianglepath.dotted"
+            case .taskInbox:   return "tray.full.fill"
             case .agentRuns:    return "list.bullet.rectangle.portrait"
             case .meetingWorkflow: return "person.2.wave.2"
             case .deliverables: return "shippingbox.and.arrow.backward.fill"
             case .skillPackages: return "shippingbox.fill"
             case .personas:    return "theatermasks"
+            case .workflowTemplates: return "square.stack.3d.up.badge.plus"
             case .deviceTools: return "wrench.and.screwdriver.fill"
             case .mcp:         return "powerplug"
             case .github:      return "chevron.left.forwardslash.chevron.right"
@@ -106,6 +114,7 @@ struct SettingsView: View {
             case .usage:       return "chart.bar.xaxis"
             case .dashboard:   return "chart.line.uptrend.xyaxis"
             case .memory:      return "brain"
+            case .memoryAudit: return "brain.head.profile"
             case .favorites:   return "star"
             case .leaderboard: return "trophy.fill"
             case .routing:     return "arrow.triangle.branch"
@@ -127,11 +136,13 @@ struct SettingsView: View {
             case .prompts:     return Color(red: 0.56, green: 0.40, blue: 0.86)
             case .skills:      return Color(red: 0.48, green: 0.36, blue: 0.90)
             case .connectorHub: return Color(red: 0.12, green: 0.58, blue: 0.62)
+            case .taskInbox:   return Color(red: 0.18, green: 0.52, blue: 0.84)
             case .agentRuns:    return Color(red: 0.10, green: 0.45, blue: 0.72)
             case .meetingWorkflow: return Color(red: 0.85, green: 0.42, blue: 0.18)
             case .deliverables: return Color(red: 0.88, green: 0.46, blue: 0.18)
             case .skillPackages: return Color(red: 0.10, green: 0.62, blue: 0.70)
             case .personas:    return Color(red: 0.72, green: 0.34, blue: 0.62)
+            case .workflowTemplates: return Color(red: 0.36, green: 0.50, blue: 0.88)
             case .deviceTools: return Color(red: 0.20, green: 0.60, blue: 0.62)
             case .mcp:         return Color(red: 0.26, green: 0.54, blue: 0.80)
             case .github:      return Color(red: 0.18, green: 0.62, blue: 0.58)
@@ -144,6 +155,7 @@ struct SettingsView: View {
             case .usage:       return Color(red: 0.24, green: 0.63, blue: 0.36)
             case .dashboard:   return Color(red: 0.18, green: 0.52, blue: 0.92)
             case .memory:      return Color(red: 0.56, green: 0.40, blue: 0.86)
+            case .memoryAudit: return Color(red: 0.46, green: 0.38, blue: 0.82)
             case .favorites:   return Color(red: 0.92, green: 0.70, blue: 0.18)
             case .leaderboard: return Color(red: 0.85, green: 0.60, blue: 0.14)
             case .routing:     return Color(red: 0.46, green: 0.40, blue: 0.90)
@@ -270,6 +282,8 @@ struct SettingsView: View {
                         SkillsLibraryView(store: viewModel.skillsStore, viewModel: viewModel)
                     case .connectorHub:
                         ConnectorHubView()
+                    case .taskInbox:
+                        TaskInboxView()
                     case .agentRuns:
                         AgentRunCenterView(embeddedInSettings: true)
                     case .meetingWorkflow:
@@ -285,6 +299,8 @@ struct SettingsView: View {
                         SkillPackageMarketView(onInstallPackage: installSkillPackage)
                     case .personas:
                         PersonaSettingsView(viewModel: viewModel)
+                    case .workflowTemplates:
+                        WorkflowTemplateMarketView()
                     case .deviceTools:
                         DeviceToolsSettingsView(viewModel: viewModel)
                     case .mcp:
@@ -309,6 +325,8 @@ struct SettingsView: View {
                         UsageDashboardView()
                     case .memory:
                         MemorySettingsView(viewModel: viewModel)
+                    case .memoryAudit:
+                        MemoryAuditView(viewModel: viewModel)
                     case .favorites:
                         FavoritesSettingsView()
                     case .leaderboard:
@@ -748,9 +766,9 @@ struct SettingsView: View {
     private var desktopTabSections: [(title: String, tabs: [Tab])] {
         [
             ("基础", [.providers, .modelDoctor, .prompts, .skills, .skillPackages, .deviceTools, .github]),
-            ("工作台", [.connectorHub, .agentRuns, .meetingWorkflow, .deliverables]),
-            ("工作流", [.personas, .chains, .mcp, .webSearch, .tts, .scheduler, .performance]),
-            ("数据", [.secretStore, .sync, .backup, .memory, .favorites, .privacy]),
+            ("工作台", [.connectorHub, .taskInbox, .agentRuns, .meetingWorkflow, .deliverables]),
+            ("工作流", [.personas, .workflowTemplates, .chains, .mcp, .webSearch, .tts, .scheduler, .performance]),
+            ("数据", [.secretStore, .sync, .backup, .memory, .memoryAudit, .favorites, .privacy]),
             ("洞察", [.usage, .dashboard, .leaderboard, .eval]),
             ("版本", [.updates, .changelog, .debugLog])
         ]
@@ -954,6 +972,8 @@ struct SettingsView: View {
                 SkillsLibraryView(store: viewModel.skillsStore, viewModel: viewModel)
             case .connectorHub:
                 ConnectorHubView()
+            case .taskInbox:
+                TaskInboxView()
             case .agentRuns:
                 AgentRunCenterView(embeddedInSettings: true)
             case .meetingWorkflow:
@@ -969,6 +989,8 @@ struct SettingsView: View {
                 SkillPackageMarketView(onInstallPackage: installSkillPackage)
             case .personas:
                 PersonaSettingsView(viewModel: viewModel)
+            case .workflowTemplates:
+                WorkflowTemplateMarketView()
             case .deviceTools:
                 DeviceToolsSettingsView(viewModel: viewModel)
             case .mcp:
@@ -993,6 +1015,8 @@ struct SettingsView: View {
                 UsageDashboardView()
             case .memory:
                 MemorySettingsView(viewModel: viewModel)
+            case .memoryAudit:
+                MemoryAuditView(viewModel: viewModel)
             case .favorites:
                 FavoritesSettingsView()
             case .leaderboard:
@@ -1381,11 +1405,13 @@ struct SettingsView: View {
         case .prompts:     return "保存可复用的 Prompt 模板,用 {{变量}} 占位,填充后一键复制。"
         case .skills:      return "技能 = 系统提示 + 可用工具。可按输入自动触发,也可绑定到当前会话。"
         case .connectorHub: return "统一查看 GitHub、Web、MCP、知识库、iCloud、日历提醒和设备工具的连接状态与权限。"
+        case .taskInbox:   return "把 Agent 审批、失败任务、定时任务异常和记忆健康提醒汇成一个可处理的收件箱。"
         case .agentRuns:   return "集中查看长任务、深度研究、定时任务、工具调用和会议任务的运行记录、步骤、审批和成本。"
         case .meetingWorkflow: return "把会议从会前准备、会中捕获到会后行动项追踪串成闭环。"
         case .deliverables: return "把回答、研究或会议内容整理成 Markdown、HTML、网页、PDF/PPT 大纲。"
         case .skillPackages: return "导入、导出和预览 .kownskill 技能包,包含提示词、变量、示例和所需工具权限。"
         case .personas:    return "Persona = 系统提示词 + 默认模型 + 工具/技能/知识库 打包成档案,输入栏按会话一键切换。"
+        case .workflowTemplates: return "把常见多步流程一键安装成 Prompt Chain,例如调研交付、会议闭环和红队审稿。"
         case .deviceTools: return "让模型在你的系统「提醒事项 / 备忘录」里创建条目。需授权;iOS 备忘录走剪贴板+跳转。"
         case .mcp:         return "挂载外部 MCP server,把任意第三方工具暴露给模型。支持远程 HTTP/SSE,macOS 还支持本地 stdio 命令。"
         case .github:      return "连接 GitHub 后,对话里可选仓库,把定稿内容直接提交;聊天显示改动行数与 commit 链接。"
@@ -1398,6 +1424,7 @@ struct SettingsView: View {
         case .usage:       return "按天 + 模型查看 token 用量。input / output 分别计,辅助估算成本。"
         case .dashboard:   return "用图表对比各模型的用量与成本:成本排行、每日 token 走势与输入/输出内訳。"
         case .memory:      return "管理跨会话长期记忆:开关注入、查看与删除已抽取的记忆条目。默认关闭(隐私优先)。"
+        case .memoryAudit: return "审计长期记忆的归属、重复、过期和来源缺口,决定哪些该置顶、修订或清理。"
         case .favorites:   return "收藏过的回答片段,点星可在回答卡上收藏 / 取消。"
         case .leaderboard: return "Compare 模式裁判判定累计出的模型胜率榜:按胜率排名,看哪家模型更常赢。"
         case .routing:     return "个人口味盲测 + Direct 模式的模型路由开关:盲选攒出你的偏好画像,让「用我的偏好」按类别替你选模型。"
